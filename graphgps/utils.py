@@ -120,7 +120,7 @@ def make_wandb_name(cfg):
         if cfg.dataset.name == 'LocalDegreeProfile':
             dataset_name += 'LDP'
         else:
-            dataset_name += cfg.dataset.name
+            dataset_name += cfg.dataset.name.replace("-", ".")
 
     if cfg.dataset.infer_link_label in ["edge"]:
         dataset_name += f"+{cfg.dataset.infer_link_label}"

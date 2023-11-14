@@ -9,7 +9,7 @@ import torch_geometric.transforms as T
 from numpy.random import default_rng
 from ogb.graphproppred import PygGraphPropPredDataset
 from torch_geometric.datasets import (Actor, GNNBenchmarkDataset, Planetoid,
-                                      TUDataset, WebKB, WikipediaNetwork, ZINC)
+                                      TUDataset, UPFD, WebKB, WikipediaNetwork, ZINC)
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.loader import load_pyg, load_ogb, set_dataset_attr
 from torch_geometric.graphgym.register import register_loader
@@ -129,6 +129,9 @@ def load_dataset_master(format, name, dataset_dir):
 
         elif pyg_dataset_id == 'ZINC':
             dataset = preformat_ZINC(dataset_dir, name)
+
+        elif pyg_dataset_id == 'UPFD':
+            dataset = preformat_UPFD(dataset_dir, name)
             
         elif pyg_dataset_id == 'AQSOL':
             dataset = preformat_AQSOL(dataset_dir, name)
@@ -560,6 +563,30 @@ def preformat_ZINC(dataset_dir, name):
         [ZINC(root=dataset_dir, subset=(name == 'subset'), split=split)
          for split in ['train', 'val', 'test']]
     )
+    return dataset
+
+
+def preformat_UPFD(dataset_dir, name: str):
+    """Load and preformat UPFD datasets.
+
+    Args:
+        dataset_dir: path where to store the cached dataset
+        name: select the sub-dataset combined by a dash with the features to use
+
+    Returns:
+        PyG dataset object
+    """
+    dataset_name, dataset_features = name.split('-', 1)
+    if dataset_name not in ["politifact", "gossipcop"]:
+        raise ValueError(f"Unexpected dataset name choice for UPFD dataset: {dataset_name}")
+    if dataset_features not in ["profile", "spacy", "bert", "content"]:
+        raise ValueError(f"Unexpected dataset name choice for UPFD dataset: {dataset_features}")
+    dataset = join_dataset_splits(
+        [UPFD(root=dataset_dir, name=dataset_name, feature=dataset_features, split=split)
+         for split in ['train', 'val', 'test']]
+    )
+    pre_transform_in_memory(dataset, T.ToUndirected())
+    # TODO: add the root features to data objects
     return dataset
 
 
