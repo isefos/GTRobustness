@@ -17,13 +17,28 @@ class GraphormerModel(torch.nn.Module):
 
     def __init__(self, dim_in, dim_out):
         super().__init__()
-        self.encoder = FeatureEncoder(dim_in)
-        dim_in = self.encoder.dim_in
 
-        if cfg.gnn.layers_pre_mp > 0:
-            self.pre_mp = GNNPreMP(
-                dim_in, cfg.gnn.dim_inner, cfg.gnn.layers_pre_mp)
-            dim_in = cfg.gnn.dim_inner
+        # TODO: I switched the position of encoder and pre_mp to allow encoding and layers 
+        # of dim different than input features
+        #   - but would be better to have this as a config option
+
+        if dim_in > 1:
+            if cfg.gnn.layers_pre_mp > 0:
+                self.pre_mp = GNNPreMP(
+                    dim_in, cfg.gnn.dim_inner, cfg.gnn.layers_pre_mp)
+                dim_in = cfg.gnn.dim_inner
+
+            self.encoder = FeatureEncoder(dim_in)
+            dim_in = self.encoder.dim_in
+
+        else:
+            self.encoder = FeatureEncoder(dim_in)
+            dim_in = self.encoder.dim_in
+
+            if cfg.gnn.layers_pre_mp > 0:
+                self.pre_mp = GNNPreMP(
+                    dim_in, cfg.gnn.dim_inner, cfg.gnn.layers_pre_mp)
+                dim_in = cfg.gnn.dim_inner
 
         if not cfg.graphormer.embed_dim == cfg.gnn.dim_inner == dim_in:
             raise ValueError(

@@ -1,0 +1,54 @@
+out_dir: tests/results
+metric_best: accuracy
+tensorboard_each_run: True
+dataset:
+  format: PyG-UPFD
+  name: politifact-spacy
+  task: graph
+  task_type: classification_binary
+  transductive: False
+  split_mode: standard
+  node_encoder: True
+  node_encoder_name: GraphormerBias
+  node_encoder_bn: True
+posenc_GraphormerBias:
+  enable: True
+  node_degrees_only: False
+  num_spatial_types: 20
+  num_in_degrees: 512
+  num_out_degrees: 512
+train:
+  mode: custom
+  batch_size: 32
+  eval_period: 1
+  ckpt_period: 100
+model:
+  type: Graphormer
+  loss_fun: cross_entropy
+  graph_pooling: graph_token
+graphormer:
+  num_layers: 2
+  num_heads: 2
+  embed_dim: 64
+  dropout: 0.0
+  attention_dropout: 0.1
+  mlp_dropout: 0.1
+  input_dropout: 0.1
+gnn:
+  head: graphormer_graph
+  layers_pre_mp: 1
+  layers_post_mp: 1  # Not used when `gnn.head: san_graph`
+  dim_inner: 64  # `gt.dim_hidden` must match `gnn.dim_inner`
+  batchnorm: True
+  act: relu
+  dropout: 0.0
+  agg: mean
+  normalize_adj: False
+optim:
+  clip_grad_norm: True
+  clip_grad_norm_value: 5.0
+  optimizer: adamW
+  weight_decay: 0.01
+  base_lr: 0.001
+  max_epoch: 200
+  scheduler: polynomial_with_warmup
