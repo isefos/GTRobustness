@@ -16,6 +16,7 @@ from torch_geometric.graphgym.logger import set_printing
 from torch_geometric.graphgym.optim import create_optimizer, \
     create_scheduler, OptimizerConfig
 from torch_geometric.graphgym.model_builder import create_model
+from torch_geometric.graphgym.loss import compute_loss
 from torch_geometric.graphgym.train import GraphGymDataModule, train
 from torch_geometric.graphgym.utils.comp_budget import params_count
 from torch_geometric.graphgym.utils.device import auto_select_device
@@ -25,6 +26,7 @@ from torch_geometric import seed_everything
 from graphgps.finetuning import load_pretrained_model_cfg, \
     init_model_from_pretrained
 from graphgps.logger import create_logger
+from graphgps.attack.attack import prbcd_attack_test_dataset
 
 
 torch.backends.cuda.matmul.allow_tf32 = True  # Default False in PyTorch 1.12+
@@ -165,6 +167,69 @@ if __name__ == '__main__':
         else:
             train_dict[cfg.train.mode](loggers, loaders, model, optimizer,
                                        scheduler)
+            
+
+        # ATTACK:
+        # (temporary hacky way of adding attack to every run,
+        #  will only work for UPDF and weighted / generalized models though... Work in Progress)
+            
+        # TODO: add all of this to a separate function / class and make it enabled / disabled by config
+        #  also add all parameters to config
+        n_attacks = 20
+        attack_lr = 4_000  # 4_000
+        attack_b = 10_000
+        attack_e = 0.15  # 0.3
+
+        # TODO: add this to the actual UPFD dataset (so it gets downloaded directly)
+        dataset_name = "politifact"
+        data_path = os.path.join(os.getcwd(), "datasets", "UPFD")
+        # from: https://github.com/safe-graph/GNN-FakeNews/blob/main/data/gos_id_twitter_mapping.pkl
+        # and https://github.com/safe-graph/GNN-FakeNews/blob/main/data/pol_id_twitter_mapping.pkl
+        id_mapping_files = {
+            'politifact': os.path.join(data_path, "pol_id_twitter_mapping.pkl"),
+            'gossipcop': os.path.join(data_path, "gos_id_twitter_mapping.pkl"),
+        }
+        id_mapping_path = id_mapping_files[dataset_name]
+        raw_data_path = os.path.join(data_path, dataset_name, "raw")
+        graph_indices_paths = {
+            "train": os.path.join(raw_data_path, "train_idx.npy"),
+            "val": os.path.join(raw_data_path, "val_idx.npy"),
+            "test": os.path.join(raw_data_path, "test_idx.npy"),
+        }
+
+        # TODO: attack loss wrapper for normal training loss, put into attack, and let it be configurable 
+        def attack_loss(pred, true, node_cls_mask):
+            return compute_loss(pred, true)[0]
+        
+        # TODO: instead of giving train val test, 
+        # already compute total nodes x before and pass, 
+        # then just pass attack dataset
+        
+        results = prbcd_attack_test_dataset(
+            model=model,
+            datasets={split: l.dataset for split, l in zip(["train", "val", "test"], loaders)},
+            device=torch.device(cfg.accelerator),
+            attack_loss=attack_loss,
+            id_mapping_path=id_mapping_path,
+            graph_indices_paths=graph_indices_paths,
+            limit_number_attacks=n_attacks,
+            e_budget=attack_e,
+            block_size=attack_b,
+            lr=attack_lr,
+            sigmoid_threshold=cfg.model.thresh,
+        )
+        print(
+            f"PRBCD: Accuracy clean: {results['clean_acc']:.3f},  Perturbed: {results['pert_acc']:.3f}.\n"
+            f"Average number of edges added: {sum(results['num_edges_added']) / len(results['num_edges_added']):.3f}\n"
+            f"Average number of edges removed: "
+            f"{sum(results['num_edges_removed']) / len(results['num_edges_removed']):.3f}\n"
+            f"Average number of nodes added: {sum(results['num_nodes_added']) / len(results['num_nodes_added']):.3f}\n"
+            f"Average number of nodes removed: "
+            f"{sum(results['num_nodes_removed']) / len(results['num_nodes_removed']):.3f}\n"
+            f"Nodes most frequently added - (freq, global_node_index): {results['most_added_nodes'][:10]}\n"
+        )
+
+
     # Aggregate results from different seeds
     try:
         agg_runs(cfg.out_dir, cfg.metric_best)
