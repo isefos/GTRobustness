@@ -1,5 +1,5 @@
 import torch
-from torch_geometric.utils import to_dense_adj, remove_self_loops
+from torch_geometric.utils import to_dense_adj, remove_self_loops, scatter
 
 
 def node_in_graph_prob_undirected(
@@ -9,13 +9,18 @@ def node_in_graph_prob_undirected(
     num_iterations: int = 5,
     root_node: None | int = None,
 ) -> torch.Tensor:
+    """
+    Sparse implementation as a form of message passing
+    """
     assert num_iterations > 0, "Must do at least one iteration"
     assert len(edge_weights.shape) == 1, "Only scalar edge weights are supported"
-    adj_edge_index, adj_edge_weights = remove_self_loops(edge_index, edge_weights)
-    adj = to_dense_adj(adj_edge_index, batch, adj_edge_weights).squeeze_()
-    prob_nodes = torch.ones(batch.size(0))
+    num_nodes = batch.size(0)
+    edge_index_nsl, edge_weights_nsl = remove_self_loops(edge_index, edge_weights)
+    prob_nodes = torch.ones(num_nodes)
     for _ in range(num_iterations):
-        prob_nodes_new = 1 - torch.prod(1 - adj * prob_nodes[None, :], dim=1)
+        msg = 1 - edge_weights_nsl * prob_nodes[edge_index_nsl[1, :]]
+        out = scatter(msg, edge_index_nsl[0, :], dim=0, dim_size=num_nodes, reduce='mul')
+        prob_nodes_new = 1 - out
         if root_node is not None:
             prob_nodes_new[root_node] = 1
         prob_nodes = prob_nodes_new
@@ -29,24 +34,28 @@ def node_in_graph_prob_directed(
     num_iterations: int = 5,
     root_node: None | int = None,
 ) -> torch.Tensor:
-    raise NotImplementedError("Must implement vectorized version, otherwise too slow")
+    """
+    Sparse implementation as a form of message passing
+    """
     assert num_iterations > 0, "Must do at least one iteration"
+    assert len(edge_weights.shape) == 1, "Only scalar edge weights are supported"
+    num_nodes = batch.size(0)
+    edge_index_nsl, edge_weights_nsl = remove_self_loops(edge_index, edge_weights)
     prob_nodes = torch.ones(num_nodes)
     for _ in range(num_iterations):
-        prob_nodes_new = torch.zeros(num_nodes)
-        for node_idx in range(num_nodes):
-            edges_out_mask = edge_index[0, :] == node_idx
-            neighbors_out = edge_index[1, edges_out_mask]
-            neigh_out_weights = edge_weights[edges_out_mask]
-            edges_in_mask = edge_index[1, :] == node_idx
-            neighbors_in = edge_index[0, edges_in_mask]
-            neigh_in_weights = edge_weights[edges_in_mask]
-            neighbors = torch.cat((neighbors_out, neighbors_in), dim=0)
-            edges_neigh_weights = torch.cat((neigh_out_weights, neigh_in_weights), dim=0)
-            prob_nodes_new[node_idx] = 1 - torch.prod(1 - prob_nodes[neighbors] * edges_neigh_weights)
-        prob_nodes = prob_nodes_new
+        msg_out = 1 - edge_weights_nsl * prob_nodes[edge_index_nsl[1, :]]
+        msg_in = 1 - edge_weights_nsl * prob_nodes[edge_index_nsl[0, :]]
+        out = scatter(
+            torch.cat((msg_out, msg_in), dim=0),
+            torch.cat((edge_index_nsl[0, :], edge_index_nsl[1, :]), dim=0),
+            dim=0,
+            dim_size=num_nodes,
+            reduce='mul',
+        )
+        prob_nodes_new = 1 - out
         if root_node is not None:
-            prob_nodes[root_node] = 1
+            prob_nodes_new[root_node] = 1
+        prob_nodes = prob_nodes_new
     return prob_nodes
 
 

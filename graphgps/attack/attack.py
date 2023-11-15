@@ -12,22 +12,22 @@ import pickle
 import numpy as np
 
 
-def forward_wrapper(forward: Callable) -> Callable:
-    # does this actually work?
+def forward_wrapper(forward: Callable, is_undirected: bool) -> Callable:
 
     @functools.wraps(forward)
     def wrapped_forward(data, root_node: None | int = None, remove_not_connected: bool = False):
         if remove_not_connected:
             assert root_node is not None, "The root node must be specified"
             new_data, new_root_node = get_only_root_graph(data, root_node)
+
             # TODO: where to get bool: undirected from?
             new_data.node_probs = node_in_graph_prob(
                 edge_index=new_data.edge_index,
                 edge_weights=new_data.edge_attr,
                 batch=new_data.batch,
-                undirected=True,
+                undirected=is_undirected,
                 root_node=new_root_node,
-                num_iterations=3,
+                num_iterations=4,
             )
             return forward(new_data)[0]
         else:
@@ -48,20 +48,27 @@ def prbcd_attack_test_dataset(
     e_budget: float,
     block_size: int,  # e.g. 1_000
     lr: float,  # e.g. 1_000
+    is_undirected: bool,
     sigmoid_threshold: float,
+    existing_node_prob_multiplier: int,
+    allow_existing_graph_pert: bool,
 ):
+    # TODO: make dataset agnostic with default, but let dataset specific methods be overloaded 
+    # TODO: use logger instead of print
     complete_graph_output = get_complete_graph(datasets, device, id_mapping_path, graph_indices_paths)
     all_nodes, global_test_edge_index, root_masks, root_indices, node_ids = complete_graph_output
-    # TODO: make a model copy with same parameters, so we don't overwrite the actual forward call 
-    # (reversible through model.forward = model.forward.forward?) 
-    model.forward = forward_wrapper(model.forward)
+
+    # TODO: undo wrapping through: model.forward = model.forward.__wrapped__ after attack 
+    model.forward = forward_wrapper(model.forward, is_undirected)
 
     prbcd = PRBCDAttack(
-        model, 
-        block_size=block_size, 
-        lr=lr, 
+        model,
+        block_size=block_size,
+        lr=lr,
+        is_undirected=is_undirected,
         loss=attack_loss,
-        existing_edge_prob_multiplier=1,  # TODO: when implemented make larger, e.g. 10
+        existing_node_prob_multiplier=existing_node_prob_multiplier,
+        allow_existing_graph_pert=allow_existing_graph_pert,
     )
     
     local_root_offset = torch.arange(len(root_indices) - 1, dtype=torch.int)
@@ -102,17 +109,14 @@ def prbcd_attack_test_dataset(
             edge_index = global_test_edge_index[i]
             root_node = int(edge_index[0, 0].item())
             # check that using the complete graph with all user nodes is equivalent
-
-            # TODO:
             global_clean_data = Batch.from_data_list([Data(x=node_features.clone(), edge_index=edge_index)])
-
             with torch.no_grad():
                 global_graph_output = model(
                     global_clean_data, root_node=root_node, remove_not_connected=True,
                 )
             assert torch.allclose(clean_output, global_graph_output, atol=0.001, rtol=0.001)
 
-            # then do the attack
+            # attack: find perturbations
             pert_edge_index, perts = prbcd.attack(
                 node_features,
                 edge_index,
@@ -121,10 +125,13 @@ def prbcd_attack_test_dataset(
                 root_node=root_node,
                 remove_not_connected=True,
             )
+
             # check the result of the attack on the model
             # TODO: check if the perturbation violates any other structure rules
             #  (maybe no chaining together 2 same ids?)
-            assert check_if_tree(pert_edge_index)
+            if not check_if_tree(pert_edge_index):
+                print("\n\nWARNING: PERTURBATION IS NOT A TREE ANYMORE!!!\n\n")
+
             data = Batch.from_data_list([Data(x=node_features.clone(), edge_index=pert_edge_index)])
             new_data, new_root_node = get_only_root_graph(data, root_node)
             with torch.no_grad():
@@ -168,6 +175,7 @@ def prbcd_attack_test_dataset(
             local_root_offset=local_root_offset,
             node_ids=node_ids,
         )
+
         # TODO: analysis on the ids -> have we basically added the same node twice (but with different indices)?
         #  check if some of the added nodes have the same id (as any other node in graph) using node_ids
         #  -> are we violating any graph properties (eg. no chaining same id?)
@@ -230,10 +238,11 @@ def prbcd_attack_test_dataset(
 
 # TODO: dataset analysis:
 #  - Plot the graphs!
-#  - How many levels from root? Can a retweet be retweeted?
+#  - How many levels from root?
 #  - Always strict trees?
 #  - Are the assumed rules never violated? No retweeting your own tweet/ retweet.
-#       -----> no chaining same ids -> not feasible to retweet your own tweet??????????
+#       -----> no chaining same ids -> not feasible to retweet your own tweet?
+#  - Are graph ids (news) repeated, or is each graph on a different news?
 #  - How often are node ids repeated?
 #     - Within same graph?
 #     - In other graphs?

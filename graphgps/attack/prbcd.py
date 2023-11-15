@@ -101,7 +101,8 @@ class PRBCDAttack(torch.nn.Module):
         lr: float = 1_000,
         is_undirected: bool = True,
         log: bool = True,
-        existing_edge_prob_multiplier: float = 1,
+        existing_node_prob_multiplier: float = 1.,
+        allow_existing_graph_pert: bool = True,
         **kwargs,
     ):
         super().__init__()
@@ -131,8 +132,11 @@ class PRBCDAttack(torch.nn.Module):
         self.epochs_resampling = epochs_resampling
         self.lr = lr
 
-        self.existing_edge_prob_multiplier = existing_edge_prob_multiplier
-        
+        # settings for node injection
+        self.existing_node_prob_multiplier = existing_node_prob_multiplier
+        self.importance_sampling = not self.existing_node_prob_multiplier == 1
+        self.allow_existing_graph_pert = allow_existing_graph_pert
+        self.multinomial_sampling = not allow_existing_graph_pert or self.importance_sampling
 
         self.coeffs.update(kwargs)
 
@@ -173,7 +177,27 @@ class PRBCDAttack(torch.nn.Module):
         self.edge_index = edge_index.cpu().clone()
         self.edge_weight = edge_weight.cpu().clone()
         self.num_nodes = x.size(0)
-        self.included_nodes = torch.unique(edge_index)
+
+        # settings for node injection attacks:
+        if self.multinomial_sampling:
+            sorted_included_nodes: torch.Tensor = edge_index.unique(sorted=True)
+            num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
+            to_lin_idx = self._triu_to_linear_idx if self.is_undirected else self._full_to_linear_idx
+            self.edge_sample_prior = torch.ones(num_possible_edges, dtype=torch.float, device=self.device)
+            if self.importance_sampling:
+                # give edges to included nodes a higher probability of getting sampled
+                edges_to_included = self._get_new_1hop_edges(
+                    sorted_included_nodes, self.num_nodes, self.is_undirected, self.device,
+                )
+                idx_to_included = to_lin_idx(self.num_nodes, edges_to_included)
+                self.edge_sample_prior[idx_to_included] *= self.existing_node_prob_multiplier
+            if not self.allow_existing_graph_pert:
+                # don't allow the edges between to included nodes to change, only adding new edges
+                edges_between_included = self._get_fully_connected_edges(
+                    sorted_included_nodes, self.is_undirected, self.device,
+                )
+                idx_between_included = to_lin_idx(self.num_nodes, edges_between_included)
+                self.edge_sample_prior[idx_between_included] = 0
 
         # For collecting attack statistics
         self.attack_statistics = defaultdict(list)
@@ -299,7 +323,7 @@ class PRBCDAttack(torch.nn.Module):
     def _forward(self, x: Tensor, edge_index: Tensor, edge_weight: Tensor,
                  **kwargs) -> Tensor:
         """Forward model."""
-        # TODO: create a data / batch object, clone x, since it gets modified inplace in the forward pass
+        # create a data / batch object, clone x, since it gets modified inplace in the forward pass
         data = Batch.from_data_list([Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight)])
         return self.model(data, **kwargs)
 
@@ -362,22 +386,12 @@ class PRBCDAttack(torch.nn.Module):
         for _ in range(self.coeffs['max_trials_sampling']):
             num_possible_edges = self._num_possible_edges(
                 self.num_nodes, self.is_undirected)
-            if self.existing_edge_prob_multiplier == 1:
-                self.current_block = torch.randint(num_possible_edges,
-                                                (self.block_size, ),
-                                                device=self.device)
+            if not self.multinomial_sampling:
+                self.current_block = torch.randint(
+                    num_possible_edges, (self.block_size, ), device=self.device,
+                )
             else:
-                # TODO: change in resampling as well
-                probs = torch.ones(num_possible_edges, dtype=torch.float)
-                if self.is_undirected:
-                    # basically inverse of: self._linear_to_triu_idx
-                    included_node_edge_indices = self.fun1(self.included_nodes)
-                else:
-                    # basically inverse of: self._linear_to_full_idx
-                    included_node_edge_indices = self.fun2(self.included_nodes)
-                probs[included_node_edge_indices] *= self.existing_edge_prob_multiplier
-                self.current_block = torch.multinomial(probs, self.block_size).to(device=self.device)
-
+                self.current_block = torch.multinomial(self.edge_sample_prior, self.block_size)
             self.current_block = torch.unique(self.current_block, sorted=True)
             if self.is_undirected:
                 self.block_edge_index = self._linear_to_triu_idx(
@@ -411,8 +425,13 @@ class PRBCDAttack(torch.nn.Module):
             n_edges_resample = self.block_size - self.current_block.size(0)
             num_possible_edges = self._num_possible_edges(
                 self.num_nodes, self.is_undirected)
-            lin_index = torch.randint(num_possible_edges, (n_edges_resample, ),
-                                      device=self.device)
+
+            if not self.multinomial_sampling:
+                lin_index = torch.randint(
+                    num_possible_edges, (n_edges_resample, ), device=self.device,
+                )
+            else:
+                lin_index = torch.multinomial(self.edge_sample_prior, n_edges_resample)
 
             current_block = torch.cat((self.current_block, lin_index))
             self.current_block, unique_idx = torch.unique(
@@ -549,6 +568,18 @@ class PRBCDAttack(torch.nn.Module):
         col_idx = 1 + lin_idx + row_idx - nn // 2 + torch.div(
             (n - row_idx) * (n - row_idx - 1), 2, rounding_mode='floor')
         return torch.stack((row_idx, col_idx))
+    
+    @staticmethod
+    def _triu_to_linear_idx(n: int, triu_idx: Tensor) -> Tensor:
+        """Given normal edge indices get the corresponding linear triu idx
+        triu_idx = [[-row_idx-], [-col_idx-]]
+        answer based on 
+        https://math.stackexchange.com/a/2134297
+        """
+        i = triu_idx[0, :]
+        j = triu_idx[1, :]
+        linear_idx = (n * (n - 1) // 2) - ((n - i) * (n - i - 1) // 2) + j
+        return linear_idx
 
     @staticmethod
     def _linear_to_full_idx(n: int, lin_idx: Tensor) -> Tensor:
@@ -556,6 +587,66 @@ class PRBCDAttack(torch.nn.Module):
         row_idx = torch.div(lin_idx, n, rounding_mode='floor')
         col_idx = lin_idx % n
         return torch.stack((row_idx, col_idx))
+    
+    @staticmethod
+    def _full_to_linear_idx(n: int, full_idx: Tensor) -> Tensor:
+        """Given normal edge indices get the corresponding linear idx
+        full_idx = [[-row_idx-], [-col_idx-]]
+        """
+        i = full_idx[0, :]
+        j = full_idx[1, :]
+        linear_idx = n * i + j
+        return linear_idx
+
+    @staticmethod
+    def _get_new_1hop_edges(
+        sorted_included_node_idx: torch.Tensor,
+        num_nodes: int,
+        is_undirected: bool,
+        device,
+    ) -> torch.Tensor:
+        """Returns edge_index including all edges between included nodes and injection nodes
+        indices given as [i_row, j_col]
+        when is_undirecet: only one direction given with i_row > j_col
+        """
+        n_inc = sorted_included_node_idx.size(0)
+        mask = torch.ones(num_nodes, dtype=torch.bool, device=device)
+        mask[sorted_included_node_idx] = 0
+        injection_nodes = torch.arange(0, num_nodes, dtype=torch.long, device=device)[mask]
+        n_inj = injection_nodes.size(0)
+        edges = torch.cat(
+            (
+                sorted_included_node_idx.repeat_interleave(n_inj)[None, :],
+                injection_nodes.repeat(n_inc)[None, :],
+            ),
+            dim=0,
+        )
+        edges, _ = edges.sort(dim=0)
+        if not is_undirected:
+            edges = torch.cat((edges, edges[[1, 0], :]), dim=0)
+        return edges
+
+    @staticmethod
+    def _get_fully_connected_edges(
+        sorted_included_node_idx: torch.Tensor,
+        is_undirected: bool,
+        device,
+    ) -> torch.Tensor:
+        """Returns edge_index for all edges between included nodes
+        indices given as [i_row, j_col]
+        no self loops
+        when is_undirecet: only one direction given with i_row > j_col
+        """
+        n = sorted_included_node_idx.size(0)
+        repeats_upper = torch.arange(n-1, -1, -1, dtype=torch.long, device=device)
+        repeated_lower = torch.cat([sorted_included_node_idx[i:] for i in range(1, n)], dim=0)
+        edges = torch.cat(
+            (sorted_included_node_idx.repeat_interleave(repeats_upper)[None, :], repeated_lower[None, :]),
+            dim=0,
+        )
+        if not is_undirected:
+            edges = torch.cat((edges, edges[[1, 0], :]), dim=0)
+        return edges
 
     @staticmethod
     def _margin_loss(score: Tensor, labels: Tensor,

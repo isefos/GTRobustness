@@ -178,11 +178,17 @@ if __name__ == '__main__':
         n_attacks = 20
         attack_lr = 4_000  # 4_000
         attack_b = 10_000
-        attack_e = 0.15  # 0.3
+        attack_e = 0.3  # 0.3
+        existing_node_prob_multiplier = 10.
+        allow_existing_graph_pert = False  # False
+        # TODO: where to get bool: undirected from?
+        is_undirected = True
 
         # TODO: add this to the actual UPFD dataset (so it gets downloaded directly)
         dataset_name = "politifact"
         data_path = os.path.join(os.getcwd(), "datasets", "UPFD")
+
+        # TODO: to run in current state, must manually download these files and put into correct dir
         # from: https://github.com/safe-graph/GNN-FakeNews/blob/main/data/gos_id_twitter_mapping.pkl
         # and https://github.com/safe-graph/GNN-FakeNews/blob/main/data/pol_id_twitter_mapping.pkl
         id_mapping_files = {
@@ -216,7 +222,10 @@ if __name__ == '__main__':
             e_budget=attack_e,
             block_size=attack_b,
             lr=attack_lr,
+            is_undirected=is_undirected,
             sigmoid_threshold=cfg.model.thresh,
+            existing_node_prob_multiplier=existing_node_prob_multiplier,
+            allow_existing_graph_pert=allow_existing_graph_pert,
         )
         print(
             f"PRBCD: Accuracy clean: {results['clean_acc']:.3f},  Perturbed: {results['pert_acc']:.3f}.\n"
