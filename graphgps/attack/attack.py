@@ -109,7 +109,9 @@ def prbcd_attack_test_dataset(
             edge_index = global_test_edge_index[i]
             root_node = int(edge_index[0, 0].item())
             # check that using the complete graph with all user nodes is equivalent
-            global_clean_data = Batch.from_data_list([Data(x=node_features.clone(), edge_index=edge_index)])
+            global_clean_data = Batch.from_data_list(
+                [Data(x=node_features.clone(), edge_index=edge_index, edge_attr=torch.ones(edge_index.size(1)))]
+                )
             with torch.no_grad():
                 global_graph_output = model(
                     global_clean_data, root_node=root_node, remove_not_connected=True,

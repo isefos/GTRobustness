@@ -9,7 +9,7 @@ dataset:
   transductive: False
   split_mode: standard
   node_encoder: True
-  node_encoder_name: GraphormerBias
+  node_encoder_name: WeightedGraphormerBias
   node_encoder_bn: True
 posenc_GraphormerBias:
   enable: True
@@ -19,7 +19,7 @@ posenc_GraphormerBias:
   num_out_degrees: 512
 train:
   mode: custom
-  batch_size: 32
+  batch_size: 16
   eval_period: 1
   ckpt_period: 100
 model:
@@ -29,7 +29,7 @@ model:
 graphormer:
   num_layers: 2
   num_heads: 2
-  embed_dim: 64
+  embed_dim: 32
   dropout: 0.0
   attention_dropout: 0.1
   mlp_dropout: 0.1
@@ -38,7 +38,7 @@ gnn:
   head: graphormer_graph
   layers_pre_mp: 1
   layers_post_mp: 1  # Not used when `gnn.head: san_graph`
-  dim_inner: 64  # `gt.dim_hidden` must match `gnn.dim_inner`
+  dim_inner: 32  # `gt.dim_hidden` must match `gnn.dim_inner`
   batchnorm: True
   act: relu
   dropout: 0.0
@@ -50,5 +50,5 @@ optim:
   optimizer: adamW
   weight_decay: 0.01
   base_lr: 0.001
-  max_epoch: 200
+  max_epoch: 3
   scheduler: polynomial_with_warmup

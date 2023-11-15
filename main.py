@@ -179,8 +179,8 @@ if __name__ == '__main__':
         attack_lr = 4_000  # 4_000
         attack_b = 10_000
         attack_e = 0.3  # 0.3
-        existing_node_prob_multiplier = 10.
-        allow_existing_graph_pert = False  # False
+        existing_node_prob_multiplier = 1.  # 100
+        allow_existing_graph_pert = True  # False
         # TODO: where to get bool: undirected from?
         is_undirected = True
 

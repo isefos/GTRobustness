@@ -134,9 +134,9 @@ class PRBCDAttack(torch.nn.Module):
 
         # settings for node injection
         self.existing_node_prob_multiplier = existing_node_prob_multiplier
-        self.importance_sampling = not self.existing_node_prob_multiplier == 1
+        self.included_weighted = not self.existing_node_prob_multiplier == 1
         self.allow_existing_graph_pert = allow_existing_graph_pert
-        self.multinomial_sampling = not allow_existing_graph_pert or self.importance_sampling
+        self.weighted_sampling = not allow_existing_graph_pert or self.included_weighted
 
         self.coeffs.update(kwargs)
 
@@ -179,25 +179,27 @@ class PRBCDAttack(torch.nn.Module):
         self.num_nodes = x.size(0)
 
         # settings for node injection attacks:
-        if self.multinomial_sampling:
+        if self.weighted_sampling:
             sorted_included_nodes: torch.Tensor = edge_index.unique(sorted=True)
-            num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
             to_lin_idx = self._triu_to_linear_idx if self.is_undirected else self._full_to_linear_idx
-            self.edge_sample_prior = torch.ones(num_possible_edges, dtype=torch.float, device=self.device)
-            if self.importance_sampling:
+            idx_to_included = None
+            idx_between_included = None
+            if self.included_weighted:
                 # give edges to included nodes a higher probability of getting sampled
                 edges_to_included = self._get_new_1hop_edges(
                     sorted_included_nodes, self.num_nodes, self.is_undirected, self.device,
                 )
                 idx_to_included = to_lin_idx(self.num_nodes, edges_to_included)
-                self.edge_sample_prior[idx_to_included] *= self.existing_node_prob_multiplier
             if not self.allow_existing_graph_pert:
                 # don't allow the edges between to included nodes to change, only adding new edges
                 edges_between_included = self._get_fully_connected_edges(
                     sorted_included_nodes, self.is_undirected, self.device,
                 )
                 idx_between_included = to_lin_idx(self.num_nodes, edges_between_included)
-                self.edge_sample_prior[idx_between_included] = 0
+            # Now use these for sampling
+            raise NotImplementedError("Need to implement the weighted sampling")
+            weighted_sampler(idx_to_included, idx_between_included, self.existing_node_prob_multiplier)
+            weighted_sampler.sample(n)
 
         # For collecting attack statistics
         self.attack_statistics = defaultdict(list)
@@ -386,12 +388,13 @@ class PRBCDAttack(torch.nn.Module):
         for _ in range(self.coeffs['max_trials_sampling']):
             num_possible_edges = self._num_possible_edges(
                 self.num_nodes, self.is_undirected)
-            if not self.multinomial_sampling:
+            if not self.weighted_sampling:
                 self.current_block = torch.randint(
                     num_possible_edges, (self.block_size, ), device=self.device,
                 )
             else:
-                self.current_block = torch.multinomial(self.edge_sample_prior, self.block_size)
+                # self.current_block = torch.multinomial(self.edge_sample_prior, self.block_size)
+                raise NotImplementedError
             self.current_block = torch.unique(self.current_block, sorted=True)
             if self.is_undirected:
                 self.block_edge_index = self._linear_to_triu_idx(
@@ -426,12 +429,13 @@ class PRBCDAttack(torch.nn.Module):
             num_possible_edges = self._num_possible_edges(
                 self.num_nodes, self.is_undirected)
 
-            if not self.multinomial_sampling:
+            if not self.weighted_sampling:
                 lin_index = torch.randint(
                     num_possible_edges, (n_edges_resample, ), device=self.device,
                 )
             else:
-                lin_index = torch.multinomial(self.edge_sample_prior, n_edges_resample)
+                # lin_index = torch.multinomial(self.edge_sample_prior, n_edges_resample)
+                raise NotImplementedError
 
             current_block = torch.cat((self.current_block, lin_index))
             self.current_block, unique_idx = torch.unique(
