@@ -31,9 +31,9 @@ graphormer:
   num_heads: 2
   embed_dim: 32
   dropout: 0.0
-  attention_dropout: 0.1
-  mlp_dropout: 0.1
-  input_dropout: 0.1
+  attention_dropout: 0.0  # 0.1
+  mlp_dropout: 0.0  # 0.1
+  input_dropout: 0.0  # 0.1
 gnn:
   head: graphormer_graph
   layers_pre_mp: 1
@@ -50,5 +50,5 @@ optim:
   optimizer: adamW
   weight_decay: 0.01
   base_lr: 0.001
-  max_epoch: 3
+  max_epoch: 10
   scheduler: polynomial_with_warmup

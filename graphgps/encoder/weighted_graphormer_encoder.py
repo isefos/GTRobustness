@@ -5,6 +5,7 @@ from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.register import register_node_encoder
 from torch_geometric.utils import to_dense_adj, to_networkx
 from itertools import combinations
+from graphgps.encoder.graphormer_encoder import add_graph_token
 
 # Permutes from (batch, node, node, head) to (batch, head, node, node)
 BATCH_HEAD_NODE_NODE = (0, 3, 1, 2)
@@ -162,6 +163,7 @@ def weighted_graphormer_pre_processing(data, distance):
 
     # TODO: only undirected implemented for now, add directed later
     # TODO: handle too large degree -> clamping to max
+    # TODO: where to get is_undirected from
     data.degree_indices, data.degree_weights = node_degree_weights_undirected(
         data.x.size(0), data.edge_index, data.edge_attr,
     )
@@ -244,6 +246,12 @@ class WeightedBiasEncoder(torch.nn.Module):
                                          spatial_types)
         bias = spatial_encodings.permute(BATCH_HEAD_NODE_NODE)
 
+        # TODO: add bias for node ex prob
+        if hasattr(data, "node_probs"):
+            n = data.node_probs.size(0)
+            assert n == bias.size(2) == bias.size(3)
+            bias += torch.log2(data.node_probs.repeat(n, 1))[None, None :, :]
+
         if self.use_graph_token:
             bias = F.pad(bias, INSERT_GRAPH_TOKEN)
             bias[:, :, 1:, 0] = self.graph_token
@@ -252,40 +260,7 @@ class WeightedBiasEncoder(torch.nn.Module):
         B, H, N, _ = bias.shape
         data.attn_bias = bias.reshape(B * H, N, N)
 
-        # TODO: add bias for node ex prob
-        if hasattr(data, "node_probs"):
-            assert N == data.node_probs.size(0)
-            data.attn_bias += torch.log2(data.node_probs.repeat(N, 1))[None, :, :]
-
         return data
-
-
-def add_graph_token(data, token):
-    """Helper function to augment a batch of PyG graphs
-    with a graph token each. Note that the token is
-    automatically replicated to fit the batch.
-
-    Args:
-        data: A PyG data object holding a single graph
-        token: A tensor containing the graph token values
-
-    Returns:
-        The augmented data object.
-    """
-    B = len(data.batch.unique())
-    tokens = torch.repeat_interleave(token, B, 0)
-    data.x = torch.cat([tokens, data.x], 0)
-    data.batch = torch.cat(
-        [torch.arange(0, B, device=data.x.device, dtype=torch.long), data.batch]
-    )
-    data.batch, sort_idx = torch.sort(data.batch)
-    data.x = data.x[sort_idx]
-    # TODO: check if works 
-    if hasattr(data, "node_probs"):
-        # add 1 as prob of graph token
-        data.node_probs = torch.cat([torch.ones(B), data.node_probs], 0)
-        data.node_probs = data.node_probs[sort_idx]
-    return data
 
 
 class WeightedNodeEncoder(torch.nn.Module):
@@ -304,6 +279,8 @@ class WeightedNodeEncoder(torch.nn.Module):
             use_graph_token: If True, adds the graph token to the incoming batch.
         """
         super().__init__()
+
+        # TODO: for undirected graph only use a single embedding degree_encoder
         self.in_degree_encoder = torch.nn.Embedding(num_in_degree, embed_dim)
         self.out_degree_encoder = torch.nn.Embedding(num_out_degree, embed_dim)
 
