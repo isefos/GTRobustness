@@ -11,6 +11,9 @@ from tqdm import tqdm
 from torch_geometric.utils import coalesce, to_undirected
 from torch_geometric.data import Data, Batch
 
+from graphgps.attack.sampling import WeightedIndexSampler
+
+
 # (predictions, labels, ids/mask) -> Tensor with one element
 LOSS_TYPE = Callable[[Tensor, Tensor, Optional[Tensor]], Tensor]
 
@@ -104,7 +107,7 @@ class PRBCDAttack(torch.nn.Module):
         lr: float = 1_000,
         is_undirected: bool = True,
         log: bool = True,
-        existing_node_prob_multiplier: float = 1.,
+        existing_node_prob_multiplier: int = 1,
         allow_existing_graph_pert: bool = True,
         **kwargs,
     ):
@@ -200,9 +203,12 @@ class PRBCDAttack(torch.nn.Module):
                 )
                 idx_between_included = to_lin_idx(self.num_nodes, edges_between_included)
             # Now use these for sampling
-            raise NotImplementedError("Need to implement the weighted sampling")
-            weighted_sampler(idx_to_included, idx_between_included, self.existing_node_prob_multiplier)
-            weighted_sampler.sample(n)
+            self.weighted_index_sampler = WeightedIndexSampler(
+                idx_to_included,
+                idx_between_included,
+                self.existing_node_prob_multiplier,
+                self._num_possible_edges(self.num_nodes, self.is_undirected),
+            )
 
         # For collecting attack statistics
         self.attack_statistics = defaultdict(list)
@@ -401,8 +407,9 @@ class PRBCDAttack(torch.nn.Module):
                     num_possible_edges, (self.block_size, ), device=self.device,
                 )
             else:
-                # self.current_block = torch.multinomial(self.edge_sample_prior, self.block_size)
-                raise NotImplementedError
+                self.current_block = self.weighted_index_sampler.sample(
+                    self.block_size, device=self.device,
+                )
             self.current_block = torch.unique(self.current_block, sorted=True)
             if self.is_undirected:
                 self.block_edge_index = self._linear_to_triu_idx(
@@ -442,8 +449,9 @@ class PRBCDAttack(torch.nn.Module):
                     num_possible_edges, (n_edges_resample, ), device=self.device,
                 )
             else:
-                # lin_index = torch.multinomial(self.edge_sample_prior, n_edges_resample)
-                raise NotImplementedError
+                lin_index = self.weighted_index_sampler.sample(
+                    self.block_size, device=self.device,
+                )
 
             current_block = torch.cat((self.current_block, lin_index))
             self.current_block, unique_idx = torch.unique(

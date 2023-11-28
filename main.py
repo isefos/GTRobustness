@@ -177,10 +177,10 @@ if __name__ == '__main__':
         #  also add all parameters to config
         n_attacks = 20
         attack_lr = 4_000  # 4_000
-        attack_b = 4_000
+        attack_b = 2_000
         attack_e = 0.3  # 0.3
-        existing_node_prob_multiplier = 1.  # 100
-        allow_existing_graph_pert = True  # False
+        existing_node_prob_multiplier = 1000  # 1
+        allow_existing_graph_pert = False
         # TODO: where to get bool: undirected from?
         is_undirected = True
 
