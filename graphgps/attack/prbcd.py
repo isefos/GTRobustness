@@ -15,6 +15,9 @@ from torch_geometric.data import Data, Batch
 LOSS_TYPE = Callable[[Tensor, Tensor, Optional[Tensor]], Tensor]
 
 
+# torch.autograd.set_detect_anomaly(True)
+
+
 class PRBCDAttack(torch.nn.Module):
     r"""The Projected Randomized Block Coordinate Descent (PRBCD) adversarial
     attack from the `Robustness of Graph Neural Networks at Scale
@@ -374,6 +377,11 @@ class PRBCDAttack(torch.nn.Module):
         is_edge_in_clean_adj = modified_edge_weight > 1
         modified_edge_weight[is_edge_in_clean_adj] = (
             2 - modified_edge_weight[is_edge_in_clean_adj])
+        
+        # remove zero weight edges, not needed in sparse representation
+        zero_weight_mask = modified_edge_weight > 0
+        modified_edge_weight = modified_edge_weight[zero_weight_mask]
+        modified_edge_index = modified_edge_index[:, zero_weight_mask]
 
         return modified_edge_index, modified_edge_weight
 

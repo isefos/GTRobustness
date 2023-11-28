@@ -21,3 +21,7 @@ def set_cfg_gt(cfg):
     cfg.posenc_GraphormerBias.num_spatial_types = None
     cfg.posenc_GraphormerBias.num_in_degrees = None
     cfg.posenc_GraphormerBias.num_out_degrees = None
+    cfg.posenc_GraphormerBias.directed_graphs = True
+    cfg.posenc_GraphormerBias.has_edge_attr = True
+    cfg.posenc_GraphormerBias.combinations_degree = False
+    cfg.posenc_GraphormerBias.use_weighted_path_distance = False

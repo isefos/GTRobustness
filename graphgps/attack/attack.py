@@ -134,10 +134,19 @@ def prbcd_attack_test_dataset(
             if not check_if_tree(pert_edge_index):
                 print("\n\nWARNING: PERTURBATION IS NOT A TREE ANYMORE!!!\n\n")
 
-            data = Batch.from_data_list([Data(x=node_features.clone(), edge_index=pert_edge_index)])
-            new_data, new_root_node = get_only_root_graph(data, root_node)
+            pert_data = Batch.from_data_list(
+                [
+                    Data(
+                        x=node_features.clone(),
+                        edge_index=pert_edge_index,
+                        edge_attr=torch.ones(pert_edge_index.size(1)),
+                    )
+                ]
+            )
             with torch.no_grad():
-                pert_output = model(new_data)
+                pert_output = model(
+                    pert_data, root_node=root_node, remove_not_connected=True,
+                )
         except KeyboardInterrupt:
             print("Attacks interrupted by user.")
             break

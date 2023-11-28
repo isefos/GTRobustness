@@ -139,7 +139,8 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
     if 'GraphormerBias' in pe_types:
         data = graphormer_pre_processing(
             data,
-            cfg.posenc_GraphormerBias.num_spatial_types
+            cfg.posenc_GraphormerBias.num_spatial_types,
+            is_undirected,
         )
 
     return data

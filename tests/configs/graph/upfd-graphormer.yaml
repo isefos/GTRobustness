@@ -17,6 +17,10 @@ posenc_GraphormerBias:
   num_spatial_types: 20
   num_in_degrees: 512
   num_out_degrees: 512
+  directed_graphs: False
+  has_edge_attr: False
+  combinations_degree: False
+  use_weighted_path_distance: False
 train:
   mode: custom
   batch_size: 16
