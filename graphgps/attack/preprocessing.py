@@ -1,5 +1,9 @@
 import torch
-from torch_geometric.utils import to_dense_adj, remove_self_loops, scatter
+from torch_geometric.utils import remove_self_loops, scatter
+
+
+# TODO: also save maximum edge weight of each node -> for shortest path pruning
+# just in the first iteration with max reduction, almost no additional cost
 
 
 def node_in_graph_prob_undirected(
@@ -71,10 +75,10 @@ def node_in_graph_prob(
         return torch.ones(batch.size(0))
     fun = node_in_graph_prob_undirected if undirected else node_in_graph_prob_directed
     node_prob = fun(
-            edge_index=edge_index,
-            edge_weights=edge_weights,
-            batch=batch,
-            num_iterations=num_iterations,
-            root_node=root_node,
+        edge_index=edge_index,
+        edge_weights=edge_weights,
+        batch=batch,
+        num_iterations=num_iterations,
+        root_node=root_node,
     )
     return node_prob

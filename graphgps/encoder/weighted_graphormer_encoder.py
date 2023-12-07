@@ -6,7 +6,6 @@ from torch_geometric.utils import to_dense_adj, to_scipy_sparse_matrix, scatter
 from itertools import combinations
 from graphgps.encoder.graphormer_encoder import add_graph_token
 from scipy.sparse import csgraph
-import logging
 import time
 
 # Permutes from (batch, node, node, head) to (batch, head, node, node)
@@ -224,12 +223,74 @@ def weighted_graphormer_pre_processing(
     # for now calculate the fixed distance values, without any gradient
     inv_edge_attr = 1 / data.edge_attr.detach()
     adj_weighted = to_scipy_sparse_matrix(data.edge_index, edge_attr=inv_edge_attr, num_nodes=n).tocsc()
-    distances_weighted, predecessors = csgraph.shortest_path(
+    distances_weighted_np, predecessors_np = csgraph.shortest_path(
         adj_weighted, method="auto", directed=directed_graphs, return_predecessors=True, unweighted=False,
     )
+    distances_weighted_np = distances_weighted_np.reshape(n**2)
+    clamped_distance_mask_np = distances_weighted_np > distance - 1
+    adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsc()
+    distances_hop_np = csgraph.construct_dist_matrix(adj, predecessors_np, directed=directed_graphs)
+    distances_hop_np[distances_hop_np > distance - 1] = distance - 1
+    max_hops = int(distances_hop_np.max())
+
     if use_weighted_path_distance:
-        distances_weighted = torch.tensor(distances_weighted.reshape(n ** 2))
-        distances_weighted[distances_weighted > distance-1] = distance-1
+
+        use_weighted_gradient = True
+
+        if use_weighted_gradient:
+            # get dense inv adj for easier indexing in path reconstruction
+            inv_adj = scatter(
+                inv_edge_attr,
+                n * data.edge_index[0] + data.edge_index[1],
+                dim=0,
+                dim_size=n**2,
+                reduce='sum',
+            )
+            # hack: because we know that the self loops are zero, 
+            # we can just put all the negative indices to (0, 0) -> 0
+            # then we are technically always adding that first self-loop edge for "non-edges", 
+            # but doesn't matter since we are just adding 0
+            assert inv_adj[0].item() == 0
+            clamped_distance_mask = torch.tensor(clamped_distance_mask_np, dtype=torch.bool)
+            true_distance_mask = ~clamped_distance_mask
+            distances_weighted = torch.zeros(n**2)
+
+            p_original = torch.tensor(predecessors_np.reshape((n**2)), dtype=torch.long)
+            adj_col_idx = p_original[true_distance_mask]
+            neg_mask = adj_col_idx < 0
+            adj_col_idx[neg_mask] = 0
+            # ends: torch.arange(n, dtype=torch.long).repeat(n)
+            adj_row_idx = torch.arange(n, dtype=torch.long).repeat(n)[true_distance_mask]
+            adj_row_idx[neg_mask] = 0
+            adj_lin_idx = n * adj_col_idx + adj_row_idx
+            distances_weighted[true_distance_mask] += inv_adj[adj_lin_idx]
+
+            row_idx = torch.zeros((n**2), dtype=torch.long)
+            col_idx = torch.arange(n, dtype=torch.long).repeat_interleave(n)
+            p_prev = p_original
+            for i in range(max_hops - 1):
+                row_idx = p_prev.clone()
+                row_idx[row_idx < 0] = col_idx[row_idx < 0]
+                p_next = p_original[n * col_idx + row_idx]
+                adj_col_idx = p_prev[true_distance_mask]
+                adj_row_idx = p_next[true_distance_mask]
+                neg_mask = torch.logical_or(adj_col_idx < 0, adj_row_idx < 0)
+                adj_lin_idx = n * adj_col_idx + adj_row_idx
+                adj_lin_idx[neg_mask] = 0
+                distances_weighted[true_distance_mask] += inv_adj[adj_lin_idx]
+                p_prev = p_next
+            distances_weighted[clamped_distance_mask] = distance - 1
+
+            debug = True
+            if debug:
+                distances_clamped = torch.tensor(distances_weighted_np, dtype=torch.float32)
+                distances_clamped[clamped_distance_mask] = distance - 1
+                assert torch.allclose(distances_weighted, distances_clamped)
+
+        else:
+            distances_weighted = torch.tensor(distances_weighted_np, dtype=torch.float32)
+            distances_weighted[distances_weighted > distance - 1] = distance - 1
+
         dw_low = torch.floor(distances_weighted).to(dtype=torch.long)
         dw_high = torch.ceil(distances_weighted).to(dtype=torch.long)
         weights_high = distances_weighted - dw_low
@@ -238,10 +299,7 @@ def weighted_graphormer_pre_processing(
         spatial_types = torch.cat((dw_low[:, None], dw_high[:, None]), dim=1)
         data.spatial_types_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
     else:
-        adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsc()
-        distances = csgraph.construct_dist_matrix(adj, predecessors, directed=directed_graphs)
-        spatial_types = torch.tensor(distances.reshape(n ** 2), dtype=torch.long)
-        spatial_types[spatial_types > distance-1] = distance-1
+        spatial_types = torch.tensor(distances_hop_np.reshape(n ** 2), dtype=torch.long)
     data.spatial_types = spatial_types
 
     t = time.perf_counter() - t

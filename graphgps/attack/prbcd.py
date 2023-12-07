@@ -207,7 +207,7 @@ class PRBCDAttack(torch.nn.Module):
                 idx_to_included,
                 idx_between_included,
                 self.existing_node_prob_multiplier,
-                self._num_possible_edges(self.num_nodes, self.is_undirected),
+                self._num_possible_edges(self.num_nodes, self.is_undirected)-1,
             )
 
         # For collecting attack statistics

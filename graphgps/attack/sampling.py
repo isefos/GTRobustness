@@ -70,7 +70,7 @@ class WeightedIndexSampler:
             num_steps += 1
             if num_steps > max_steps:
                 raise Exception("Something must have gone wrong...")
-            c = (r + l) // 2
+            c = l + (r - l) // 2
             step_size[:] = 1
             if self.weighted_idx is not None:
                 n_w_before = torch.searchsorted(

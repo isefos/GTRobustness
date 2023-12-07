@@ -97,11 +97,13 @@ def prbcd_attack_test_dataset(
             # we want to attack each graph individually (data loader should have batch size 1)
             model.eval()
             assert clean_data.num_graphs == 1
+            num_nodes = clean_data.x.size(0)
+            num_edges = clean_data.edge_index.size(1)
             clean_data = clean_data.to(device)
             with torch.no_grad():
                 clean_output = model(clean_data)
             # Perturb e_budget of edges:
-            global_budget = int(e_budget * clean_data.edge_index.size(1) / 2)
+            global_budget = int(e_budget * num_edges / 2)
             # mask out the other root nodes (should not be able to attack using those!)
             other_roots_mask = root_masks[i, :]
             node_features = all_nodes[other_roots_mask, :]
@@ -225,12 +227,14 @@ def prbcd_attack_test_dataset(
                 count_nodes_removed_index[node] += 1
             else:
                 count_nodes_removed_index[node] = 1
-        print(f"Added edges: {sorted([tuple(sorted(e)) for e in added_edges])}")
-        print(f"Added edges (connected): {sorted([tuple(sorted(e)) for e in added_edges_connected])}")
-        print(f"Removed edges: {sorted([tuple(sorted(e)) for e in removed_edges])}")
-        print(f"Added nodes: {sorted(added_nodes)}")
-        print(f"Added nodes (connected): {sorted(added_nodes_connected)}")
-        print(f"Removed nodes: {sorted(removed_nodes)}")
+        print(f"Original number of edges: {num_edges:>5}")
+        print(f"Added edges:              {len(added_edges):>5}")
+        print(f"Added edges (connected):  {len(added_edges_connected):>5}")
+        print(f"Removed edges:            {len(removed_edges):>5}")
+        print(f"Original number of nodes: {num_nodes:>5}")
+        print(f"Added nodes:              {len(added_nodes):>5}")
+        print(f"Added nodes (connected):  {len(added_nodes_connected):>5}")
+        print(f"Removed nodes:            {len(removed_nodes):>5}")
     # summary of results and analysis
     clean_acc = total_clean_correct / total_examples
     pert_acc = total_pert_correct / total_examples

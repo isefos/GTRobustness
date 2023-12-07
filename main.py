@@ -228,14 +228,12 @@ if __name__ == '__main__':
             allow_existing_graph_pert=allow_existing_graph_pert,
         )
         print(
-            f"PRBCD: Accuracy clean: {results['clean_acc']:.3f},  Perturbed: {results['pert_acc']:.3f}.\n"
-            f"Average number of edges added: {sum(results['num_edges_added']) / len(results['num_edges_added']):.3f}\n"
-            f"Average number of edges removed: "
-            f"{sum(results['num_edges_removed']) / len(results['num_edges_removed']):.3f}\n"
-            f"Average number of nodes added: {sum(results['num_nodes_added']) / len(results['num_nodes_added']):.3f}\n"
-            f"Average number of nodes removed: "
-            f"{sum(results['num_nodes_removed']) / len(results['num_nodes_removed']):.3f}\n"
-            f"Nodes most frequently added - (freq, global_node_index): {results['most_added_nodes'][:10]}\n"
+            f"PRBCD: Accuracy clean:           {results['clean_acc']:.3f},  Perturbed: {results['pert_acc']:.3f}.\n"
+            f"Average number of edges added:   {sum(results['num_edges_added']) / len(results['num_edges_added']):.3f}\n"
+            f"Average number of edges removed: {sum(results['num_edges_removed']) / len(results['num_edges_removed']):.3f}\n"
+            f"Average number of nodes added:   {sum(results['num_nodes_added']) / len(results['num_nodes_added']):.3f}\n"
+            f"Average number of nodes removed: {sum(results['num_nodes_removed']) / len(results['num_nodes_removed']):.3f}\n\n"
+            f"Nodes most frequently added - (freq, global_node_index):\n{results['most_added_nodes'][:10]}\n"
         )
 
 
