@@ -12,6 +12,8 @@ from torch_geometric.utils import coalesce, to_undirected
 from torch_geometric.data import Data, Batch
 
 from graphgps.attack.sampling import WeightedIndexSampler
+from torch_geometric.graphgym.loss import compute_loss
+import logging
 
 
 # (predictions, labels, ids/mask) -> Tensor with one element
@@ -126,6 +128,8 @@ class PRBCDAttack(torch.nn.Module):
                 self.loss = self._probability_margin_loss
             elif loss == 'tanh_margin':
                 self.loss = self._tanh_margin_loss
+            elif loss == 'train':
+                self.loss = self._train_loss
             else:
                 raise ValueError(f'Unknown loss `{loss}`')
         else:
@@ -235,7 +239,6 @@ class PRBCDAttack(torch.nn.Module):
             f'exceeds budget {budget}')
 
         return perturbed_edge_index, flipped_edges
-
 
     def _prepare(self, budget: int) -> Iterable[int]:
         """Prepare attack."""
@@ -439,18 +442,26 @@ class PRBCDAttack(torch.nn.Module):
         self.current_block = self.current_block[sorted_idx]
 
         # Sample until enough edges were drawn
-        for _ in range(self.coeffs['max_trials_sampling']):
+        for i in range(self.coeffs['max_trials_sampling']):
+            if i > 0:
+                # not sure if later line is correct in the case of second sampling:
+                # block_edge_weight_prev = self.block_edge_weight[sorted_idx]
+                logging.info(
+                    "\n\nWARNING: sampling _resample_random_block is retrying, "
+                    "please check that it works correctly!\n\n"
+                )
+
             n_edges_resample = self.block_size - self.current_block.size(0)
-            num_possible_edges = self._num_possible_edges(
-                self.num_nodes, self.is_undirected)
 
             if not self.weighted_sampling:
+                num_possible_edges = self._num_possible_edges(
+                    self.num_nodes, self.is_undirected)
                 lin_index = torch.randint(
                     num_possible_edges, (n_edges_resample, ), device=self.device,
                 )
             else:
                 lin_index = self.weighted_index_sampler.sample(
-                    self.block_size, device=self.device,
+                    n_edges_resample, device=self.device,
                 )
 
             current_block = torch.cat((self.current_block, lin_index))
@@ -592,13 +603,16 @@ class PRBCDAttack(torch.nn.Module):
     @staticmethod
     def _triu_to_linear_idx(n: int, triu_idx: Tensor) -> Tensor:
         """Given normal edge indices get the corresponding linear triu idx
+         - without diagonal: no i == j
+         - upper: no i > j
         triu_idx = [[-row_idx-], [-col_idx-]]
         answer based on 
-        https://math.stackexchange.com/a/2134297
+        https://stackoverflow.com/a/27088560
         """
         i = triu_idx[0, :]
         j = triu_idx[1, :]
-        linear_idx = (n * (n - 1) // 2) - ((n - i) * (n - i - 1) // 2) + j
+        assert (i < j).all()
+        linear_idx = (n * (n - 1) // 2) - ((n - i) * (n - i - 1) // 2) + j - i - 1
         return linear_idx
 
     @staticmethod
@@ -627,7 +641,7 @@ class PRBCDAttack(torch.nn.Module):
     ) -> torch.Tensor:
         """Returns edge_index including all edges between included nodes and injection nodes
         indices given as [i_row, j_col]
-        when is_undirecet: only one direction given with i_row > j_col
+        when is_undirected: only one direction given with i_row < j_col
         """
         n_inc = sorted_included_node_idx.size(0)
         mask = torch.ones(num_nodes, dtype=torch.bool, device=device)
@@ -655,13 +669,16 @@ class PRBCDAttack(torch.nn.Module):
         """Returns edge_index for all edges between included nodes
         indices given as [i_row, j_col]
         no self loops
-        when is_undirecet: only one direction given with i_row > j_col
+        when is_undirected: only one direction given with i_row > j_col
         """
         n = sorted_included_node_idx.size(0)
         repeats_upper = torch.arange(n-1, -1, -1, dtype=torch.long, device=device)
         repeated_lower = torch.cat([sorted_included_node_idx[i:] for i in range(1, n)], dim=0)
         edges = torch.cat(
-            (sorted_included_node_idx.repeat_interleave(repeats_upper)[None, :], repeated_lower[None, :]),
+            (
+                sorted_included_node_idx.repeat_interleave(repeats_upper)[None, :],
+                repeated_lower[None, :]
+            ),
             dim=0,
         )
         if not is_undirected:
@@ -770,6 +787,10 @@ class PRBCDAttack(torch.nn.Module):
             labels = labels[is_correct]
 
         return F.nll_loss(log_prob, labels)
+    
+    @staticmethod
+    def _train_loss(prediction: Tensor, labels: Tensor, idx_mask: Optional[Tensor] = None) -> Tensor:
+        return compute_loss(prediction, labels)[0]
 
     def _append_statistics(self, mapping: Dict[str, Any]):
         for key, value in mapping.items():

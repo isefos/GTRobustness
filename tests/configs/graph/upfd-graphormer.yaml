@@ -14,9 +14,9 @@ dataset:
 posenc_GraphormerBias:
   enable: True
   node_degrees_only: False
-  num_spatial_types: 20
-  num_in_degrees: 512
-  num_out_degrees: 512
+  num_spatial_types: 16
+  num_in_degrees: 32
+  num_out_degrees: 32
   directed_graphs: False
   has_edge_attr: False
   combinations_degree: False
@@ -54,5 +54,15 @@ optim:
   optimizer: adamW
   weight_decay: 0.01
   base_lr: 0.001
-  max_epoch: 10
+  max_epoch: 56
   scheduler: polynomial_with_warmup
+attack:
+  enabled: True
+  num_attacked_graphs: 0  # 0 means attack all
+  lr: 4_000
+  block_size: 2_000
+  e_budget: 0.1
+  existing_node_prob_multiplier: 1_000
+  allow_existing_graph_pert: False
+  is_undirected: True
+  loss: train

@@ -5,7 +5,7 @@ from torch_geometric.graphgym.register import register_layer
 
 
 @register_layer('gcnconvweighted')
-class WeightedGATConvGraphGymLayer(nn.Module):
+class WeightedGCNConvGraphGymLayer(nn.Module):
     """
     Graph Convolutional Network (GCN) layer
     """

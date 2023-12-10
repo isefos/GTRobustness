@@ -10,6 +10,7 @@ from scipy.sparse.csgraph import breadth_first_order
 from graphgps.attack.preprocessing import node_in_graph_prob
 import pickle
 import numpy as np
+import logging
 
 
 def forward_wrapper(forward: Callable, is_undirected: bool) -> Callable:
@@ -44,7 +45,7 @@ def prbcd_attack_test_dataset(
     attack_loss: Callable,
     id_mapping_path,
     graph_indices_paths,
-    limit_number_attacks: int,
+    num_attacked_graphs: int,
     e_budget: float,
     block_size: int,  # e.g. 1_000
     lr: float,  # e.g. 1_000
@@ -53,8 +54,7 @@ def prbcd_attack_test_dataset(
     existing_node_prob_multiplier: int,
     allow_existing_graph_pert: bool,
 ):
-    # TODO: make dataset agnostic with default, but let dataset specific methods be overloaded 
-    # TODO: use logger instead of print
+    # TODO: make dataset agnostic with default, but let dataset specific methods be overloaded
     complete_graph_output = get_complete_graph(datasets, device, id_mapping_path, graph_indices_paths)
     all_nodes, global_test_edge_index, root_masks, root_indices, node_ids = complete_graph_output
 
@@ -89,9 +89,9 @@ def prbcd_attack_test_dataset(
     # count_nodes_added_connected_id = {}
     attack_test_loader = DataLoader(datasets["test"], batch_size=1, shuffle=False)
     for i, clean_data in enumerate(attack_test_loader):
-        if i >= limit_number_attacks:
+        if num_attacked_graphs and i >= num_attacked_graphs:
             break
-        print(f"\nAttacking test graph {i + 1}")
+        logging.info(f"\nAttacking test graph {i + 1}")
         # ATTACK
         try:
             # we want to attack each graph individually (data loader should have batch size 1)
@@ -134,7 +134,7 @@ def prbcd_attack_test_dataset(
             # TODO: check if the perturbation violates any other structure rules
             #  (maybe no chaining together 2 same ids?)
             if not check_if_tree(pert_edge_index):
-                print("\n\nWARNING: PERTURBATION IS NOT A TREE ANYMORE!!!\n\n")
+                logging.info("\n\nWARNING: PERTURBATION IS NOT A TREE ANYMORE!!!\n\n")
 
             pert_data = Batch.from_data_list(
                 [
@@ -150,7 +150,7 @@ def prbcd_attack_test_dataset(
                     pert_data, root_node=root_node, remove_not_connected=True,
                 )
         except KeyboardInterrupt:
-            print("Attacks interrupted by user.")
+            logging.info("Attacks interrupted by user.")
             break
         # RESULTS OF THE ATTACK
         y_correct = int(clean_data.y)
@@ -166,12 +166,12 @@ def prbcd_attack_test_dataset(
         clean_correct = clean_pred == y_correct
         pert_correct = pert_pred == y_correct
         probs = [f"{p:.4f}" for p in clean_prob]
-        print(
+        logging.info(
             f"CLEAN:     \tcorrect (margin) [prob]:\t"
             f"{str(clean_correct):5} ({f'{clean_margin:.4f}':>7}) [{probs[0]}, {probs[1]}]"
         )
         probs = [f"{p:.4f}" for p in pert_prob]
-        print(
+        logging.info(
             f"PERTURBED: \tcorrect (margin) [prob]:\t"
             f"{str(pert_correct):5} ({f'{pert_margin:.4f}':>7}) [{probs[0]}, {probs[1]}]"
         )
@@ -227,14 +227,14 @@ def prbcd_attack_test_dataset(
                 count_nodes_removed_index[node] += 1
             else:
                 count_nodes_removed_index[node] = 1
-        print(f"Original number of edges: {num_edges:>5}")
-        print(f"Added edges:              {len(added_edges):>5}")
-        print(f"Added edges (connected):  {len(added_edges_connected):>5}")
-        print(f"Removed edges:            {len(removed_edges):>5}")
-        print(f"Original number of nodes: {num_nodes:>5}")
-        print(f"Added nodes:              {len(added_nodes):>5}")
-        print(f"Added nodes (connected):  {len(added_nodes_connected):>5}")
-        print(f"Removed nodes:            {len(removed_nodes):>5}")
+        logging.info(f"Original number of edges: {num_edges:>5}")
+        logging.info(f"Added edges:              {len(added_edges):>5}")
+        logging.info(f"Added edges (connected):  {len(added_edges_connected):>5}")
+        logging.info(f"Removed edges:            {len(removed_edges):>5}")
+        logging.info(f"Original number of nodes: {num_nodes:>5}")
+        logging.info(f"Added nodes:              {len(added_nodes):>5}")
+        logging.info(f"Added nodes (connected):  {len(added_nodes_connected):>5}")
+        logging.info(f"Removed nodes:            {len(removed_nodes):>5}")
     # summary of results and analysis
     clean_acc = total_clean_correct / total_examples
     pert_acc = total_pert_correct / total_examples

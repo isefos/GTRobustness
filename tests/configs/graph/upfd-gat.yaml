@@ -26,10 +26,20 @@ gnn:
   batchnorm: True
   act: relu
   dropout: 0.0
-  att_heads: 2
-  head: weighted_mean_pool_graph
+  att_heads: 1
+  head: weighted_add_pool_graph
 optim:
   optimizer: adamW
   weight_decay: 0.02
-  base_lr: 0.001
-  max_epoch: 100
+  base_lr: 0.0005
+  max_epoch: 70
+attack:
+  enabled: True
+  num_attacked_graphs: 0  # 0 means attack all
+  lr: 4_000
+  block_size: 2_000
+  e_budget: 0.1
+  existing_node_prob_multiplier: 1_000
+  allow_existing_graph_pert: False
+  is_undirected: True
+  loss: train
