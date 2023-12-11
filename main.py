@@ -169,25 +169,6 @@ if __name__ == '__main__':
 
         # ATTACK:
         if cfg.attack.enabled:
-
-            # TODO: add this to the actual UPFD dataset (so it gets downloaded directly)
-            dataset_name = "politifact"
-            data_path = os.path.join(os.getcwd(), "datasets", "UPFD")
-
-            # TODO: to run in current state, must manually download these files and put into correct dir
-            # from: https://github.com/safe-graph/GNN-FakeNews/blob/main/data/gos_id_twitter_mapping.pkl
-            # and https://github.com/safe-graph/GNN-FakeNews/blob/main/data/pol_id_twitter_mapping.pkl
-            id_mapping_files = {
-                'politifact': os.path.join(data_path, "pol_id_twitter_mapping.pkl"),
-                'gossipcop': os.path.join(data_path, "gos_id_twitter_mapping.pkl"),
-            }
-            id_mapping_path = id_mapping_files[dataset_name]
-            raw_data_path = os.path.join(data_path, dataset_name, "raw")
-            graph_indices_paths = {
-                "train": os.path.join(raw_data_path, "train_idx.npy"),
-                "val": os.path.join(raw_data_path, "val_idx.npy"),
-                "test": os.path.join(raw_data_path, "test_idx.npy"),
-            }
             
             # TODO: instead of giving train val test, 
             # already compute total nodes x before and pass, 
@@ -195,13 +176,11 @@ if __name__ == '__main__':
 
             # TODO: if specified, load best model checkpoint before attack
             
-            results = prbcd_attack_test_dataset(
+            prbcd_attack_test_dataset(
                 model=model,
                 datasets={split: l.dataset for split, l in zip(["train", "val", "test"], loaders)},
                 device=torch.device(cfg.accelerator),
                 attack_loss=cfg.attack.loss,
-                id_mapping_path=id_mapping_path,
-                graph_indices_paths=graph_indices_paths,
                 num_attacked_graphs=cfg.attack.num_attacked_graphs,
                 e_budget=cfg.attack.e_budget,
                 block_size=cfg.attack.block_size,
@@ -211,12 +190,6 @@ if __name__ == '__main__':
                 existing_node_prob_multiplier=cfg.attack.existing_node_prob_multiplier,
                 allow_existing_graph_pert=cfg.attack.allow_existing_graph_pert,
             )
-            logging.info(f"PRBCD: Accuracy clean:           {results['clean_acc']:.3f},  Perturbed: {results['pert_acc']:.3f}.")
-            logging.info(f"Average number of edges added:   {sum(results['num_edges_added']) / len(results['num_edges_added']):.3f}")
-            logging.info(f"Average number of edges removed: {sum(results['num_edges_removed']) / len(results['num_edges_removed']):.3f}")
-            logging.info(f"Average number of nodes added:   {sum(results['num_nodes_added']) / len(results['num_nodes_added']):.3f}")
-            logging.info(f"Average number of nodes removed: {sum(results['num_nodes_removed']) / len(results['num_nodes_removed']):.3f}")
-            logging.info(f"Nodes most frequently added - (freq, global_node_index):\n{results['most_added_nodes'][:10]}")
 
 
     # Aggregate results from different seeds

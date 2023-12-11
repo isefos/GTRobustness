@@ -9,7 +9,7 @@ import torch_geometric.transforms as T
 from numpy.random import default_rng
 from ogb.graphproppred import PygGraphPropPredDataset
 from torch_geometric.datasets import (Actor, GNNBenchmarkDataset, Planetoid,
-                                      TUDataset, UPFD, WebKB, WikipediaNetwork, ZINC)
+                                      TUDataset, WebKB, WikipediaNetwork, ZINC)
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.loader import load_pyg, load_ogb, set_dataset_attr
 from torch_geometric.graphgym.register import register_loader
@@ -18,6 +18,7 @@ from graphgps.loader.dataset.aqsol_molecules import AQSOL
 from graphgps.loader.dataset.coco_superpixels import COCOSuperpixels
 from graphgps.loader.dataset.malnet_tiny import MalNetTiny
 from graphgps.loader.dataset.voc_superpixels import VOCSuperpixels
+from graphgps.loader.dataset.upfd import UPFD
 from graphgps.loader.split_generator import (prepare_splits,
                                              set_dataset_splits)
 from graphgps.transform.posenc_stats import compute_posenc_stats
@@ -29,15 +30,15 @@ from graphgps.transform.transforms import (pre_transform_in_memory,
 
 def log_loaded_dataset(dataset, format, name):
     logging.info(f"[*] Loaded dataset '{name}' from '{format}':")
-    logging.info(f"  {dataset.data}")
+    logging.info(f"  {dataset._data}")
     logging.info(f"  undirected: {dataset[0].is_undirected()}")
     logging.info(f"  num graphs: {len(dataset)}")
 
     total_num_nodes = 0
-    if hasattr(dataset.data, 'num_nodes'):
-        total_num_nodes = dataset.data.num_nodes
-    elif hasattr(dataset.data, 'x'):
-        total_num_nodes = dataset.data.x.size(0)
+    if hasattr(dataset._data, 'num_nodes'):
+        total_num_nodes = dataset._data.num_nodes
+    elif hasattr(dataset, 'x'):
+        total_num_nodes = dataset.x.size(0)
     logging.info(f"  avg num_nodes/graph: "
                  f"{total_num_nodes // len(dataset)}")
     logging.info(f"  num node features: {dataset.num_node_features}")
@@ -45,21 +46,21 @@ def log_loaded_dataset(dataset, format, name):
     if hasattr(dataset, 'num_tasks'):
         logging.info(f"  num tasks: {dataset.num_tasks}")
 
-    if hasattr(dataset.data, 'y') and dataset.data.y is not None:
-        if isinstance(dataset.data.y, list):
+    if hasattr(dataset, 'y') and dataset.y is not None:
+        if isinstance(dataset.y, list):
             # A special case for ogbg-code2 dataset.
             logging.info(f"  num classes: n/a")
-        elif dataset.data.y.numel() == dataset.data.y.size(0) and \
-                torch.is_floating_point(dataset.data.y):
+        elif dataset.y.numel() == dataset.y.size(0) and \
+                torch.is_floating_point(dataset.y):
             logging.info(f"  num classes: (appears to be a regression task)")
         else:
             logging.info(f"  num classes: {dataset.num_classes}")
-    elif hasattr(dataset.data, 'train_edge_label') or hasattr(dataset.data, 'edge_label'):
+    elif hasattr(dataset._data, 'train_edge_label') or hasattr(dataset._data, 'edge_label'):
         # Edge/link prediction task.
-        if hasattr(dataset.data, 'train_edge_label'):
-            labels = dataset.data.train_edge_label  # Transductive link task
+        if hasattr(dataset._data, 'train_edge_label'):
+            labels = dataset._data.train_edge_label  # Transductive link task
         else:
-            labels = dataset.data.edge_label  # Inductive link task
+            labels = dataset._data.edge_label  # Inductive link task
         if labels.numel() == labels.size(0) and \
                 torch.is_floating_point(labels):
             logging.info(f"  num edge classes: (probably a regression task)")
