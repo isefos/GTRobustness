@@ -81,6 +81,11 @@ class UPFD(InMemoryDataset):
         'gossipcop': '1VskhAQ92PrT4sWEKQ2v2-AJhEcpp4A81',
     }
 
+    id_twitter_mapping_urls = {
+        'politifact': 'https://github.com/safe-graph/GNN-FakeNews/raw/main/data/pol_id_twitter_mapping.pkl',
+        'gossipcop': 'https://github.com/safe-graph/GNN-FakeNews/raw/main/data/gos_id_twitter_mapping.pkl',
+    }
+
     def __init__(
         self,
         root: str,
@@ -112,7 +117,8 @@ class UPFD(InMemoryDataset):
     def raw_file_names(self) -> List[str]:
         return [
             'node_graph_id.npy', 'graph_labels.npy', 'A.txt', 'train_idx.npy',
-            'val_idx.npy', 'test_idx.npy', f'new_{self.feature}_feature.npz'
+            'val_idx.npy', 'test_idx.npy', f'new_{self.feature}_feature.npz',
+            'id_twitter_mapping.pkl',
         ]
 
     @property
@@ -123,6 +129,7 @@ class UPFD(InMemoryDataset):
         path = download_url(self.url.format(self.ids[self.name]), self.raw_dir)
         extract_zip(path, self.raw_dir)
         os.remove(path)
+        download_url(self.id_twitter_mapping_urls[self.name], self.raw_dir, filename='id_twitter_mapping.pkl')
 
     def process(self):
         x = sp.load_npz(
@@ -137,6 +144,18 @@ class UPFD(InMemoryDataset):
         y = torch.from_numpy(y).to(torch.long)
         _, y = y.unique(sorted=True, return_inverse=True)
 
+        with open(osp.join(self.raw_dir, 'id_twitter_mapping.pkl'), "rb") as f:
+            twitter_id_mapping: dict[int, str] = pickle.load(f)
+            node_idx = list(twitter_id_mapping.keys())
+            assert node_idx == list(range(len(node_idx)))
+        twitter_ids = np.zeros(len(twitter_id_mapping), dtype=np.int64)
+        for i, twitter_id in enumerate(twitter_id_mapping.values()):
+            if not twitter_id[0].isdigit():
+                # is_root, make it negative to identify later
+                twitter_id = '-' + ''.join(c for c in twitter_id if c.isdigit())
+            twitter_ids[i] = int(twitter_id)
+        twitter_ids = torch.from_numpy(twitter_ids)
+
         batch = np.load(osp.join(self.raw_dir, 'node_graph_id.npy'))
         batch = torch.from_numpy(batch).to(torch.long)
 
@@ -146,11 +165,12 @@ class UPFD(InMemoryDataset):
         self.slices = {
             'x': node_slice,
             'edge_index': edge_slice,
-            'y': graph_slice
+            'y': graph_slice,
+            'twitter_ids': node_slice, 
         }
 
         edge_index -= node_slice[batch[edge_index[0]]].view(1, -1)
-        self.data = Data(x=x, edge_index=edge_index, y=y)
+        self.data = Data(x=x, edge_index=edge_index, y=y, twitter_ids=twitter_ids)
 
         for path, split in zip(self.processed_paths, ['train', 'val', 'test']):
             idx = np.load(osp.join(self.raw_dir, f'{split}_idx.npy')).tolist()
@@ -174,6 +194,7 @@ def to_add_somehow():
     # TODO: to run in current state, must manually download these files and put into correct dir
     # from: https://github.com/safe-graph/GNN-FakeNews/blob/main/data/gos_id_twitter_mapping.pkl
     # and https://github.com/safe-graph/GNN-FakeNews/blob/main/data/pol_id_twitter_mapping.pkl
+    #     https://github.com/safe-graph/GNN-FakeNews/raw/main/data/gos_id_twitter_mapping.pkl
     id_mapping_files = {
         'politifact': os.path.join(data_path, "pol_id_twitter_mapping.pkl"),
         'gossipcop': os.path.join(data_path, "gos_id_twitter_mapping.pkl"),
