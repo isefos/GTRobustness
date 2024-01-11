@@ -364,6 +364,7 @@ class WeightedBiasEncoder(torch.nn.Module):
             n = data.node_probs.size(0)
             assert n == bias.size(2) == bias.size(3)
             # if p is so small that log(p) = -inf, gradient is undefined, so just set -inf for very small p
+            # TODO: or scale to be same as min!
             l = torch.zeros_like(data.node_probs) - torch.inf
             min_prob_mask = data.node_probs > 1e-30
             l[min_prob_mask] = data.node_probs[min_prob_mask].log()
@@ -494,7 +495,7 @@ class WeightedPreprocessing(torch.nn.Module):
         self.use_weighted_path_distance = use_weighted_path_distance
 
     def forward(self, data):
-        if not (hasattr(data, "in_degrees") or hasattr(data, "degrees")):
+        if hasattr(data, "recompute_preprocessing") and data.recompute_preprocessing:
             data = weighted_graphormer_pre_processing(
                 data,
                 self.distance,

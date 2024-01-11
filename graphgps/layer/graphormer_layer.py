@@ -39,11 +39,15 @@ class GraphormerLayer(torch.nn.Module):
     def forward(self, data):
         x = self.input_norm(data.x)
         x, real_nodes = to_dense_batch(x, data.batch)
+        mask = ~real_nodes
+        key_padding_mask = (torch.zeros_like(mask, dtype=torch.float32).masked_fill_(mask, float("-inf")))
 
         if hasattr(data, "attn_bias"):
-            x = self.attention(x, x, x, ~real_nodes, attn_mask=data.attn_bias)[0][real_nodes]
+            x, _ = self.attention(query=x, key=x, value=x, key_padding_mask=key_padding_mask, attn_mask=data.attn_bias, need_weights=False)
+            x = x[real_nodes, :]
         else:
-            x = self.attention(x, x, x, ~real_nodes)[0][real_nodes]
+            x, _ = self.attention(query=x, key=x, value=x, key_padding_mask=key_padding_mask, need_weights=False)
+            x = x[real_nodes, :]
         x = self.dropout(x) + data.x
         data.x = self.mlp(x) + x
         return data

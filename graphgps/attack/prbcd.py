@@ -148,6 +148,8 @@ class PRBCDAttack(torch.nn.Module):
         self.allow_existing_graph_pert = allow_existing_graph_pert
         self.weighted_sampling = not allow_existing_graph_pert or self.included_weighted
 
+        # TODO: add sampling only from the 
+
         self.coeffs.update(kwargs)
 
     def attack(

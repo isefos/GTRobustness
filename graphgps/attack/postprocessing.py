@@ -1,112 +1,143 @@
 import torch
+import logging
 from graphgps.attack.utils_attack import get_reached_nodes
 
 
-# TODO: make default and specific versions to get loaded dependent on cfg (existing is super specific to UPFD?)
+def output_comparison(y_gt, output_clean, output_pert, sigmoid_threshold):
+    logit_clean = output_clean[0, :]
+    logit_pert = output_pert[0, :]
+
+    y_multiclass: torch.Tensor
+    class_index_pred_clean: int
+    class_index_pred_pred: int
+    prob_clean: torch.Tensor
+    prob_pert: torch.Tensor
+
+    if y_gt.size(0) == 1:
+        # binary classification
+        y_binary = int(y_gt[0].item())
+        y_multiclass = torch.zeros(2, dtype=torch.long)
+        y_multiclass[y_binary] = 1
+        prob_clean_binary = torch.sigmoid(logit_clean)
+        prob_pert_binary = torch.sigmoid(logit_pert)
+        class_index_pred_clean = int(prob_clean_binary > sigmoid_threshold)
+        class_index_pred_pred = int(prob_pert_binary > sigmoid_threshold)
+        prob_clean = torch.cat([1 - prob_clean_binary, prob_clean_binary], dim=0)
+        prob_pert = torch.cat([1 - prob_pert_binary, prob_pert_binary], dim=0)
+    else:
+        y_multiclass = y_gt
+        class_index_pred_clean = int(logit_clean.argmax().item())
+        class_index_pred_pred = int(logit_pert.argmax().item())
+        prob_clean = logit_clean.softmax(dim=0)
+        prob_pert = logit_pert.softmax(dim=0)
+
+    class_index_gt = int(y_multiclass.argmax().item())
+    y_correct_mask = y_multiclass.to(dtype=torch.bool)
+    margin_clean = float((prob_clean[y_correct_mask] - prob_clean[~y_correct_mask].max()).item())
+    margin_pert = float((prob_pert[y_correct_mask] - prob_pert[~y_correct_mask].max()).item())
+    correct_clean = class_index_pred_clean == class_index_gt
+    correct_pert = class_index_pred_pred == class_index_gt
+
+    logging_stats = [
+        ("Clean", prob_clean, logit_clean, correct_clean, margin_clean),
+        ("Perturbed", prob_pert, logit_pert, correct_pert, margin_pert),
+    ]
+    for (name, prob, logit, correct, margin) in logging_stats:
+        prob_str = ", ".join((f"{p:.3f}" for p in prob.tolist()))
+        logit_str = ", ".join([f"{l:.2f}" for l in logit.tolist()])
+        logging.info(
+            f"{name + ':':<10}\tcorrect (margin) [prob] <logits>:\t"
+            f"{str(correct):5} ({f'{margin:.4}':>7}) [{prob_str}] <{logit_str}>"
+        )
+    return correct_clean, correct_pert
 
 
-def get_global_indices(
-    nodes: set[int],
-    edges: set[frozenset[int]],
-    all_nodes: torch.Tensor,
-    node_features: torch.Tensor,
-    root_mask: torch.Tensor,
-    local_root_offset: torch.Tensor,
-    node_ids: list[str],
-) -> tuple[set[int], list[str], set[frozenset[int]], list[frozenset[str]]]:
-    """reverse root mask index shift"""
-    nodes_indices = torch.Tensor(list(nodes))
-    masked_roots = torch.nonzero(~root_mask).squeeze()
-    local_masked_roots = masked_roots - local_root_offset
-    root_mask_offset = torch.searchsorted(
-        local_masked_roots,
-        nodes_indices,
-        right=True,
-    )
-    nodes_mapping: dict[int, int] = {}
-    for i, node_index in enumerate(nodes_indices):
-        nodes_mapping[int(node_index)] = int(node_index + root_mask_offset[i])
-    # check that it is correct -> indexes the same features
-    for local_node_index, global_node_index in nodes_mapping.items():
-        assert torch.allclose(all_nodes[global_node_index, :], node_features[local_node_index, :])
-    global_nodes = set(nodes_mapping.values())
-    # additionally construct it for the ids (not unique -> use list)
-    nodes_ids = [node_ids[i] for i in global_nodes]
-    # for the edges
-    global_edges = set(frozenset(nodes_mapping[node_index] for node_index in edge) for edge in edges)
-    edges_ids = [frozenset(node_ids[i] for i in edge) for edge in global_edges]
-    return global_nodes, nodes_ids, global_edges, edges_ids
-
-
-def post_process_attack(
+def basic_edge_and_node_stats(
     edge_index: torch.Tensor,
     pert_edge_index: torch.Tensor,
-    all_nodes: torch.Tensor,
-    node_features: torch.Tensor,
-    roots_mask: torch.Tensor,
-    local_root_offset: torch.Tensor,
-    node_ids: list[str],
-    num_nodes_added,
-    num_nodes_added_connected,
-    num_nodes_removed,
-    num_edges_added,
-    num_edges_added_connected,
-    num_edges_removed,
-    count_nodes_added_index,
-    count_nodes_added_connected_index,
-    count_nodes_removed_index,
+    root: None | int,
 ):
-    def to_global(edges: set[frozenset[int]]):
-        nodes = set()
-        for edge in edges:
-            nodes.update(edge)
-        nodes, nodes_ids, edges, edges_ids = get_global_indices(
-            nodes, edges, all_nodes, node_features, roots_mask, local_root_offset, node_ids,
-        )
-        return {"nodes": nodes, "nodes_ids": nodes_ids, "edges": edges, "edges_ids": edges_ids}
+    if root is not None:
+        reached = get_reached_nodes(root, pert_edge_index)
+    else:
+        # TODO: add option when root is None -> select the largest conected subgraph as new graph
+        raise NotImplementedError
+    edges = set()
+    nodes = set()
+    for edge in torch.split(edge_index, 1, dim=1):
+        edge = tuple(int(n) for n in edge.squeeze().tolist())
+        edges.add(edge)
+        nodes.update(edge)
 
-    root = int(edge_index[0, 0])
-    reached = get_reached_nodes(root, pert_edge_index)
-    # edges:
-    edges = set(frozenset(int(i) for i in e.squeeze()) for e in torch.split(edge_index, 1, dim=1))
-    pert_edges = set(frozenset(int(i) for i in e.squeeze()) for e in torch.split(pert_edge_index, 1, dim=1))
-    pert_r_edges = set(e for e in pert_edges if all(n in reached for n in e))
-    # nodes:
-    result_dict = {}
-    for category, category_edges in zip(["clean", "pert", "pert_r"], [edges, pert_edges, pert_r_edges]):
-        result_dict[category] = to_global(category_edges)
-    # edges
-    edges = result_dict["clean"]["edges"]
-    pert_edges = result_dict["pert"]["edges"]
-    pert_edges_connected = result_dict["pert_r"]["edges"]
-    added_edges = pert_edges - edges
-    added_edges_connected = pert_edges_connected - edges
-    removed_edges = edges - pert_edges
-    num_edges_added.append(len(added_edges))
-    num_edges_added_connected.append(len(added_edges_connected))
-    num_edges_removed.append(len(removed_edges))
-    # nodes
-    nodes = result_dict["clean"]["nodes"]
-    pert_nodes = result_dict["pert"]["nodes"]
-    pert_nodes_connected = result_dict["pert_r"]["nodes"]
-    added_nodes = pert_nodes - nodes
-    added_nodes_connected = pert_nodes_connected - nodes
-    removed_nodes = nodes - pert_nodes
-    num_nodes_added.append(len(added_nodes))
-    for node in added_nodes:
-        if node in count_nodes_added_index:
-            count_nodes_added_index[node] += 1
-        else:
-            count_nodes_added_index[node] = 1
-    num_nodes_added_connected.append(len(added_nodes_connected))
-    for node in added_nodes_connected:
-        if node in count_nodes_added_connected_index:
-            count_nodes_added_connected_index[node] += 1
-        else:
-            count_nodes_added_connected_index[node] = 1
-    num_nodes_removed.append(len(removed_nodes))
-    for node in removed_nodes:
-        if node in count_nodes_removed_index:
-            count_nodes_removed_index[node] += 1
-        else:
-            count_nodes_removed_index[node] = 1
+    edges_pert = set()
+    nodes_pert = set()
+    nodes_pert_connected = set()
+    for edge in torch.split(pert_edge_index, 1, dim=1):
+        edge = tuple(int(n) for n in edge.squeeze().tolist())
+        edges_pert.add(edge)
+        nodes_pert.update(edge)
+        nodes_pert_connected.update([n for n in edge if n in reached])
+    edges_pert_connected = set(e for e in edges_pert if all(n in reached for n in e))
+
+    edges_added = edges_pert - edges
+    edges_added_connected = edges_pert_connected - edges
+    edges_removed = edges - edges_pert
+
+    nodes_added = nodes_pert - nodes
+    nodes_added_connected = nodes_pert_connected - nodes
+    nodes_removed = nodes - nodes_pert
+
+    stats = {
+        "edges": {
+            "clean": edges,
+            "pert": edges_pert,
+            "pert_connected": edges_pert_connected,
+            "added": edges_added,
+            "added_connected": edges_added_connected,
+            "removed": edges_removed
+        },
+        "nodes": {
+            "clean": nodes,
+            "pert": nodes_pert,
+            "pert_connected": nodes_pert_connected,
+            "added": nodes_added,
+            "added_connected": nodes_added_connected,
+            "removed": nodes_removed
+        },
+    }
+    num_stats = {}
+    for key1 in stats:
+        num_key = "num_" + key1
+        num_stats[num_key] = {}
+        for key2, value in stats[key1].items():
+            num_stats[num_key][key2] = len(value)
+    return stats | num_stats
+
+
+def log_and_accumulate_stats(accumulated_stats, stats):
+    stat_keys = [
+        ("num_edges", "clean"), ("num_edges", "added"), ("num_edges", "added_connected"), ("num_edges", "removed"),
+        ("num_nodes", "clean"), ("num_nodes", "added"), ("num_nodes", "added_connected"), ("num_nodes", "removed"),
+
+    ]
+    acc_keys = [
+        "num_edges", "num_edges_added", "num_edges_added_connected", "num_edges_removed",
+        "num_nodes", "num_nodes_added", "num_nodes_added_connected", "num_nodes_removed"
+    ]
+    info_texts = [
+        "Original number of edges", "Added edges", "Added edges (connected)", "Removed edges",
+        "Original number of nodes", "Added nodes", "Added nodes (connected)", "Removed nodes"
+    ]
+
+    for stat_key, acc_key, info_text in zip(stat_keys, acc_keys, info_texts):
+        current_stat = stats[stat_key[0]][stat_key[1]]
+        accumulated_stats[acc_key].append(current_stat)
+        logging.info(f"{info_text + ':':<26} {current_stat:>7}")
+
+
+def log_summary_stats(accumulated_stats):
+    logging.info("SUMMARY (averages over all attacked graphs):")
+    for key, current_stat in accumulated_stats.items():
+        name = "avg_" + key
+        avg = sum(current_stat) / len(current_stat)
+        logging.info(f"{name + ':':<30} {f'{avg:.2f}':>10}")

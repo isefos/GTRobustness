@@ -1,7 +1,7 @@
 import torch
 from torch_geometric.utils import remove_self_loops, scatter
 from torch_geometric.data import Data, Batch
-from torch_geometric.utils import to_scipy_sparse_matrix, index_to_mask, subgraph
+from torch_geometric.utils import to_scipy_sparse_matrix, index_to_mask
 from scipy.sparse.csgraph import breadth_first_order
 from typing import Callable
 import functools
@@ -14,39 +14,48 @@ import functools
 def forward_wrapper(forward: Callable, is_undirected: bool) -> Callable:
 
     @functools.wraps(forward)
-    def wrapped_forward(data, root_node: None | int = None, remove_not_connected: bool = False):
-        if remove_not_connected:
-            assert root_node is not None, "The root node must be specified"
-            new_data, new_root_node = get_only_root_graph(data, root_node)
-
-            # TODO: where to get bool: undirected from?
-            new_data.node_probs = node_in_graph_prob(
-                edge_index=new_data.edge_index,
-                edge_weights=new_data.edge_attr,
-                batch=new_data.batch,
-                undirected=is_undirected,
-                root_node=new_root_node,
-                num_iterations=4,
-            )
-            return forward(new_data)[0]
-        else:
+    def wrapped_forward(
+        data: Batch,
+        root_node: None | int = None,
+        remove_not_connected: bool = False,
+        recompute_preprocessing: bool = False,
+        unmodified: bool = True,
+    ):
+        if unmodified:
             return forward(data)[0]
+        assert data.num_graphs == 1
+        if remove_not_connected:
+            if root_node is not None:
+                data, root_node = get_only_root_graph(data, root_node)
+            else:
+                # TODO: add option when root is None -> select the largest conected subgraph as new graph
+                raise NotImplementedError
+        data.node_probs = node_in_graph_prob(
+            edge_index=data.edge_index,
+            edge_weights=data.edge_attr,
+            batch=data.batch,
+            undirected=is_undirected,
+            root_node=root_node,
+            num_iterations=4,
+        )
+        if recompute_preprocessing:
+            data.recompute_preprocessing = True
+        return forward(data)[0]
 
     return wrapped_forward
 
 
-def get_only_root_graph(data, root_node: int):
+def get_only_root_graph(batch: Batch, root_node: int):
     # only works for a single graph
-    assert torch.all(data.batch == 0)
+    assert torch.all(batch.batch == 0)
+    data: Data = batch.get_example(0)
     num_nodes = data.x.size(0)
     # do graph traversal starting from root to find the root component
     adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=num_nodes)
     bfs_order = breadth_first_order(adj, root_node, return_predecessors=False)
     subset_mask = index_to_mask(torch.tensor(bfs_order, dtype=torch.long), size=num_nodes)
-    edge_index, edge_attr = subgraph(subset_mask, data.edge_index, data.edge_attr, relabel_nodes=True)
-    new_data = Batch.from_data_list(
-        [Data(x=data.x[subset_mask, :].clone(), edge_index=edge_index, edge_attr=edge_attr)]
-    )
+    data_root_component = data.subgraph(subset_mask)
+    new_data = Batch.from_data_list([data_root_component])
     new_root_node = int(subset_mask[:root_node].sum().item())
     assert torch.allclose(data.x[root_node, :], new_data.x[new_root_node, :])
     return new_data, new_root_node

@@ -25,7 +25,7 @@ from torch_geometric import seed_everything
 from graphgps.finetuning import load_pretrained_model_cfg, \
     init_model_from_pretrained
 from graphgps.logger import create_logger
-from graphgps.attack.attack import prbcd_attack_test_dataset
+from graphgps.attack.attack import prbcd_attack_dataset
 
 
 torch.backends.cuda.matmul.allow_tf32 = True  # Default False in PyTorch 1.12+
@@ -165,20 +165,33 @@ if __name__ == '__main__':
             train(model, datamodule, logger=True)
         else:
             train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
-            
-
-        # ATTACK:
+        # Attack
         if cfg.attack.enabled:
             
-            # TODO: instead of giving train val test, 
-            # already compute total nodes x before and pass, 
-            # then just pass attack dataset -> unmodified dataset, attack dataset
-
             # TODO: if specified, load best model checkpoint before attack
-            
-            prbcd_attack_test_dataset(
+
+            splits = ["train", "val", "test"]
+            split_to_attack_idx = splits.index(cfg.attack.split)
+            dataset_to_attack = loaders[split_to_attack_idx].dataset
+
+            additional_injection_datasets = None
+            inject_nodes_from_attack_dataset = False
+            if cfg.attack.enable_node_injection:
+                include_additional_datasets = [
+                    cfg.attack.node_injection_from_train,
+                    cfg.attack.node_injection_from_val,
+                    cfg.attack.node_injection_from_test,
+                ]
+                inject_nodes_from_attack_dataset = include_additional_datasets[split_to_attack_idx]
+                include_additional_datasets[split_to_attack_idx] = False
+                additional_injection_datasets = [l.dataset for i, l in enumerate(loaders) if include_additional_datasets[i]]
+
+            prbcd_attack_dataset(
                 model=model,
-                datasets={split: l.dataset for split, l in zip(["train", "val", "test"], loaders)},
+                dataset_to_attack=dataset_to_attack,
+                node_injection_attack=cfg.attack.enable_node_injection,
+                additional_injection_datasets=additional_injection_datasets,
+                inject_nodes_from_attack_dataset=inject_nodes_from_attack_dataset,
                 device=torch.device(cfg.accelerator),
                 attack_loss=cfg.attack.loss,
                 num_attacked_graphs=cfg.attack.num_attacked_graphs,
@@ -189,9 +202,10 @@ if __name__ == '__main__':
                 sigmoid_threshold=cfg.model.thresh,
                 existing_node_prob_multiplier=cfg.attack.existing_node_prob_multiplier,
                 allow_existing_graph_pert=cfg.attack.allow_existing_graph_pert,
+                remove_isolated_components=cfg.attack.remove_isolated_components,
+                root_node_idx=cfg.attack.root_node_idx,
+                include_root_nodes_for_injection=cfg.attack.include_root_nodes_for_injection,
             )
-
-
     # Aggregate results from different seeds
     try:
         agg_runs(cfg.out_dir, cfg.metric_best)
