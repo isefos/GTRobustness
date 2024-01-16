@@ -1,0 +1,96 @@
+seml:
+  executable: main.py
+  output_dir: configs_seml/logs
+  project_root_dir: ../..
+
+slurm:
+  experiments_per_job: 1
+  sbatch_options:
+    gres: gpu:0       # num GPUs
+    mem: 16G          # memory
+    cpus-per-task: 4  # num cores
+    time: 0-08:00     # max time, D-HH:MM
+
+###### BEGIN PARAMETER CONFIGURATION ######
+
+fixed:
+  graphgym:
+    accelerator: cpu
+    num_threads: 8
+    seed: 0
+    out_dir: configs_seml/results
+    metric_best: accuracy
+    tensorboard_each_run: false
+    dataset:
+      format: PyG-UPFD
+      name: politifact-spacy
+      task: graph
+      task_type: classification_binary
+      transductive: false
+      split_mode: standard
+      node_encoder: true
+      node_encoder_name: WeightedGraphormerBias
+      node_encoder_bn: true
+    posenc_GraphormerBias:
+      enable: true
+      node_degrees_only: false
+      num_spatial_types: 16
+      num_in_degrees: 32
+      num_out_degrees: 32
+      directed_graphs: false
+      has_edge_attr: false
+      combinations_degree: false
+      use_weighted_path_distance: false
+    train:
+      mode: custom
+      batch_size: 16
+      eval_period: 1
+      ckpt_period: 100
+    model:
+      type: Graphormer
+      loss_fun: cross_entropy
+      graph_pooling: graph_token
+    graphormer:
+      num_layers: 2
+      num_heads: 2
+      embed_dim: 32
+      dropout: 0.0
+      attention_dropout: 0.0  # 0.1
+      mlp_dropout: 0.0  # 0.1
+      input_dropout: 0.0  # 0.1
+    gnn:
+      head: graphormer_graph
+      layers_pre_mp: 1
+      layers_post_mp: 1  # Not used when `gnn.head: san_graph`
+      dim_inner: 32  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+      batchnorm: true
+      act: relu
+      dropout: 0.0
+      agg: mean
+      normalize_adj: false
+    optim:
+      clip_grad_norm: true
+      clip_grad_norm_value: 5.0
+      optimizer: adamW
+      weight_decay: 0.01
+      base_lr: 0.001
+      max_epoch: 3  # 56
+      scheduler: polynomial_with_warmup
+    attack:
+      enable: true
+      split: test
+      num_attacked_graphs: 2  # 0 means attack all
+      lr: 4_000
+      block_size: 2_000
+      e_budget: 0.1
+      is_undirected: true
+      loss: train
+      enable_node_injection: true
+      node_injection_from_train: true
+      node_injection_from_val: true
+      node_injection_from_test: true
+      existing_node_prob_multiplier: 1_000
+      allow_existing_graph_pert: false
+      remove_isolated_components: true
+      root_node_idx: 0
+      include_root_nodes_for_injection: false

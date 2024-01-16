@@ -32,7 +32,7 @@ optim:
   base_lr: 0.01
   max_epoch: 51
 attack:
-  enabled: True
+  enable: True
   split: test
   num_attacked_graphs: 0  # 0 means attack all
   lr: 4_000

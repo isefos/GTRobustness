@@ -25,6 +25,8 @@ __pycache__/
 .idea
 *.log
 *.bak
+configs_seml/logs
+configs_seml/results
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

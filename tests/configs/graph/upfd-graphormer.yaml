@@ -57,7 +57,7 @@ optim:
   max_epoch: 56
   scheduler: polynomial_with_warmup
 attack:
-  enabled: True
+  enable: True
   split: test
   num_attacked_graphs: 0  # 0 means attack all
   lr: 4_000

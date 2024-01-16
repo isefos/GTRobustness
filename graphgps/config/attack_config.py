@@ -10,7 +10,7 @@ def dataset_cfg(cfg):
     cfg.attack = CN()
 
     # whether to attack or not
-    cfg.attack.enabled = False
+    cfg.attack.enable = False
 
     # which split to attack, "train", "val", or "test"
     cfg.attack.split = "test"
