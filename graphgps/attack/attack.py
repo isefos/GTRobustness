@@ -6,7 +6,12 @@ from torch_geometric.data import Data, Batch
 from graphgps.attack.dataset_attack import get_total_dataset_graphs, get_augmented_graph
 from graphgps.attack.utils_attack import check_if_tree
 from graphgps.attack.preprocessing import forward_wrapper
-from graphgps.attack.postprocessing import output_comparison, basic_edge_and_node_stats, log_and_accumulate_stats, log_summary_stats
+from graphgps.attack.postprocessing import (
+    log_and_accumulate_output,
+    basic_edge_and_node_stats,
+    log_and_accumulate_pert_stats,
+    log_summary_stats,
+)
 import logging
 
 
@@ -56,6 +61,8 @@ def prbcd_attack_dataset(
     accumulated_stats = {
         "correct_clean": [],
         "correct_pert": [],
+        "margin_clean": [],
+        "margin_pert": [],
         "num_edges": [],
         "num_edges_added": [],
         "num_edges_added_connected": [],
@@ -69,7 +76,7 @@ def prbcd_attack_dataset(
     total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = None, None, None
     if node_injection_attack:
         
-        # TODO: attack a global index to all possible nodes, that can later be used to trace which nodes where added
+        # TODO: attach a global index to all possible nodes, that can later be used to trace which nodes where added
         # how many times
 
         total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = get_total_dataset_graphs(
@@ -140,9 +147,9 @@ def prbcd_attack_dataset(
                 unmodified=False,
             )
         
-        clean_correct, pert_correct = output_comparison(clean_data.y, clean_output, pert_output, sigmoid_threshold)
-        accumulated_stats["correct_clean"].append(clean_correct)
-        accumulated_stats["correct_pert"].append(pert_correct)
+        log_and_accumulate_output(
+            clean_data.y, clean_output, pert_output, sigmoid_threshold, accumulated_stats,
+        )
 
         stats = basic_edge_and_node_stats(clean_data.edge_index, pert_edge_index, root=root_node_idx)
         assert num_edges == stats["num_edges"]["clean"]
@@ -150,11 +157,12 @@ def prbcd_attack_dataset(
         if is_undirected:
             for key, value in stats["num_edges"].items():
                 stats["num_edges"][key] = value // 2
-        log_and_accumulate_stats(accumulated_stats, stats)
+        log_and_accumulate_pert_stats(accumulated_stats, stats)
 
-    log_summary_stats(accumulated_stats)
+    summary_stats = log_summary_stats(accumulated_stats)
     model.forward = model.forward.__wrapped__
     logging.info("End of attack.")
+    return {"avg": summary_stats, "all": accumulated_stats}
 
 
 def attack_single_graph(

@@ -104,21 +104,16 @@ def main(cfg):
     logging.info(f"[*] Starting now: {datetime.datetime.now()}, with seed={cfg.seed}, running on {cfg.accelerator}")
 
     # Train
-    if cfg.train.mode == 'standard':
-        if cfg.wandb.use:
-            logging.warning("[W] WandB logging is not supported with the "
-                            "default train.mode, set it to `custom`")
-        datamodule = GraphGymDataModule()
-        train(model, datamodule, logger=True)
-    else:
-        train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
+    assert cfg.train.mode != 'standard', "Default train.mode not supported, use `custom` (or other specific mode)"
+    train_results = train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
 
     # Attack
+    attack_results = None
     if cfg.attack.enable:
         dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_cfg(loaders)
         # TODO: if specified, load best model checkpoint before attack
         # TODO: return results
-        prbcd_attack_dataset(
+        attack_results = prbcd_attack_dataset(
             model=model,
             dataset_to_attack=dataset_to_attack,
             node_injection_attack=cfg.attack.enable_node_injection,
@@ -140,9 +135,7 @@ def main(cfg):
         )
 
     logging.info(f"[*] Finished now: {datetime.datetime.now()}")
-
-    # TODO: return results
-    results = {"example": 10}
+    results = {"train": train_results, "attack": attack_results}
     return results
 
 
@@ -196,7 +189,6 @@ def run(graphgym: dict):
 
     cfg.out_dir = output_dir
     cfg.run_dir = run_dir
-    cfg.run_id = ex_identifier + "-" + run_identifier
     cfg.cfg_dest = run_identifier + "/configs_all.yaml"
 
     load_cfg(cfg, args)

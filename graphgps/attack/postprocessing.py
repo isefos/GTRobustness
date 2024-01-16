@@ -3,7 +3,7 @@ import logging
 from graphgps.attack.utils_attack import get_reached_nodes
 
 
-def output_comparison(y_gt, output_clean, output_pert, sigmoid_threshold):
+def log_and_accumulate_output(y_gt, output_clean, output_pert, sigmoid_threshold, accumulated_stats):
     logit_clean = output_clean[0, :]
     logit_pert = output_pert[0, :]
 
@@ -49,7 +49,11 @@ def output_comparison(y_gt, output_clean, output_pert, sigmoid_threshold):
             f"{name + ':':<10}\tcorrect (margin) [prob] <logits>:\t"
             f"{str(correct):5} ({f'{margin:.4}':>7}) [{prob_str}] <{logit_str}>"
         )
-    return correct_clean, correct_pert
+    
+    accumulated_stats["correct_clean"].append(correct_clean)
+    accumulated_stats["correct_pert"].append(correct_pert)
+    accumulated_stats["margin_clean"].append(margin_clean)
+    accumulated_stats["margin_pert"].append(margin_pert)
 
 
 def basic_edge_and_node_stats(
@@ -114,7 +118,7 @@ def basic_edge_and_node_stats(
     return stats | num_stats
 
 
-def log_and_accumulate_stats(accumulated_stats, stats):
+def log_and_accumulate_pert_stats(accumulated_stats, stats):
     stat_keys = [
         ("num_edges", "clean"), ("num_edges", "added"), ("num_edges", "added_connected"), ("num_edges", "removed"),
         ("num_nodes", "clean"), ("num_nodes", "added"), ("num_nodes", "added_connected"), ("num_nodes", "removed"),
@@ -136,8 +140,11 @@ def log_and_accumulate_stats(accumulated_stats, stats):
 
 
 def log_summary_stats(accumulated_stats):
+    summary_stats = {}
     logging.info("Attack stats summary (averages over all attacked graphs):")
     for key, current_stat in accumulated_stats.items():
         name = "avg_" + key
         avg = sum(current_stat) / len(current_stat)
         logging.info(f"\t{name + ':':<30} {f'{avg:.2f}':>10}")
+        summary_stats[name] = avg
+    return summary_stats

@@ -136,5 +136,5 @@ def make_wandb_name(cfg):
         model_name += "+RWSE"
 
     # Compose wandb run name.
-    name = f"{cfg.run_id}"
+    name = f"{dataset_name}.{model_name}"
     return name
