@@ -39,6 +39,7 @@ def prbcd_attack_dataset(
     root_node_idx: None | int,
     include_root_nodes_for_injection: bool,
 ):
+    logging.info("Start of attack:")
     model.eval()
     model.forward = forward_wrapper(model.forward, is_undirected)
 
@@ -84,7 +85,7 @@ def prbcd_attack_dataset(
     for i, clean_data in enumerate(clean_loader):
         if num_attacked_graphs and i >= num_attacked_graphs:
             break
-        logging.info(f"\nAttacking test graph {i + 1}")
+        logging.info(f"Attacking graph {i + 1}")
 
         num_nodes = clean_data.x.size(0)
         num_edges = clean_data.edge_index.size(1)
@@ -125,7 +126,7 @@ def prbcd_attack_dataset(
         #       Maybe even chained (retweeting himself)
 
         if not check_if_tree(pert_edge_index):
-            logging.info("\n\nWARNING: PERTURBATION IS NOT A TREE ANYMORE!!!\n\n")
+            logging.info("WARNING: PERTURBATION IS NOT A TREE ANYMORE!")
 
         pert_data = clean_data_augmented.clone()
         pert_data.edge_index = pert_edge_index
@@ -153,7 +154,7 @@ def prbcd_attack_dataset(
 
     log_summary_stats(accumulated_stats)
     model.forward = model.forward.__wrapped__
-    logging.info("\nEND OF ATTACK\n")
+    logging.info("End of attack.")
 
 
 def attack_single_graph(

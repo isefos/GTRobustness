@@ -327,7 +327,7 @@ class WeightedBiasEncoder(torch.nn.Module):
         """
         super().__init__()
         self.num_heads = num_heads
-        self.spatial_encoder = torch.nn.Embedding(num_spatial_types + 1, num_heads)
+        self.spatial_encoder = torch.nn.Embedding(num_spatial_types, num_heads)
         self.use_graph_token = use_graph_token
         if self.use_graph_token:
             self.graph_token = torch.nn.Parameter(torch.zeros(1, num_heads, 1))

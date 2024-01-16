@@ -18,10 +18,9 @@ class GraphormerLayer(torch.nn.Module):
             input_dropout: Dropout applied within the MLP
         """
         super().__init__()
-        self.attention = torch.nn.MultiheadAttention(embed_dim,
-                                                     num_heads,
-                                                     attention_dropout,
-                                                     batch_first=True)
+        self.attention = torch.nn.MultiheadAttention(
+            embed_dim, num_heads, attention_dropout, batch_first=True,
+        )
         self.input_norm = torch.nn.LayerNorm(embed_dim)
         self.dropout = torch.nn.Dropout(dropout)
 
@@ -41,13 +40,16 @@ class GraphormerLayer(torch.nn.Module):
         x, real_nodes = to_dense_batch(x, data.batch)
         mask = ~real_nodes
         key_padding_mask = (torch.zeros_like(mask, dtype=torch.float32).masked_fill_(mask, float("-inf")))
-
-        if hasattr(data, "attn_bias"):
-            x, _ = self.attention(query=x, key=x, value=x, key_padding_mask=key_padding_mask, attn_mask=data.attn_bias, need_weights=False)
-            x = x[real_nodes, :]
-        else:
-            x, _ = self.attention(query=x, key=x, value=x, key_padding_mask=key_padding_mask, need_weights=False)
-            x = x[real_nodes, :]
+        attn_bias = data.attn_bias if hasattr(data, "attn_bias") else None
+        x, _ = self.attention(
+            query=x,
+            key=x,
+            value=x,
+            key_padding_mask=key_padding_mask,
+            attn_mask=attn_bias,
+            need_weights=False,
+        )
+        x = x[real_nodes, :]
         x = self.dropout(x) + data.x
         data.x = self.mlp(x) + x
         return data

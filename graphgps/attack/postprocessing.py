@@ -44,7 +44,7 @@ def output_comparison(y_gt, output_clean, output_pert, sigmoid_threshold):
     ]
     for (name, prob, logit, correct, margin) in logging_stats:
         prob_str = ", ".join((f"{p:.3f}" for p in prob.tolist()))
-        logit_str = ", ".join([f"{l:.2f}" for l in logit.tolist()])
+        logit_str = ", ".join([f"{l:.3f}" for l in logit.tolist()])
         logging.info(
             f"{name + ':':<10}\tcorrect (margin) [prob] <logits>:\t"
             f"{str(correct):5} ({f'{margin:.4}':>7}) [{prob_str}] <{logit_str}>"
@@ -136,8 +136,8 @@ def log_and_accumulate_stats(accumulated_stats, stats):
 
 
 def log_summary_stats(accumulated_stats):
-    logging.info("SUMMARY (averages over all attacked graphs):")
+    logging.info("Attack stats summary (averages over all attacked graphs):")
     for key, current_stat in accumulated_stats.items():
         name = "avg_" + key
         avg = sum(current_stat) / len(current_stat)
-        logging.info(f"{name + ':':<30} {f'{avg:.2f}':>10}")
+        logging.info(f"\t{name + ':':<30} {f'{avg:.2f}':>10}")

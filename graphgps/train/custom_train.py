@@ -325,7 +325,7 @@ def log_attn_weights(loggers, loaders, model, optimizer=None, scheduler=None):
     """
     import os.path as osp
     from torch_geometric.loader.dataloader import DataLoader
-    from graphgps.utils import unbatch, unbatch_edge_index
+    from torch_geometric.utils import unbatch, unbatch_edge_index
 
     start_time = time.perf_counter()
 

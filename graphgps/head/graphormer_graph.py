@@ -17,7 +17,6 @@ class GraphormerHead(torch.nn.Module):
 
     def __init__(self, dim_in, dim_out):
         super().__init__()
-        print(f"Initializing {cfg.model.graph_pooling} pooling function")
         self.pooling_fun = register.pooling_dict[cfg.model.graph_pooling]
 
         self.ln = torch.nn.LayerNorm(dim_in)
