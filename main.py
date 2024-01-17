@@ -166,6 +166,9 @@ cfg_dict = convert_cfg_to_dict(cfg)
 ex.add_config({"graphgym": cfg_dict})
 
 
+os.makedirs("configs_seml/logs", exist_ok=True)
+
+
 @ex.automain
 def run(graphgym: dict):
     set_cfg(cfg)

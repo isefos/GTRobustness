@@ -74,12 +74,7 @@ class UPFD(InMemoryDataset):
             value, indicating whether the data object should be included in the
             final dataset. (default: :obj:`None`)
     """
-    url = 'https://docs.google.com/uc?export=download&id={}&confirm=t'
-
-    ids = {
-        'politifact': '1KOmSrlGcC50PjkvRVbyb_WoWHVql06J-',
-        'gossipcop': '1VskhAQ92PrT4sWEKQ2v2-AJhEcpp4A81',
-    }
+    url = 'https://data.pyg.org/datasets/upfd_{}.zip'
 
     id_twitter_mapping_urls = {
         'politifact': 'https://github.com/safe-graph/GNN-FakeNews/raw/main/data/pol_id_twitter_mapping.pkl',
@@ -96,6 +91,9 @@ class UPFD(InMemoryDataset):
         pre_transform: Optional[Callable] = None,
         pre_filter: Optional[Callable] = None,
     ):
+        assert name in ['politifact', 'gossipcop']
+        assert split in ['train', 'val', 'test']
+
         self.root = root
         self.name = name
         self.feature = feature
@@ -126,7 +124,7 @@ class UPFD(InMemoryDataset):
         return ['train.pt', 'val.pt', 'test.pt']
 
     def download(self):
-        path = download_url(self.url.format(self.ids[self.name]), self.raw_dir)
+        path = download_url(self.url.format(self.name), self.raw_dir)
         extract_zip(path, self.raw_dir)
         os.remove(path)
         download_url(self.id_twitter_mapping_urls[self.name], self.raw_dir, filename='id_twitter_mapping.pkl')

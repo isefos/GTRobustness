@@ -2,6 +2,7 @@ seml:
   executable: main.py
   output_dir: configs_seml/logs
   project_root_dir: ../..
+  conda_environment: gtr
 
 slurm:
   experiments_per_job: 1

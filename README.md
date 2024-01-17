@@ -2,32 +2,27 @@
 ### Python environment setup with Conda
 
 ```bash
-# Update! (use mostly conda, versions of cuda / cpu )
-conda create -n gtr python=3.10
+conda create -n gtr python=3.11
 conda activate gtr
 
-conda install pytorch=1.13 torchvision torchaudio pytorch-cuda=11.7 -c pytorch -c nvidia
-conda install pyg=2.2 -c pyg -c conda-forge
-pip install pyg-lib -f https://data.pyg.org/whl/torch-1.13.0+cu117.html
+# install the version of pytorch that is compatible with your system
+# e.g.:
+conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
+# or for cpu only:
+# conda install pytorch torchvision torchaudio cpuonly -c pytorch
+
+conda install -c pyg pyg pytorch-scatter
+
+conda install -c conda-forge yacs tensorboardx lightning torchmetrics performer-pytorch ogb wandb seml
 
 # RDKit is required for OGB-LSC PCQM4Mv2 and datasets derived from it.  
 # conda install openbabel fsspec rdkit -c conda-forge
 
-pip install pytorch-lightning yacs torchmetrics
-pip install performer-pytorch
-pip install tensorboardX
-pip install ogb
-pip install wandb
-
 conda clean --all
 ```
 
+Because of a bug in `seml` (which will be fixed soon), you also have to go into your installed seml files and change line 242 to `all_configs = [{k: int(v) if (isinstance(v, numbers.Integral) and not isinstance(v, bool)) else v`
 
-### Running GraphGPS
-```bash
-conda activate gtr
-...
-```
 
 
 ### W&B logging
