@@ -18,7 +18,6 @@ from torch_geometric.graphgym.optim import (
     create_optimizer, create_scheduler, OptimizerConfig,
 )
 from torch_geometric.graphgym.model_builder import create_model
-from torch_geometric.graphgym.train import GraphGymDataModule, train
 from torch_geometric.graphgym.utils.comp_budget import params_count
 from torch_geometric.graphgym.utils.device import auto_select_device
 from torch_geometric.graphgym.register import train_dict
@@ -173,7 +172,6 @@ os.makedirs("configs_seml/logs", exist_ok=True)
 def run(graphgym: dict):
     set_cfg(cfg)
 
-    seed = graphgym.get("seed", cfg.seed)
     ex_identifier = (
         graphgym["dataset"]["format"]
         + "-" + graphgym["dataset"]["name"]
@@ -181,6 +179,7 @@ def run(graphgym: dict):
     )
     output_dir = os.path.join(graphgym["out_dir"], ex_identifier)
 
+    seed = graphgym.get("seed", cfg.seed)
     run_identifier = f"s{seed}-{datetime.datetime.now().strftime('d%Y%m%d-t%H%M%S')}"
     run_dir = os.path.join(output_dir, run_identifier)
     os.makedirs(run_dir)

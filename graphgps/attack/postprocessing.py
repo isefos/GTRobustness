@@ -60,7 +60,7 @@ def basic_edge_and_node_stats(
     edge_index: torch.Tensor,
     pert_edge_index: torch.Tensor,
     root: None | int,
-):
+) -> tuple[dict[str, dict[str, set[tuple[int, int]]]], dict[str, dict[str, int]]]:
     if root is not None:
         reached = get_reached_nodes(root, pert_edge_index)
     else:
@@ -115,7 +115,7 @@ def basic_edge_and_node_stats(
         num_stats[num_key] = {}
         for key2, value in stats[key1].items():
             num_stats[num_key][key2] = len(value)
-    return stats | num_stats
+    return stats, num_stats
 
 
 def log_and_accumulate_pert_stats(accumulated_stats, stats):

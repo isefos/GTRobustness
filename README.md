@@ -13,7 +13,11 @@ conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvi
 
 conda install -c pyg pyg pytorch-scatter
 
-conda install -c conda-forge yacs tensorboardx lightning torchmetrics performer-pytorch ogb wandb seml
+conda install -c conda-forge yacs tensorboardx lightning torchmetrics performer-pytorch ogb wandb
+
+cd seml
+
+pip install .
 
 # RDKit is required for OGB-LSC PCQM4Mv2 and datasets derived from it.  
 # conda install openbabel fsspec rdkit -c conda-forge

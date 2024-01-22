@@ -113,7 +113,7 @@ def prbcd_attack_dataset(
             global_budget=global_budget,
             node_injection_attack=node_injection_attack,
             total_attack_dataset_graph=total_attack_dataset_graph,
-            attack_dataset_slice=attack_dataset_slices[i],
+            attack_dataset_slice=None if attack_dataset_slices is None else attack_dataset_slices[i],
             total_additional_datasets_graph=total_additional_datasets_graph,
             root_node_idx=root_node_idx,
             remove_isolated_components=remove_isolated_components,
@@ -151,13 +151,13 @@ def prbcd_attack_dataset(
             clean_data.y, clean_output, pert_output, sigmoid_threshold, accumulated_stats,
         )
 
-        stats = basic_edge_and_node_stats(clean_data.edge_index, pert_edge_index, root=root_node_idx)
-        assert num_edges == stats["num_edges"]["clean"]
-        assert num_nodes == stats["num_nodes"]["clean"]
+        stats, num_stats = basic_edge_and_node_stats(clean_data.edge_index, pert_edge_index, root=root_node_idx)
+        assert num_edges == num_stats["num_edges"]["clean"]
+        assert num_nodes == num_stats["num_nodes"]["clean"]
         if is_undirected:
-            for key, value in stats["num_edges"].items():
-                stats["num_edges"][key] = value // 2
-        log_and_accumulate_pert_stats(accumulated_stats, stats)
+            for key, value in num_stats["num_edges"].items():
+                num_stats["num_edges"][key] = value // 2
+        log_and_accumulate_pert_stats(accumulated_stats, num_stats)
 
     summary_stats = log_summary_stats(accumulated_stats)
     model.forward = model.forward.__wrapped__
