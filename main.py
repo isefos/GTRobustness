@@ -1,3 +1,4 @@
+import numpy  # noqa, try to fix mkl error
 import datetime
 import os
 import torch
