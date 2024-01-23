@@ -7,11 +7,11 @@ seml:
 slurm:
   experiments_per_job: 1
   sbatch_options:
-    partition: cpu
+    partition: gpu_limited
     gres: gpu:0       # num GPUs
-    mem: 16G          # memory
-    cpus-per-task: 4  # num cores
-    time: 0-08:00     # max time, D-HH:MM
+    mem: 8G          # memory
+    cpus-per-task: 1  # num cores
+    time: 0-00:20     # max time, D-HH:MM
 
 ###### BEGIN PARAMETER CONFIGURATION ######
 
