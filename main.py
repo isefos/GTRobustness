@@ -76,7 +76,7 @@ def get_attack_cfg(loaders):
     
 def main(cfg):
     # Pytorch environment
-    torch.set_num_threads(cfg.num_threads)
+    # torch.set_num_threads(cfg.num_threads)  # commented to see if is cause of error
     seed_everything(cfg.seed)
     auto_select_device()
     

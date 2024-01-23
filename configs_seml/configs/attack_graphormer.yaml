@@ -8,17 +8,16 @@ slurm:
   experiments_per_job: 1
   sbatch_options:
     partition: gpu_limited
-    gres: gpu:0       # num GPUs
+    gres: gpu:1       # num GPUs
     mem: 8G          # memory
     cpus-per-task: 1  # num cores
-    time: 0-00:20     # max time, D-HH:MM
+    time: 0-00:30     # max time, D-HH:MM
 
 ###### BEGIN PARAMETER CONFIGURATION ######
 
 fixed:
   graphgym:
     accelerator: cpu
-    num_threads: 8
     seed: 0
     out_dir: configs_seml/results
     metric_best: accuracy
