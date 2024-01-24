@@ -19,7 +19,7 @@ fixed:
 
   graphgym:
 
-    accelerator: cpu
+    accelerator: cuda
     out_dir: configs_seml/results
     metric_best: accuracy
     tensorboard_each_run: false
