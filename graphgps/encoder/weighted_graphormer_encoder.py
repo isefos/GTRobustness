@@ -512,6 +512,7 @@ class WeightedPreprocessing(torch.nn.Module):
 @register_node_encoder("WeightedGraphormerBias")
 class WeightedGraphormerEncoder(torch.nn.Sequential):
     def __init__(self, dim_emb, *args, **kwargs):
+        assert not cfg.posenc_GraphormerBias.has_edge_attr, "Weighted graphormer cannot currently use edge attributes"
         encoders = [
             WeightedPreprocessing(
                 cfg.posenc_GraphormerBias.num_spatial_types,

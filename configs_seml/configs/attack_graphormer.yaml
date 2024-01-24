@@ -31,7 +31,7 @@ fixed:
       split_mode: standard
       node_encoder: true
       node_encoder_name: WeightedGraphormerBias
-      node_encoder_bn: true
+      node_encoder_bn: false
     posenc_GraphormerBias:
       enable: true
       node_degrees_only: false
@@ -46,7 +46,11 @@ fixed:
       mode: custom
       batch_size: 16
       eval_period: 1
-      ckpt_period: 100
+      ckpt_best: true
+      early_stopping: true
+      early_stopping_patience: 25
+      early_stopping_delta_e: 0.03
+      early_stopping_warmup: 20
     model:
       type: Graphormer
       loss_fun: cross_entropy
@@ -64,11 +68,6 @@ fixed:
       layers_pre_mp: 1
       layers_post_mp: 1  # Not used when `gnn.head: san_graph`
       dim_inner: 32  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
-      batchnorm: true
-      act: relu
-      dropout: 0.0
-      agg: mean
-      normalize_adj: false
     optim:
       clip_grad_norm: true
       clip_grad_norm_value: 5.0

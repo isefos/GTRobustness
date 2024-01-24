@@ -1,4 +1,4 @@
-import numpy  # noqa, try to fix mkl error
+import numpy  # noqa, fixes mkl error
 import datetime
 import os
 import torch
@@ -77,7 +77,7 @@ def get_attack_cfg(loaders):
     
 def main(cfg):
     # Pytorch environment
-    # torch.set_num_threads(cfg.num_threads)  # commented to see if is cause of error
+    torch.set_num_threads(cfg.num_threads)
     seed_everything(cfg.seed)
     auto_select_device()
     

@@ -92,12 +92,17 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
     """
     start_epoch = 0
     if cfg.train.auto_resume:
-        start_epoch = load_ckpt(model, optimizer, scheduler,
-                                cfg.train.epoch_resume)
+        start_epoch = load_ckpt(model, optimizer, scheduler, cfg.train.epoch_resume)
     if start_epoch == cfg.optim.max_epoch:
         logging.info('Checkpoint found, Task already done')
     else:
         logging.info('Start from epoch %s', start_epoch)
+
+    early_stopping = cfg.train.early_stopping
+    patience = cfg.train.early_stopping_patience
+    best_val_loss = None
+    patience_e = cfg.train.early_stopping_delta_e
+    patience_warmup = start_epoch + cfg.train.early_stopping_warmup
 
     if cfg.wandb.use:
         try:
@@ -116,15 +121,18 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
     full_epoch_times = []
     perf = [[] for _ in range(num_splits)]
     for cur_epoch in range(start_epoch, cfg.optim.max_epoch):
+
+        if early_stopping and patience <= 0:
+            logging.info('Early stopping because validation loss is not improving further')
+            break
+
         start_time = time.perf_counter()
-        train_epoch(loggers[0], loaders[0], model, optimizer, scheduler,
-                    cfg.optim.batch_accumulation)
+        train_epoch(loggers[0], loaders[0], model, optimizer, scheduler, cfg.optim.batch_accumulation)
         perf[0].append(loggers[0].write_epoch(cur_epoch))
 
         if is_eval_epoch(cur_epoch):
             for i in range(1, num_splits):
-                eval_epoch(loggers[i], loaders[i], model,
-                           split=split_names[i - 1])
+                eval_epoch(loggers[i], loaders[i], model, split=split_names[i - 1])
                 perf[i].append(loggers[i].write_epoch(cur_epoch))
         else:
             for i in range(1, num_splits):
@@ -145,7 +153,18 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
 
         # Log current best stats on eval epoch.
         if is_eval_epoch(cur_epoch):
-            best_epoch = int(np.array([vp['loss'] for vp in val_perf]).argmin())
+            val_losses = [vp['loss'] for vp in val_perf]
+            val_loss_cur_epoch = val_losses[-1]
+
+            if cur_epoch > patience_warmup:
+                if best_val_loss is None:
+                    best_val_loss = val_loss_cur_epoch
+                elif best_val_loss > val_loss_cur_epoch:
+                    best_val_loss = val_loss_cur_epoch
+                elif (1 + patience_e) * best_val_loss <= val_loss_cur_epoch:
+                    patience -= 1
+
+            best_epoch = int(np.array(val_losses).argmin())
             best_train = best_val = best_test = ""
             if cfg.metric_best != 'auto':
                 # Select again based on val perf of `cfg.metric_best`.
@@ -174,7 +193,7 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
                     run.summary["full_epoch_time_avg"] = np.mean(full_epoch_times)
                     run.summary["full_epoch_time_sum"] = np.sum(full_epoch_times)
             # Checkpoint the best epoch params (if enabled).
-            if cfg.train.enable_ckpt and cfg.train.ckpt_best and  best_epoch == cur_epoch:
+            if cfg.train.enable_ckpt and cfg.train.ckpt_best and best_epoch == cur_epoch:
                 save_ckpt(model, optimizer, scheduler, cur_epoch)
                 if cfg.train.ckpt_clean:  # Delete old ckpt each time.
                     clean_ckpt()
@@ -204,7 +223,10 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
 
     logging.info('Task done, results saved in %s', cfg.run_dir)
     results = {split: p for split, p in zip(["train", "val", "test"], perf)}
-    results["best_epoch"] = best_epoch
+    results["best_val_epoch"] = best_epoch
+    results["best_val_" + cfg.metric_best] = perf[1][best_epoch]
+    results["best_val_train_" + cfg.metric_best] = perf[0][best_epoch]
+    results["best_val_test_" + cfg.metric_best] = perf[2][best_epoch]
     return results
 
 

@@ -1,0 +1,225 @@
+seml:
+  executable: main.py
+  output_dir: configs_seml/logs
+  project_root_dir: ../..
+  conda_environment: gtr
+
+slurm:
+  experiments_per_job: 8
+  sbatch_options:
+    partition: gpu_limited
+    gres: gpu:1       # num GPUs
+    mem: 8G          # memory
+    cpus-per-task: 1  # num cores
+    time: 0-08:00     # max time, D-HH:MM
+
+# experiment fixed configs 
+
+fixed:
+
+  graphgym:
+
+    accelerator: cpu
+    out_dir: configs_seml/results
+    metric_best: accuracy
+    tensorboard_each_run: false
+
+    dataset:
+      format: PyG-UPFD
+      # name: politifact-spacy -> grid
+      task: graph
+      task_type: classification_binary
+      transductive: false
+      split_mode: standard
+      node_encoder: true
+      node_encoder_name: WeightedGraphormerBias
+      # node_encoder_bn: false -> grid
+
+    posenc_GraphormerBias:
+      enable: true
+      node_degrees_only: false
+      # num_spatial_types: 16 -> grid
+      # num_in_degrees: 32 -> grid
+      # num_out_degrees: 32 -> grid
+      directed_graphs: false
+      has_edge_attr: false
+      # next 2 only matter for attack, set to fixed false
+      combinations_degree: false
+      use_weighted_path_distance: false
+
+    train:
+      mode: custom
+      # batch_size: 16 -> grid
+      eval_period: 1
+      enable_ckpt: false  # hyperparameter search, no need to save the models
+      early_stopping: true
+      early_stopping_patience: 25
+      early_stopping_delta_e: 0.03
+      early_stopping_warmup: 20
+
+    model:
+      type: Graphormer
+      loss_fun: cross_entropy
+      graph_pooling: graph_token
+
+    graphormer:
+      # num_layers: 2 -> grid
+      # num_heads: 2 -> grid
+      # embed_dim: 32 -> grid
+      dropout: 0.0
+      attention_dropout: 0.0  # 0.1
+      mlp_dropout: 0.0  # 0.1
+      input_dropout: 0.0  # 0.1
+
+    # gnn: -> grid
+
+    optim:
+      clip_grad_norm: true
+      clip_grad_norm_value: 5.0
+      optimizer: adamW
+      # weight_decay: 0.01 -> grid
+      # base_lr: 0.001 -> grid
+      max_epoch: 300
+      scheduler: cosine_with_warmup
+      # num_warmup_epochs: 10 -> grid
+
+    attack:
+      enable: false
+
+# experiment random configs
+
+random:
+
+  samples: 1  # 3
+  seed: 42
+
+  graphgym.seed:
+    type: randint
+    min: 0
+    max: 1000
+
+# experiment grid configs
+
+grid:
+
+  graphgym.dataset.name: 
+    type: choice
+    options:
+      #- politifact-profile
+      #- politifact-spacy
+      - politifact-bert
+      #- politifact-content
+      #- gossipcop-profile
+      #- gossipcop-spacy
+      #- gossipcop-bert
+      #- gossipcop-content
+
+  graphgym.dataset.node_encoder_bn:
+    type: choice
+    options:
+      - false
+      #- true
+
+  graphgym.posenc_GraphormerBias.num_spatial_types:
+    type: choice
+    options:
+      - 4
+      - 16
+    zip_id: distance_degrees
+
+  graphgym.posenc_GraphormerBias.num_in_degrees:
+    type: choice
+    options:
+      - 8
+      - 32
+    zip_id: distance_degrees
+
+  graphgym.posenc_GraphormerBias.num_out_degrees:
+    type: choice
+    options:
+      - 8
+      - 32
+    zip_id: distance_degrees
+
+  graphgym.train.batch_size: 
+    type: choice
+    options:
+      - 16
+      #- 64
+
+  graphgym.graphormer.num_layers:
+    type: choice
+    options:
+      - 1
+      - 1
+      - 2
+      - 2
+    zip_id: heads_layers
+    
+  graphgym.graphormer.num_heads:
+    type: choice
+    options:
+      - 1
+      - 2
+      - 2
+      - 4
+    zip_id: heads_layers
+
+  graphgym.graphormer.embed_dim:
+    type: choice
+    options:
+      #- 16
+      - 32
+      - 64
+      #- 128
+      #- 512
+    zip_id: dim_hidden
+
+  graphgym.gnn.dim_inner:  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+    type: choice
+    options:
+      #- 16
+      - 32
+      - 64
+      #- 128
+      #- 512
+    zip_id: dim_hidden
+
+  graphgym.gnn.head:
+    type: choice
+    options:
+      - graphormer_graph
+      #- weighted_add_pool_graph
+      #- weighted_mean_pool_graph
+
+  graphgym.gnn.layers_pre_mp:
+    type: choice
+    options:
+      - 1
+      #- 2
+  
+  graphgym.gnn.layers_post_mp:
+    type: choice
+    options:
+      - 1
+      #- 2
+
+  graphgym.optim.base_lr:
+    type: loguniform
+    min: 1e-4
+    max: 1e-2
+    num: 3
+
+  graphgym.optim.weight_decay:
+    type: loguniform
+    min: 1e-4
+    max: 1e-1
+    num: 3
+
+  graphgym.optim.num_warmup_epochs:
+    type: choice
+    options: 
+      - 10
+      #- 20
+      #- 50
+      #- 100
