@@ -170,7 +170,7 @@ os.makedirs("configs_seml/logs", exist_ok=True)
 
 
 @ex.automain
-def run(graphgym: dict):
+def run(seed, graphgym: dict):
     set_cfg(cfg)
 
     ex_identifier = (
@@ -180,8 +180,8 @@ def run(graphgym: dict):
     )
     output_dir = os.path.join(graphgym["out_dir"], ex_identifier)
 
-    seed = graphgym.get("seed", cfg.seed)
-    run_identifier = f"s{seed}-{datetime.datetime.now().strftime('d%Y%m%d-t%H%M%S')}"
+    seed_graphgym = graphgym.get("seed", cfg.seed)
+    run_identifier = f"s{seed_graphgym}-{datetime.datetime.now().strftime('d%Y%m%d-t%H%M%S%f')}-{seed}"
     run_dir = os.path.join(output_dir, run_identifier)
     os.makedirs(run_dir)
 
