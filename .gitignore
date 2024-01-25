@@ -27,6 +27,7 @@ __pycache__/
 *.bak
 configs_seml/logs
 configs_seml/results
+hs_results_analysis
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

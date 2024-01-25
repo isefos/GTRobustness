@@ -9,9 +9,9 @@ slurm:
   sbatch_options:
     partition: gpu_limited
     gres: gpu:1       # num GPUs
-    mem: 8G          # memory
+    mem: 16G          # memory
     cpus-per-task: 1  # num cores
-    time: 0-00:30     # max time, D-HH:MM
+    time: 0-08:00     # max time, D-HH:MM
 
 ###### BEGIN PARAMETER CONFIGURATION ######
 
@@ -48,9 +48,9 @@ fixed:
       eval_period: 1
       ckpt_best: true
       early_stopping: true
-      early_stopping_patience: 25
+      early_stopping_patience: 30
       early_stopping_delta_e: 0.03
-      early_stopping_warmup: 20
+      early_stopping_warmup: 30
     model:
       type: Graphormer
       loss_fun: cross_entropy
@@ -74,12 +74,12 @@ fixed:
       optimizer: adamW
       weight_decay: 0.01
       base_lr: 0.001
-      max_epoch: 3  # 56
+      max_epoch: 56  # 56
       scheduler: polynomial_with_warmup
     attack:
       enable: true
       split: test
-      num_attacked_graphs: 2  # 0 means attack all
+      num_attacked_graphs: 0  # 0 means attack all
       lr: 4_000
       block_size: 2_000
       e_budget: 0.1

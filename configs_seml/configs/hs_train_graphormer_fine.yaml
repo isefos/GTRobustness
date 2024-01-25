@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 4
+  experiments_per_job: 6
   sbatch_options:
     partition: gpu_limited
     gres: gpu:1       # num GPUs
@@ -150,25 +150,20 @@ grid:
   graphgym.graphormer.num_layers:
     type: choice
     options:
-      - 1
-      - 1
       - 2
-      - 2
-    zip_id: heads_layers
+      - 4
     
   graphgym.graphormer.num_heads:
     type: choice
     options:
-      - 1
-      - 2
       - 2
       - 4
-    zip_id: heads_layers
+      - 8
 
   graphgym.graphormer.embed_dim:
     type: choice
     options:
-      #- 16
+      - 16
       - 32
       - 64
       #- 128
@@ -178,7 +173,7 @@ grid:
   graphgym.gnn.dim_inner:  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
     type: choice
     options:
-      #- 16
+      - 16
       - 32
       - 64
       #- 128
@@ -196,25 +191,25 @@ grid:
     type: choice
     options:
       - 1
-      #- 2
+      - 2
   
   graphgym.gnn.layers_post_mp:
     type: choice
     options:
       - 1
-      #- 2
+      - 2
 
   graphgym.optim.base_lr:
     type: loguniform
     min: 1e-4
-    max: 1e-2
-    num: 3
+    max: 5e-2
+    num: 4
 
   graphgym.optim.weight_decay:
     type: loguniform
     min: 1e-4
     max: 1e-1
-    num: 3
+    num: 4
 
   graphgym.optim.num_warmup_epochs:
     type: choice
