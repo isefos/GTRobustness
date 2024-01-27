@@ -54,7 +54,7 @@ def new_scheduler_config(cfg):
     )
 
 
-def get_attack_cfg(loaders):
+def get_attack_datasets(loaders):
     splits = ["train", "val", "test"]
     split_to_attack_idx = splits.index(cfg.attack.split)
     dataset_to_attack = loaders[split_to_attack_idx].dataset
@@ -110,9 +110,8 @@ def main(cfg):
     # Attack
     attack_results = None
     if cfg.attack.enable:
-        dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_cfg(loaders)
+        dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
         # TODO: if specified, load best model checkpoint before attack
-        # TODO: return results
         attack_results = prbcd_attack_dataset(
             model=model,
             dataset_to_attack=dataset_to_attack,

@@ -33,8 +33,7 @@ def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation)
         # Parameters update after accumulating gradients for given num. batches.
         if ((iter + 1) % batch_accumulation == 0) or (iter + 1 == len(loader)):
             if cfg.optim.clip_grad_norm:
-                torch.nn.utils.clip_grad_norm_(model.parameters(),
-                                               cfg.optim.clip_grad_norm_value)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.optim.clip_grad_norm_value)
             optimizer.step()
             optimizer.zero_grad()
         logger.update_stats(true=_true,
@@ -98,11 +97,11 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
     else:
         logging.info('Start from epoch %s', start_epoch)
 
-    early_stopping = cfg.train.early_stopping
-    patience = cfg.train.early_stopping_patience
+    early_stopping = cfg.optim.early_stopping
+    patience = cfg.optim.early_stopping_patience
     best_val_loss = None
-    patience_e = cfg.train.early_stopping_delta_e
-    patience_warmup = start_epoch + cfg.train.early_stopping_warmup
+    patience_e = cfg.optim.early_stopping_delta_e
+    patience_warmup = start_epoch + cfg.optim.early_stopping_warmup
 
     if cfg.wandb.use:
         try:
@@ -123,7 +122,7 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
     for cur_epoch in range(start_epoch, cfg.optim.max_epoch):
 
         if early_stopping and patience <= 0:
-            logging.info('Early stopping because validation loss is not improving further')
+            logging.info('Early stopping because validation loss is not decreasing further')
             break
 
         start_time = time.perf_counter()
@@ -159,7 +158,7 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
             if cur_epoch > patience_warmup:
                 if best_val_loss is None:
                     best_val_loss = val_loss_cur_epoch
-                elif best_val_loss > val_loss_cur_epoch:
+                elif val_loss_cur_epoch < best_val_loss:
                     best_val_loss = val_loss_cur_epoch
                 elif (1 + patience_e) * best_val_loss <= val_loss_cur_epoch:
                     patience -= 1
@@ -169,7 +168,17 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
             if cfg.metric_best != 'auto':
                 # Select again based on val perf of `cfg.metric_best`.
                 m = cfg.metric_best
-                best_epoch = int(getattr(np.array([vp[m] for vp in val_perf]), cfg.metric_agg)())
+                val_metric = np.array([vp[m] for vp in val_perf])
+                if cfg.metric_agg == "argmax":
+                    metric_agg = "max"
+                elif cfg.metric_agg == "argmin":
+                    metric_agg = "min"
+                else:
+                    raise ValueError("cfg.metric_agg should be either 'argmax' or 'argmin'")
+                best_val_metric = getattr(val_metric, metric_agg)()
+                best_val_metric_epochs = np.arange(len(val_metric), dtype=int)[val_metric == best_val_metric]
+                # use loss to decide when epochs have same best metric
+                best_epoch = int(best_val_metric_epochs[val_losses[best_val_metric_epochs].argmin()])
                 if m in perf[0][best_epoch]:
                     best_train = f"train_{m}: {perf[0][best_epoch][m]:.4f}"
                 else:
@@ -224,9 +233,9 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
     logging.info('Task done, results saved in %s', cfg.run_dir)
     results = {split: p for split, p in zip(["train", "val", "test"], perf)}
     results["best_val_epoch"] = best_epoch
-    results["best_val_" + cfg.metric_best] = perf[1][best_epoch]
-    results["best_val_train_" + cfg.metric_best] = perf[0][best_epoch]
-    results["best_val_test_" + cfg.metric_best] = perf[2][best_epoch]
+    results["best_val_" + cfg.metric_best] = perf[1][best_epoch].get(cfg.metric_best)
+    results["best_val_train_" + cfg.metric_best] = perf[0][best_epoch].get(cfg.metric_best)
+    results["best_val_test_" + cfg.metric_best] = perf[2][best_epoch].get(cfg.metric_best)
     return results
 
 

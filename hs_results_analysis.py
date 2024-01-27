@@ -45,8 +45,8 @@ def get_highest_k_indices(values, k):
 
 
 
-def main(collection: str, configs: list[str], k: int, results_path: str):
-    results = seml.get_results(collection)
+def main(collection: str, configs: list[str], k: int, results_path: str, filter_dict):
+    results = seml.get_results(collection, filter_dict=filter_dict)
     results_path, result_log_file = clean_path(results_path)
 
     with open(result_log_file, "w") as f:
@@ -155,4 +155,5 @@ if __name__ == "__main__":
     ]
     k = 6
     results_path = "hs_results_analysis"
-    main(collection=collection_name, configs=configs, k=k, results_path=results_path)
+    filter_dict = None
+    main(collection=collection_name, configs=configs, k=k, results_path=results_path, filter_dict=filter_dict)
