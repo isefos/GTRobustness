@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 4
+  experiments_per_job: 8
   sbatch_options:
     partition: gpu_limited
     gres: gpu:1       # num GPUs
@@ -87,45 +87,25 @@ fixed:
 # experiment random configs
 
 random:
+  samples: 3
+  seed: 42
 
   graphgym.seed:
-    samples: 3
-    seed: 42
     type: randint
     min: 0
     max: 1000
 
   graphgym.optim.base_lr:
-    samples: 5  # 6
-    seed: 42
     type: loguniform
     min: 1e-4
     max: 2e-1
 
   graphgym.optim.weight_decay:
-    samples: 3  # 5
-    seed: 42
     type: loguniform
     min: 1e-4
     max: 1e-1
 
-  #graphgym.graphormer.num_layers:
-  #  samples: 4
-  #  seed: 42
-  #  type: randint
-  #  min: 1
-  #  max: 10
-    
-  #graphgym.graphormer.num_heads:
-  #  samples: 4
-  #  seed: 42
-  #  type: randint
-  #  min: 1
-  #  max: 10
-
   graphgym.graphormer.embed_dim:
-    samples: 3  # 4
-    seed: 42
     type: randint
     min: 32
     max: 1000
