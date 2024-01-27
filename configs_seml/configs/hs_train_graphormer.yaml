@@ -41,7 +41,7 @@ fixed:
       node_degrees_only: false
       directed_graphs: false
       has_edge_attr: false
-      num_out_degrees: ${graphgym.posenc_GraphormerBias.num_in_degrees}
+      num_out_degrees: ${config.graphgym.posenc_GraphormerBias.num_in_degrees}
       # next 2 only matter for attack, set to fixed false
       combinations_degree: false
       use_weighted_path_distance: false
@@ -67,7 +67,7 @@ fixed:
     gnn:
       layers_pre_mp: 0
       head: graphormer_graph
-      dim_inner: ${graphgym.graphormer.embed_dim}
+      dim_inner: ${config.graphgym.graphormer.embed_dim}
 
     optim:
       clip_grad_norm: true
@@ -75,7 +75,6 @@ fixed:
       optimizer: adamW
       max_epoch: 300
       scheduler: cosine_with_warmup
-      num_warmup_epochs: 10
       early_stopping: true
       early_stopping_patience: 30
       early_stopping_delta_e: 0.05
@@ -87,61 +86,73 @@ fixed:
 # experiment random configs
 
 random:
-  samples: 3
-  seed: 42
+  samples: 2000
+  seed: 187
 
   graphgym.seed:
+    seed: 786
     type: randint
     min: 0
-    max: 1000
+    max: 10000
 
   graphgym.optim.base_lr:
+    seed: 2264
     type: loguniform
     min: 1e-4
     max: 2e-1
 
   graphgym.optim.weight_decay:
+    seed: 89
     type: loguniform
-    min: 1e-4
+    min: 1e-5
     max: 1e-1
 
   graphgym.graphormer.embed_dim:
+    seed: 13094
     type: randint
-    min: 32
-    max: 1000
-
-# experiment grid configs
-
-grid:
+    min: 20
+    max: 800
 
   graphgym.graphormer.num_layers:
+    seed: 357
     type: choice
-    options:
-      - 4
-      - 8
+    type: randint
+    min: 1
+    max: 13
 
   graphgym.posenc_GraphormerBias.num_spatial_types:
-    type: choice
-    options:
-      - 7
-      #- 11
-      - 15
+    seed: 2846
+    type: randint
+    min: 6
+    max: 15
 
   graphgym.posenc_GraphormerBias.num_in_degrees:
+    seed: 647
+    type: randint
+    min: 8
+    max: 41
+
+  graphgym.train.batch_size:
+    seed: 97
     type: choice
     options:
       - 8
-      #- 20
-      - 40
-
-  graphgym.train.batch_size: 
-    type: choice
-    options:
       - 16
-      #- 64
+      - 32
+      - 64
   
   graphgym.gnn.layers_post_mp:
+    seed: 96624
     type: choice
     options:
       - 1
       - 2
+      - 3
+
+  graphgym.optim.num_warmup_epochs:
+    seed: 3976
+    type: choice
+    options:
+      - 5
+      - 10
+      - 20
