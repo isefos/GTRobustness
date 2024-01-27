@@ -152,8 +152,8 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
 
         # Log current best stats on eval epoch.
         if is_eval_epoch(cur_epoch):
-            val_losses = [vp['loss'] for vp in val_perf]
-            val_loss_cur_epoch = val_losses[-1]
+            val_losses = np.array([vp['loss'] for vp in val_perf])
+            val_loss_cur_epoch = float(val_losses[-1])
 
             if cur_epoch > patience_warmup:
                 if best_val_loss is None:
@@ -163,7 +163,7 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
                 elif (1 + patience_e) * best_val_loss <= val_loss_cur_epoch:
                     patience -= 1
 
-            best_epoch = int(np.array(val_losses).argmin())
+            best_epoch = int(val_losses.argmin())
             best_train = best_val = best_test = ""
             if cfg.metric_best != 'auto':
                 # Select again based on val perf of `cfg.metric_best`.

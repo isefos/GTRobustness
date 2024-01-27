@@ -34,13 +34,3 @@ def extended_cfg(cfg):
     # always checkpoint the current best model based on validation performance,
     # instead, when False, follow cfg.train.eval_period checkpointing frequency.
     cfg.train.ckpt_best = False
-
-    # For early stopping
-
-    cfg.train.early_stopping = True
-
-    cfg.train.early_stopping_patience = 20
-
-    cfg.train.early_stopping_delta_e = 0.05
-
-    cfg.train.early_stopping_warmup = 10
