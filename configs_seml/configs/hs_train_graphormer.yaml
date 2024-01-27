@@ -115,7 +115,6 @@ random:
 
   graphgym.graphormer.num_layers:
     seed: 357
-    type: choice
     type: randint
     min: 1
     max: 13
