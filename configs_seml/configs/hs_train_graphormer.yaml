@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 8
+  experiments_per_job: 3
   sbatch_options:
     partition: gpu_limited
     gres: gpu:1       # num GPUs
@@ -112,19 +112,19 @@ random:
     seed: 13094
     type: randint
     min: 1
-    max: 13
+    max: 11
 
   dims_per_head:
     seed: 13094
     type: randint
     min: 4
-    max: 65
+    max: 50
 
   graphgym.graphormer.num_layers:
     seed: 357
     type: randint
     min: 1
-    max: 9
+    max: 7
 
   graphgym.posenc_GraphormerBias.num_spatial_types:
     seed: 2846

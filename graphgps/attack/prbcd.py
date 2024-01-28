@@ -241,6 +241,95 @@ class PRBCDAttack(torch.nn.Module):
             f'exceeds budget {budget}')
 
         return perturbed_edge_index, flipped_edges
+    
+    def attack_random_baseline(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        labels: Tensor,
+        budget: int,
+        idx_attack: Optional[Tensor] = None,
+        num_samples: int = 1000,
+        **kwargs,
+    ) -> Tuple[Tensor, Tensor]:
+        """Attack the predictions for the provided model and graph.
+
+        A subset of predictions may be specified with :attr:`idx_attack`. The
+        attack is allowed to flip (i.e. add or delete) :attr:`budget` edges and
+        will return the strongest perturbation it can find. It returns both the
+        resulting perturbed :attr:`edge_index` as well as the perturbations.
+
+        Args:
+            x (torch.Tensor): The node feature matrix.
+            edge_index (torch.Tensor): The edge indices.
+            labels (torch.Tensor): The labels.
+            budget (int): The number of allowed perturbations (i.e.
+                number of edges that are flipped at most).
+            idx_attack (torch.Tensor, optional): Filter for predictions/labels.
+                Shape and type must match that it can index :attr:`labels`
+                and the model's predictions.
+            **kwargs (optional): Additional arguments passed to the GNN module.
+
+        :rtype: (:class:`torch.Tensor`, :class:`torch.Tensor`)
+        """
+        self.model.eval()
+
+        self.device = x.device
+        assert kwargs.get('edge_weight') is None
+        edge_weight = torch.ones(edge_index.size(1), device=self.device)
+        self.edge_index = edge_index.cpu().clone()
+        self.edge_weight = edge_weight.cpu().clone()
+        self.num_nodes = x.size(0)
+
+        # settings for node injection attacks:
+        if self.weighted_sampling:
+            sorted_included_nodes: torch.Tensor = edge_index.unique(sorted=True)
+            to_lin_idx = self._triu_to_linear_idx if self.is_undirected else self._full_to_linear_idx
+            idx_to_included = None
+            idx_between_included = None
+            if self.included_weighted:
+                # give edges to included nodes a higher probability of getting sampled
+                edges_to_included = self._get_new_1hop_edges(
+                    sorted_included_nodes, self.num_nodes, self.is_undirected, self.device,
+                )
+                idx_to_included = to_lin_idx(self.num_nodes, edges_to_included)
+            if not self.allow_existing_graph_pert:
+                # don't allow the edges between to included nodes to change, only adding new edges
+                edges_between_included = self._get_fully_connected_edges(
+                    sorted_included_nodes, self.is_undirected, self.device,
+                )
+                idx_between_included = to_lin_idx(self.num_nodes, edges_between_included)
+            # Now use these for sampling
+            self.weighted_index_sampler = WeightedIndexSampler(
+                idx_to_included,
+                idx_between_included,
+                self.existing_node_prob_multiplier,
+                self._num_possible_edges(self.num_nodes, self.is_undirected)-1,
+            )
+
+        # For collecting attack statistics
+        self.attack_statistics = defaultdict(list)
+
+        # Loop over the epochs (Algorithm 1, line 5)
+        for step in tqdm(num_samples, disable=not self.log, desc='Attack'):
+
+            # TODO: take random sample and evaluate loss
+            pass
+
+            # loss, gradient = self._forward_and_gradient(x, labels, idx_attack, **kwargs)
+
+            # scalars = self._update(step, gradient, x, labels, budget, idx_attack, **kwargs)
+
+            # scalars['loss'] = loss.item()
+            # self._append_statistics(scalars)
+
+        # TODO: choose best sample
+
+        # perturbed_edge_index, flipped_edges = self._close(x, labels, budget, idx_attack, **kwargs)
+
+        # assert flipped_edges.size(1) <= budget, (f'# perturbed edges {flipped_edges.size(1)} exceeds budget {budget}')
+
+        return None  # perturbed_edge_index, flipped_edges
 
     def _prepare(self, budget: int) -> Iterable[int]:
         """Prepare attack."""
