@@ -20,7 +20,6 @@ fixed:
   graphgym:
 
     accelerator: cpu
-    seed: 0
     out_dir: configs_seml/results
     metric_best: accuracy
     tensorboard_each_run: false
