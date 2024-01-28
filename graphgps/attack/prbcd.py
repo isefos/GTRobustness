@@ -249,7 +249,6 @@ class PRBCDAttack(torch.nn.Module):
         labels: Tensor,
         budget: int,
         idx_attack: Optional[Tensor] = None,
-        num_samples: int = 1000,
         **kwargs,
     ) -> Tuple[Tensor, Tensor]:
         """Attack the predictions for the provided model and graph.
@@ -310,26 +309,50 @@ class PRBCDAttack(torch.nn.Module):
         # For collecting attack statistics
         self.attack_statistics = defaultdict(list)
 
+        highest_loss = float('-inf')
+        best_edge_index = None
+
         # Loop over the epochs (Algorithm 1, line 5)
-        for step in tqdm(num_samples, disable=not self.log, desc='Attack'):
+        for step in tqdm(range(self.epochs), disable=not self.log, desc='Attack'):
 
             # TODO: take random sample and evaluate loss
-            pass
+            if not self.weighted_sampling:
+                num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
+                self.current_block = torch.randint(
+                    num_possible_edges, (budget, ), device=self.device,
+                )
+            else:
+                self.current_block = self.weighted_index_sampler.sample(budget, device=self.device)
+            self.current_block = torch.unique(self.current_block, sorted=True)
+            if self.is_undirected:
+                self.block_edge_index = self._linear_to_triu_idx(self.num_nodes, self.current_block)
+            else:
+                self.block_edge_index = self._linear_to_full_idx(self.num_nodes, self.current_block)
+                self._filter_self_loops_in_block(with_weight=False)
 
-            # loss, gradient = self._forward_and_gradient(x, labels, idx_attack, **kwargs)
+            self.block_edge_weight = torch.full(self.current_block.shape, 1, device=self.device)
+            self.block_edge_weight.requires_grad = False
 
-            # scalars = self._update(step, gradient, x, labels, budget, idx_attack, **kwargs)
+            # Retrieve sparse perturbed adjacency matrix `A \oplus p_{t-1}`
+            # (Algorithm 1, line 6 / Algorithm 2, line 7)
+            edge_index, edge_weight = self._get_modified_adj(
+                self.edge_index,
+                self.edge_weight,
+                self.block_edge_index,
+                self.block_edge_weight,
+            )
 
-            # scalars['loss'] = loss.item()
-            # self._append_statistics(scalars)
+            # Get prediction (Algorithm 1, line 6 / Algorithm 2, line 7)
+            prediction = self._forward(x, edge_index, edge_weight, **kwargs)
+            # Calculate loss combining all each node
+            # (Algorithm 1, line 7 / Algorithm 2, line 8)
+            loss = self.loss(prediction, labels, idx_attack)
 
-        # TODO: choose best sample
-
-        # perturbed_edge_index, flipped_edges = self._close(x, labels, budget, idx_attack, **kwargs)
-
-        # assert flipped_edges.size(1) <= budget, (f'# perturbed edges {flipped_edges.size(1)} exceeds budget {budget}')
-
-        return None  # perturbed_edge_index, flipped_edges
+            if loss > highest_loss:
+                best_edge_index = edge_index.cpu().clone()
+                highest_loss = loss
+        
+        return best_edge_index, None
 
     def _prepare(self, budget: int) -> Iterable[int]:
         """Prepare attack."""

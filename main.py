@@ -113,10 +113,19 @@ def main(cfg):
         dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
 
         if cfg.attack.load_best_model:
-            # TODO: if specified, load best model checkpoint before attack
-            pass
+            assert cfg.train.enable_ckpt and cfg.train.ckpt_best, (
+                "To load best model, enable checkpointing and set ckpt_best"
+            )
+            # load best model checkpoint before attack
+            from torch_geometric.graphgym.checkpoint import MODEL_STATE
 
-
+            ckpt_file = os.path.join(cfg.run_dir, "ckpt", f"{train_results['best_val_epoch']}.ckpt")
+            ckpt = torch.load(ckpt_file, map_location=torch.device('cpu'))
+            best_model_dict = ckpt[MODEL_STATE]
+            model_dict = model.state_dict()
+            model_dict.update(best_model_dict)
+            model.load_state_dict(model_dict)
+        
         attack_results = prbcd_attack_dataset(
             model=model,
             dataset_to_attack=dataset_to_attack,
@@ -203,6 +212,8 @@ def run(seed, graphgym, dims_per_head: int):
         + "-"+ graphgym["model"]["type"]
     )
     output_dir = os.path.join(graphgym["out_dir"], ex_identifier)
+    os.makedirs(output_dir, exist_ok=True)
+    graphgym["out_dir"] = output_dir
 
     seed_graphgym = graphgym.get("seed", cfg.seed)
     run_identifier = f"s{seed_graphgym}-{datetime.datetime.now().strftime('d%Y%m%d-t%H%M%S%f')}-{seed}"
@@ -214,11 +225,11 @@ def run(seed, graphgym, dims_per_head: int):
         yaml.dump(graphgym, f)
     args = Namespace(cfg_file=str(graphgym_cfg_file), opts=[])
 
-    cfg.out_dir = output_dir
-    cfg.run_dir = run_dir
-    cfg.cfg_dest = run_identifier + "/configs_all.yaml"
-
     load_cfg(cfg, args)
+
+    cfg.run_dir = run_dir
+    cfg.cfg_dest = f"{run_identifier}/config.yaml"
+
     dump_cfg(cfg)
 
     return main(cfg)

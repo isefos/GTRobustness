@@ -16,12 +16,15 @@ slurm:
 ###### BEGIN PARAMETER CONFIGURATION ######
 
 fixed:
+
   graphgym:
+
     accelerator: cpu
     seed: 0
     out_dir: configs_seml/results
     metric_best: accuracy
     tensorboard_each_run: false
+
     dataset:
       format: PyG-UPFD
       name: politifact-spacy
@@ -30,52 +33,61 @@ fixed:
       transductive: false
       split_mode: standard
       node_encoder: true
-      node_encoder_name: WeightedGraphormerBias
+      node_encoder_name: LinearNode+WeightedGraphormerBias
       node_encoder_bn: false
+
     posenc_GraphormerBias:
       enable: true
+      num_spatial_types: 6
+      num_in_degrees: 37
       node_degrees_only: false
-      num_spatial_types: 16
-      num_in_degrees: 32
-      num_out_degrees: 32
       directed_graphs: false
       has_edge_attr: false
+      num_out_degrees: ${config.graphgym.posenc_GraphormerBias.num_in_degrees}
       combinations_degree: false
-      use_weighted_path_distance: false
+      use_weighted_path_distance: true
+
     train:
       mode: custom
       batch_size: 16
       eval_period: 1
+      enable_ckpt: true
       ckpt_best: true
-      early_stopping: true
-      early_stopping_patience: 30
-      early_stopping_delta_e: 0.03
-      early_stopping_warmup: 30
+
     model:
       type: Graphormer
       loss_fun: cross_entropy
       graph_pooling: graph_token
+
     graphormer:
-      num_layers: 2
-      num_heads: 2
-      embed_dim: 32
+      num_layers: 6
+      num_heads: 5
+      embed_dim: 45
       dropout: 0.0
       attention_dropout: 0.0  # 0.1
       mlp_dropout: 0.0  # 0.1
       input_dropout: 0.0  # 0.1
+
     gnn:
       head: graphormer_graph
-      layers_pre_mp: 1
-      layers_post_mp: 1  # Not used when `gnn.head: san_graph`
-      dim_inner: 32  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+      layers_pre_mp: 0
+      layers_post_mp: 1
+      dim_inner: 45  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+    
     optim:
+      base_lr: 0.0003
+      weight_decay: 0.0001
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       optimizer: adamW
-      weight_decay: 0.01
-      base_lr: 0.001
-      max_epoch: 56  # 56
-      scheduler: polynomial_with_warmup
+      max_epoch: 100
+      scheduler: cosine_with_warmup
+      num_warmup_epochs: 20
+      early_stopping: true
+      early_stopping_patience: 30
+      early_stopping_delta_e: 0.05
+      early_stopping_warmup: 30
+
     attack:
       enable: true
       split: test
@@ -94,3 +106,15 @@ fixed:
       remove_isolated_components: true
       root_node_idx: 0
       include_root_nodes_for_injection: false
+
+# experiment random configs
+
+random:
+  samples: 3
+  seed: 187
+
+  graphgym.seed:
+    seed: 786
+    type: randint
+    min: 0
+    max: 10000

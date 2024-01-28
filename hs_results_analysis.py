@@ -1,5 +1,7 @@
 import seml
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from pathlib import Path
 
@@ -89,13 +91,21 @@ def main(collection: str, configs_all_info: list[tuple[str, bool, bool]], k: int
         for i in best_experiments
     ]
 
+    best_val_with_test_acc = []
+
+    for i in best_val_acc_ind:
+        best_val_with_test_acc.append((val_acc["max_values"][i], test_acc["max_values"][i], i))
+
+    best_val_with_test_acc = sorted(best_val_with_test_acc, reverse=True)
+        
+
     # write results into file
     
     with open(result_log_file, "w") as f:
 
         f.write("\nHighest val accurracies:")
-        for i in best_val_acc_ind:
-            f.write(f"\n\tval acc: {val_acc['max_values'][i]}, by experiment: {i}")
+        for (v_a, t_a, i) in best_val_with_test_acc:
+            f.write(f"\n\tval acc: {v_a}, with {t_a}, by experiment: {i}")
 
         f.write("\nHighest test accurracies:")
         for i in best_test_acc_ind:
@@ -149,10 +159,18 @@ def main(collection: str, configs_all_info: list[tuple[str, bool, bool]], k: int
         ax_loss.plot(x, test_loss['all_values'][i], "-r", label='test')
         ax_loss.legend()
 
-        fig.savefig(results_path / f"{i}.jpg")
+        fig.savefig(results_path / f"{i}.png")
         plt.close(fig)
         ax_acc.clear()
         ax_loss.clear()
+
+    # filter results for lr < 1.3e-3
+    # mask = [result["config"]["graphgym"]["optim"]["base_lr"] < 1.3e-3 for result in results]
+    # results = [result for result, m in zip(results, mask) if m]
+    # val_max_acc = [v for v, m in zip(val_acc["max_values"], mask) if m]
+    # test_max_acc = [v for v, m in zip(test_acc["max_values"], mask) if m]
+    val_max_acc = val_acc["max_values"]
+    test_max_acc = test_acc["max_values"]
 
     for (conf, discrete, log) in configs_all_info:
         fig, ((ax_val), (ax_test)) = plt.subplots(nrows=2, ncols=1, figsize=(12, 8))
@@ -173,21 +191,21 @@ def main(collection: str, configs_all_info: list[tuple[str, bool, bool]], k: int
             val_dataset = []
             test_dataset = []
             for v in values:
-                val_dataset.append(np.array(val_acc["max_values"])[x == v])
-                test_dataset.append(np.array(test_acc["max_values"])[x == v])
+                val_dataset.append(np.array(val_max_acc)[x == v])
+                test_dataset.append(np.array(test_max_acc)[x == v])
             ax_val.violinplot(val_dataset, values, showmeans=True, showmedians=True)
             ax_test.violinplot(test_dataset, values, showmeans=True, showmedians=True)
             x = x + 0.5 * (np.random.rand(len(x)) - 0.5)
-            ax_val.scatter(x, val_acc["max_values"], s=12, c="g")
-            ax_test.scatter(x, test_acc["max_values"], s=12, c="g")
+            ax_val.scatter(x, val_max_acc, s=12, c="g")
+            ax_test.scatter(x, test_max_acc, s=12, c="g")
         else:
-            ax_val.scatter(x, val_acc["max_values"])
-            ax_test.scatter(x, test_acc["max_values"])
+            ax_val.scatter(x, val_max_acc)
+            ax_test.scatter(x, test_max_acc)
             if log:
                 ax_val.set_xscale('log')
                 ax_test.set_xscale('log')
 
-        fig.savefig(results_path / f"conf_{conf}.jpg")
+        fig.savefig(results_path / f"conf_{conf}.png")
         plt.close(fig)
 
 
@@ -204,7 +222,7 @@ if __name__ == "__main__":
         ("graphgym.gnn.layers_post_mp", True, False),
         ("graphgym.optim.num_warmup_epochs", True, False),
     ]
-    k = 6
+    k = 10
     results_path = "hs_results_analysis"
     filter_dict = None
     main(collection=collection_name, configs_all_info=configs_all_info, k=k, results_path=results_path, filter_dict=filter_dict)

@@ -3,7 +3,7 @@ import logging
 from graphgps.attack.utils_attack import get_reached_nodes
 
 
-def log_and_accumulate_output(y_gt, output_clean, output_pert, sigmoid_threshold, accumulated_stats):
+def log_and_accumulate_output(y_gt, output_clean, output_pert, sigmoid_threshold, accumulated_stats, random=False):
     logit_clean = output_clean[0, :]
     logit_pert = output_pert[0, :]
 
@@ -50,10 +50,14 @@ def log_and_accumulate_output(y_gt, output_clean, output_pert, sigmoid_threshold
             f"{str(correct):5} ({f'{margin:.4}':>7}) [{prob_str}] <{logit_str}>"
         )
     
-    accumulated_stats["correct_clean"].append(correct_clean)
-    accumulated_stats["correct_pert"].append(correct_pert)
-    accumulated_stats["margin_clean"].append(margin_clean)
-    accumulated_stats["margin_pert"].append(margin_pert)
+    if random:
+        accumulated_stats["correct_pert_random"].append(correct_pert)
+        accumulated_stats["margin_pert_random"].append(margin_pert)
+    else:
+        accumulated_stats["correct_clean"].append(correct_clean)
+        accumulated_stats["correct_pert"].append(correct_pert)
+        accumulated_stats["margin_clean"].append(margin_clean)
+        accumulated_stats["margin_pert"].append(margin_pert)
 
 
 def basic_edge_and_node_stats(
