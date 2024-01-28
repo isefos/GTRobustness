@@ -12,6 +12,9 @@ def dataset_cfg(cfg):
     # whether to attack or not
     cfg.attack.enable = False
 
+    # load the best validation model before attack or not
+    cfg.attack.load_best_model = True
+
     # which split to attack, "train", "val", or "test"
     cfg.attack.split = "test"
 

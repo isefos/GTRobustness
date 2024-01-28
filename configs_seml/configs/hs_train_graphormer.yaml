@@ -51,6 +51,7 @@ fixed:
       eval_period: 1
       # hyperparameter search, no need to save the models
       enable_ckpt: false
+      batch_size: 16
 
     model:
       type: Graphormer
@@ -62,12 +63,12 @@ fixed:
       attention_dropout: 0.0
       mlp_dropout: 0.0
       input_dropout: 0.0
-      num_heads: 8
+      embed_dim: 0  # determined using num_heads and dims_per_head
 
     gnn:
       layers_pre_mp: 0
       head: graphormer_graph
-      dim_inner: ${config.graphgym.graphormer.embed_dim}
+      dim_inner: 0 # determined using num_heads and dims_per_head
 
     optim:
       clip_grad_norm: true
@@ -86,7 +87,7 @@ fixed:
 # experiment random configs
 
 random:
-  samples: 2000
+  samples: 1000
   seed: 187
 
   graphgym.seed:
@@ -107,17 +108,23 @@ random:
     min: 1e-5
     max: 1e-1
 
-  graphgym.graphormer.embed_dim:
+  graphgym.graphormer.num_heads:
     seed: 13094
     type: randint
-    min: 20
-    max: 800
+    min: 1
+    max: 13
+
+  dims_per_head:
+    seed: 13094
+    type: randint
+    min: 4
+    max: 65
 
   graphgym.graphormer.num_layers:
     seed: 357
     type: randint
     min: 1
-    max: 13
+    max: 9
 
   graphgym.posenc_GraphormerBias.num_spatial_types:
     seed: 2846
@@ -130,15 +137,6 @@ random:
     type: randint
     min: 8
     max: 41
-
-  graphgym.train.batch_size:
-    seed: 97
-    type: choice
-    options:
-      - 8
-      - 16
-      - 32
-      - 64
   
   graphgym.gnn.layers_post_mp:
     seed: 96624

@@ -111,7 +111,12 @@ def main(cfg):
     attack_results = None
     if cfg.attack.enable:
         dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
-        # TODO: if specified, load best model checkpoint before attack
+
+        if cfg.attack.load_best_model:
+            # TODO: if specified, load best model checkpoint before attack
+            pass
+
+
         attack_results = prbcd_attack_dataset(
             model=model,
             dataset_to_attack=dataset_to_attack,
@@ -160,16 +165,36 @@ def convert_cfg_to_dict(cfg_node):
     return cfg_dict
 
 
+def convert_readonly_to_dict(readonly_dict):
+    new_dict = {}
+    for k, v in readonly_dict.items():
+        if isinstance(v, dict):
+            new_dict[k] = convert_readonly_to_dict(v)
+        else:
+            new_dict[k] = v
+    return new_dict
+
+
 set_cfg(cfg)
 cfg_dict = convert_cfg_to_dict(cfg)
-ex.add_config({"graphgym": cfg_dict})
+ex.add_config({"graphgym": cfg_dict, "dims_per_head": 0})
 
 
 os.makedirs("configs_seml/logs", exist_ok=True)
 
 
 @ex.automain
-def run(seed, graphgym: dict):
+def run(seed, graphgym, dims_per_head: int):
+    graphgym = convert_readonly_to_dict(graphgym)
+    model_type = graphgym["model"]["type"]
+    if dims_per_head > 0 and model_type in ["Graphormer"] and graphgym["gnn"]["dim_inner"] == 0:
+        if model_type == "Graphormer":
+            dim_inner = dims_per_head * graphgym["graphormer"]["num_heads"]
+            graphgym["graphormer"]["embed_dim"] = dim_inner
+            graphgym["gnn"]["dim_inner"] = dim_inner
+        else:
+            raise NotImplementedError(f"Please add a case for {model_type} (very easy)!")
+        
     set_cfg(cfg)
 
     ex_identifier = (
