@@ -115,9 +115,9 @@ def prbcd_attack_dataset(
 
         class_index_gt = int(y_multiclass.argmax().item())
         correct = class_index_pred_clean == class_index_gt
-        # if not correct:
-        #     logging.info("Skipping graph, because it is already not correctly classified.")
-        #     continue
+        if not correct:
+            logging.info("Skipping graph, because it is already not correctly classified.")
+            continue
 
         # TODO: allow for other ways to define the budget
             
