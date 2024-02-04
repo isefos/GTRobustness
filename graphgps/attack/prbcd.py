@@ -148,9 +148,35 @@ class PRBCDAttack(torch.nn.Module):
         self.allow_existing_graph_pert = allow_existing_graph_pert
         self.weighted_sampling = not allow_existing_graph_pert or self.included_weighted
 
-        # TODO: add sampling only from the 
+        # TODO: add sampling only from the connected edges
 
         self.coeffs.update(kwargs)
+
+    def _setup_sampler(self):
+        if self.weighted_sampling:
+            sorted_included_nodes: torch.Tensor = self.edge_index.unique(sorted=True)
+            to_lin_idx = self._triu_to_linear_idx if self.is_undirected else self._full_to_linear_idx
+            idx_to_included = None
+            idx_between_included = None
+            if self.included_weighted:
+                # give edges to included nodes a higher probability of getting sampled
+                edges_to_included = self._get_new_1hop_edges(
+                    sorted_included_nodes, self.num_nodes, self.is_undirected, self.device,
+                )
+                idx_to_included = to_lin_idx(self.num_nodes, edges_to_included)
+            if not self.allow_existing_graph_pert:
+                # don't allow the edges between to included nodes to change, only adding new edges
+                edges_between_included = self._get_fully_connected_edges(
+                    sorted_included_nodes, self.is_undirected, self.device,
+                )
+                idx_between_included = to_lin_idx(self.num_nodes, edges_between_included)
+            # Now use these for sampling
+            self.weighted_index_sampler = WeightedIndexSampler(
+                idx_to_included,
+                idx_between_included,
+                self.existing_node_prob_multiplier,
+                self._num_possible_edges(self.num_nodes, self.is_undirected)-1,
+            )
 
     def attack(
         self,
@@ -190,31 +216,8 @@ class PRBCDAttack(torch.nn.Module):
         self.edge_weight = edge_weight.cpu().clone()
         self.num_nodes = x.size(0)
 
-        # settings for node injection attacks:
-        if self.weighted_sampling:
-            sorted_included_nodes: torch.Tensor = edge_index.unique(sorted=True)
-            to_lin_idx = self._triu_to_linear_idx if self.is_undirected else self._full_to_linear_idx
-            idx_to_included = None
-            idx_between_included = None
-            if self.included_weighted:
-                # give edges to included nodes a higher probability of getting sampled
-                edges_to_included = self._get_new_1hop_edges(
-                    sorted_included_nodes, self.num_nodes, self.is_undirected, self.device,
-                )
-                idx_to_included = to_lin_idx(self.num_nodes, edges_to_included)
-            if not self.allow_existing_graph_pert:
-                # don't allow the edges between to included nodes to change, only adding new edges
-                edges_between_included = self._get_fully_connected_edges(
-                    sorted_included_nodes, self.is_undirected, self.device,
-                )
-                idx_between_included = to_lin_idx(self.num_nodes, edges_between_included)
-            # Now use these for sampling
-            self.weighted_index_sampler = WeightedIndexSampler(
-                idx_to_included,
-                idx_between_included,
-                self.existing_node_prob_multiplier,
-                self._num_possible_edges(self.num_nodes, self.is_undirected)-1,
-            )
+        # handles settings for node injection attacks:
+        self._setup_sampler()
 
         # For collecting attack statistics
         self.attack_statistics = defaultdict(list)
@@ -280,42 +283,13 @@ class PRBCDAttack(torch.nn.Module):
         self.edge_weight = edge_weight.cpu().clone()
         self.num_nodes = x.size(0)
 
-        # settings for node injection attacks:
-        if self.weighted_sampling:
-            sorted_included_nodes: torch.Tensor = edge_index.unique(sorted=True)
-            to_lin_idx = self._triu_to_linear_idx if self.is_undirected else self._full_to_linear_idx
-            idx_to_included = None
-            idx_between_included = None
-            if self.included_weighted:
-                # give edges to included nodes a higher probability of getting sampled
-                edges_to_included = self._get_new_1hop_edges(
-                    sorted_included_nodes, self.num_nodes, self.is_undirected, self.device,
-                )
-                idx_to_included = to_lin_idx(self.num_nodes, edges_to_included)
-            if not self.allow_existing_graph_pert:
-                # don't allow the edges between to included nodes to change, only adding new edges
-                edges_between_included = self._get_fully_connected_edges(
-                    sorted_included_nodes, self.is_undirected, self.device,
-                )
-                idx_between_included = to_lin_idx(self.num_nodes, edges_between_included)
-            # Now use these for sampling
-            self.weighted_index_sampler = WeightedIndexSampler(
-                idx_to_included,
-                idx_between_included,
-                self.existing_node_prob_multiplier,
-                self._num_possible_edges(self.num_nodes, self.is_undirected)-1,
-            )
-
-        # For collecting attack statistics
-        self.attack_statistics = defaultdict(list)
+        # handles settings for node injection attacks:
+        self._setup_sampler()
 
         highest_loss = float('-inf')
         best_edge_index = None
 
-        # Loop over the epochs (Algorithm 1, line 5)
-        for step in tqdm(range(self.epochs), disable=not self.log, desc='Attack'):
-
-            # TODO: take random sample and evaluate loss
+        for step in tqdm(range(self.epochs + self.coeffs['max_final_samples']), disable=not self.log, desc='Attack'):
             if not self.weighted_sampling:
                 num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
                 self.current_block = torch.randint(
@@ -324,6 +298,7 @@ class PRBCDAttack(torch.nn.Module):
             else:
                 self.current_block = self.weighted_index_sampler.sample(budget, device=self.device)
             self.current_block = torch.unique(self.current_block, sorted=True)
+
             if self.is_undirected:
                 self.block_edge_index = self._linear_to_triu_idx(self.num_nodes, self.current_block)
             else:
@@ -333,8 +308,6 @@ class PRBCDAttack(torch.nn.Module):
             self.block_edge_weight = torch.full(self.current_block.shape, 1, device=self.device)
             self.block_edge_weight.requires_grad = False
 
-            # Retrieve sparse perturbed adjacency matrix `A \oplus p_{t-1}`
-            # (Algorithm 1, line 6 / Algorithm 2, line 7)
             edge_index, edge_weight = self._get_modified_adj(
                 self.edge_index,
                 self.edge_weight,
@@ -342,17 +315,15 @@ class PRBCDAttack(torch.nn.Module):
                 self.block_edge_weight,
             )
 
-            # Get prediction (Algorithm 1, line 6 / Algorithm 2, line 7)
             prediction = self._forward(x, edge_index, edge_weight, **kwargs)
-            # Calculate loss combining all each node
-            # (Algorithm 1, line 7 / Algorithm 2, line 8)
             loss = self.loss(prediction, labels, idx_attack)
 
             if loss > highest_loss:
                 best_edge_index = edge_index.cpu().clone()
+                best_block_edge_index = self.block_edge_index.cpu().clone()
                 highest_loss = loss
         
-        return best_edge_index, None
+        return best_edge_index, best_block_edge_index
 
     def _prepare(self, budget: int) -> Iterable[int]:
         """Prepare attack."""

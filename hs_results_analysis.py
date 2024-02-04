@@ -94,7 +94,7 @@ def main(collection: str, configs_all_info: list[tuple[str, bool, bool]], k: int
     best_val_with_test_acc = []
 
     for i in best_val_acc_ind:
-        best_val_with_test_acc.append((val_acc["max_values"][i], test_acc["max_values"][i], i))
+        best_val_with_test_acc.append((val_acc["max_values"][i], test_acc["all_values"][i][best_val_epochs[i]], i))
 
     best_val_with_test_acc = sorted(best_val_with_test_acc, reverse=True)
         
@@ -105,7 +105,7 @@ def main(collection: str, configs_all_info: list[tuple[str, bool, bool]], k: int
 
         f.write("\nHighest val accurracies:")
         for (v_a, t_a, i) in best_val_with_test_acc:
-            f.write(f"\n\tval acc: {v_a}, with {t_a}, by experiment: {i}")
+            f.write(f"\n\tval acc: {v_a}, with {t_a} test acc, by experiment: {i}")
 
         f.write("\nHighest test accurracies:")
         for i in best_test_acc_ind:
@@ -210,19 +210,20 @@ def main(collection: str, configs_all_info: list[tuple[str, bool, bool]], k: int
 
 
 if __name__ == "__main__":
-    collection_name = "hyp_graphormer"
+    collection_name = "hyp_gcn"
     configs_all_info = [  # name, is_discrete, is_log
         ("graphgym.optim.base_lr", False, True),
         ("graphgym.optim.weight_decay", False, True),
-        ("graphgym.graphormer.num_heads", True, False),
         ("graphgym.gnn.dim_inner", False, False),
-        ("graphgym.graphormer.num_layers", True, False),
-        ("graphgym.posenc_GraphormerBias.num_spatial_types", True, False),
-        ("graphgym.posenc_GraphormerBias.num_in_degrees", False, False),
         ("graphgym.gnn.layers_post_mp", True, False),
         ("graphgym.optim.num_warmup_epochs", True, False),
+        #("graphgym.graphormer.num_heads", True, False),
+        #("graphgym.graphormer.num_layers", True, False),
+        #("graphgym.posenc_GraphormerBias.num_spatial_types", True, False),
+        #("graphgym.posenc_GraphormerBias.num_in_degrees", False, False),
+        ("graphgym.gnn.layers_mp", True, False),
     ]
-    k = 10
-    results_path = "hs_results_analysis"
+    k = 5
+    results_path = "hs_results_analysis_gcn"
     filter_dict = None
     main(collection=collection_name, configs_all_info=configs_all_info, k=k, results_path=results_path, filter_dict=filter_dict)
