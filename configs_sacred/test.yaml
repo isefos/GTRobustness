@@ -28,7 +28,7 @@ graphgym:
     has_edge_attr: false
     # next 2 only matter for attack, set to fixed false
     combinations_degree: false
-    use_weighted_path_distance: false
+    use_weighted_path_distance: true
 
   train:
     mode: custom
@@ -36,6 +36,7 @@ graphgym:
     eval_period: 1
     ckpt_best: true
     enable_ckpt: true
+
   model:
     type: Graphormer
     loss_fun: cross_entropy
@@ -73,9 +74,9 @@ graphgym:
   attack:
     enable: true
     split: test
-    num_attacked_graphs: 2  # 0 means attack all
+    num_attacked_graphs: 0  # 0 means attack all
     lr: 4_000
-    block_size: 1_000
+    block_size: 2_000
     e_budget: 0.1
     is_undirected: true
     loss: train

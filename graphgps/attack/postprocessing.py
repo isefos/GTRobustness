@@ -30,7 +30,6 @@ def get_prediction_stats(y_gt, model_output, sigmoid_threshold) -> tuple[torch.T
     return probs, logits, correct, margin
 
 
-
 def log_and_accumulate_output(
     y_gt,
     probs_clean,
@@ -47,7 +46,7 @@ def log_and_accumulate_output(
     )
     logging_stats = [
         ("clean", probs_clean, logits_clean, correct_clean, margin_clean),
-        ("pert", probs_pert, logits_pert, correct_pert, margin_pert),
+        ("pert rand" if random else "pert", probs_pert, logits_pert, correct_pert, margin_pert),
     ]
     for (name, prob, logit, correct, margin) in logging_stats:
         prob_str = ", ".join((f"{p:.3f}" for p in prob.tolist()))
@@ -132,6 +131,8 @@ def basic_edge_and_node_stats(
             if is_undirected and key1 == "edges":
                 v = v // 2
             num_stats[num_key][key2] = v
+
+    num_edges = num_edges // 2 if is_undirected else num_edges
 
     assert num_edges == num_stats["num_edges"]["clean"]
     assert num_nodes == num_stats["num_nodes"]["clean"]

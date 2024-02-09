@@ -289,7 +289,11 @@ class PRBCDAttack(torch.nn.Module):
         highest_loss = float('-inf')
         best_edge_index = None
 
-        for step in tqdm(range(self.epochs + self.coeffs['max_final_samples']), disable=not self.log, desc='Attack'):
+        for step in tqdm(
+            range(self.epochs + self.coeffs['max_final_samples']),
+            disable=not self.log,
+            desc='Random attack',
+        ):
             if not self.weighted_sampling:
                 num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
                 self.current_block = torch.randint(

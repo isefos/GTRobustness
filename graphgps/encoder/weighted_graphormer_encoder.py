@@ -2,17 +2,367 @@ import torch
 import torch.nn.functional as F
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.register import register_node_encoder
-from torch_geometric.utils import to_dense_adj, to_scipy_sparse_matrix, scatter
+from torch_geometric.utils import (
+    to_dense_adj,
+    to_scipy_sparse_matrix,
+    scatter,
+    remove_self_loops,
+    subgraph,
+)
 from itertools import combinations
-from graphgps.encoder.graphormer_encoder import add_graph_token
+from graphgps.encoder.graphormer_encoder import add_graph_token, get_shortest_paths
 from scipy.sparse import csgraph
-import time
+
 
 # Permutes from (batch, node, node, head) to (batch, head, node, node)
 BATCH_HEAD_NODE_NODE = (0, 3, 1, 2)
 
 # Inserts a leading 0 row and a leading 0 column with F.pad
 INSERT_GRAPH_TOKEN = (1, 0, 1, 0)
+
+
+def weighted_graphormer_pre_processing(
+    data,
+    distance: int,
+    directed_graphs: bool,
+    combinations_degree: bool,
+    num_in_degrees: int,
+    num_out_degrees: int,
+    use_weighted_path_distance: bool,
+):
+    """
+    """
+    # TODO: only undirected implemented for now, add directed later
+    if directed_graphs:
+        raise NotImplementedError
+
+    n = data.x.size(0)
+
+    if combinations_degree:
+        # TODO: rewrite vectorized -> scatter:
+        #in_degrees_max = torch.scatter(
+        #    input=torch.zeros(n),
+        #    value=1,
+        #    index=data.edge_index[1, :],
+        #    dim=0,
+        #    reduce="add"
+        #)
+        #certain_edges = data.edge_index[:, data.edge_attr == 1]
+        #in_degrees_min = torch.scatter(
+        #    input=torch.zeros(n),
+        #    value=1,
+        #    index=certain_edges[1, :],
+        #    dim=0,
+        #    reduce="add"
+        #)
+        #ns = in_degrees_max - in_degrees_min
+        #n_max = ns.max()
+        raise NotImplementedError
+        # TODO: handle too large degree -> clamping to max
+        data.degree_indices, data.degree_weights = node_degree_weights_undirected(
+            data.x.size(0), data.edge_index, data.edge_attr,
+        )
+    else:
+        in_degrees_weighted = torch.scatter_add(
+            input=torch.zeros(n),
+            src=data.edge_attr,
+            index=data.edge_index[1, :],
+            dim=0,
+        )
+        # clamp to maximum degree
+        max_degree = max(num_in_degrees, num_out_degrees) - 1
+        in_degrees_weighted[in_degrees_weighted > max_degree] = max_degree
+        in_degrees_low = torch.floor(in_degrees_weighted).to(dtype=torch.long)
+        in_degrees_high = torch.ceil(in_degrees_weighted).to(dtype=torch.long)
+        weights_high = in_degrees_weighted - in_degrees_low
+        weights_low = in_degrees_high - in_degrees_weighted
+        weights_low[in_degrees_low == in_degrees_high] = 1
+        # unweighted edges, remove zero degree encoding 
+        # (never used during training, can't appear after discretization)
+        weights_low[in_degrees_low == 0] = 0
+        data.degree_indices = torch.cat((in_degrees_low[:, None], in_degrees_high[:, None]), dim=1)
+        data.degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
+
+    if cfg.posenc_GraphormerBias.node_degrees_only:
+        return data
+    
+    data.graph_index = torch.cat(
+        (
+            torch.arange(n, dtype=torch.long).repeat_interleave(n)[None, :],
+            torch.arange(n, dtype=torch.long).repeat(n)[None, :],
+        ),
+        dim=0,
+    )
+
+    # TODO: make arguments
+    compute_weighted_path_distance = True
+    use_weighted_gradient = True
+
+    max_distance = distance - 1
+
+    if compute_weighted_path_distance:
+        # use the reciprocal of the edge weights to find the shortest paths
+
+        if use_weighted_path_distance:
+            # use weighted path distance and do linear interpolation of the discrete distances
+            spatial_types, spatial_types_weights = weighted_shortest_paths(
+                use_weighted_gradient=use_weighted_gradient,
+                num_nodes=n,
+                edge_index=data.edge_index,
+                edge_attr=data.edge_attr,
+                max_distance=max_distance,
+                directed_graphs=directed_graphs,
+            )
+            data.spatial_types_weights = spatial_types_weights
+
+        else:
+            # only use the edge weights to find the shortest paths,
+            # but then use the actual hops of those paths as distance
+            inv_edge_attr = 1 / data.edge_attr.detach()
+            adj_weighted = to_scipy_sparse_matrix(data.edge_index, edge_attr=inv_edge_attr, num_nodes=n).tocsc()
+            _, predecessors_np = csgraph.shortest_path(
+                adj_weighted, method="auto", directed=directed_graphs, return_predecessors=True, unweighted=False,
+            )
+            adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsc()
+            distances_hop_np = csgraph.construct_dist_matrix(adj, predecessors_np, directed=directed_graphs)
+            distances_hop_np[distances_hop_np > max_distance] = max_distance
+            spatial_types = torch.tensor(distances_hop_np.reshape(n ** 2), dtype=torch.long)
+
+    else:
+        # just ignore the edge weights etirely
+        spatial_types = get_shortest_paths(
+            edge_index=data.edge_index,
+            num_nodes=n,directed=directed_graphs,
+            max_distance=max_distance,
+        )
+
+    data.spatial_types = spatial_types
+    return data
+
+
+class WeightedBiasEncoder(torch.nn.Module):
+    def __init__(
+        self,
+        num_heads: int,
+        num_spatial_types: int,
+        use_graph_token: bool,
+        use_weighted_path_distance: bool,
+    ):
+        """Implementation of the bias encoder of Graphormer modified for attackable model
+
+        Args:
+            num_heads: The number of heads of the Graphormer model
+            num_spatial_types: The total number of different spatial types
+            num_edge_types: The total number of different edge types
+            use_graph_token: If True, pads the attn_bias to account for the
+            additional graph token that can be added by the ``NodeEncoder``.
+        """
+        super().__init__()
+        self.num_heads = num_heads
+        self.spatial_encoder = torch.nn.Embedding(num_spatial_types, num_heads)
+        self.use_graph_token = use_graph_token
+        if self.use_graph_token:
+            self.graph_token = torch.nn.Parameter(torch.zeros(1, num_heads, 1))
+        self.use_weighted_path_distance = use_weighted_path_distance
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        self.spatial_encoder.weight.data.normal_(std=0.02)
+        if self.use_graph_token:
+            self.graph_token.data.normal_(std=0.02)
+
+    def forward(self, data):
+        """Computes the bias matrix that can be induced into multi-head attention
+        via the attention mask.
+
+        Adds the tensor ``attn_bias`` to the data object, optionally accounting
+        for the graph token.
+        """
+        # To convert 2D matrices to dense-batch mode, one needs to decompose
+        # them into index and value. One example is the adjacency matrix
+        # but this generalizes actually to any 2D matrix
+        if self.use_weighted_path_distance and hasattr(data, "spatial_types_weights"):
+            # TODO: multiply and sum like in degrees
+            spatial_types: torch.Tensor = (
+                data.spatial_types_weights[:, :, None] * self.spatial_encoder(data.spatial_types)
+            ).sum(1)
+        else:
+            spatial_types: torch.Tensor = self.spatial_encoder(data.spatial_types)
+
+        spatial_encodings = to_dense_adj(data.graph_index, data.batch, spatial_types)
+        bias = spatial_encodings.permute(BATCH_HEAD_NODE_NODE)
+
+        # during attack: adds bias for node's probability of being in graph
+        if hasattr(data, "node_logprob"):
+            n = data.node_logprob.size(0)
+            assert n == bias.size(2) == bias.size(3)
+            bias += data.node_logprob[None, None, None, :]
+
+        if self.use_graph_token:
+            bias = F.pad(bias, INSERT_GRAPH_TOKEN)
+            bias[:, :, 1:, 0] = self.graph_token
+            bias[:, :, 0, :] = self.graph_token
+        
+        B, H, N, _ = bias.shape
+        data.attn_bias = bias.reshape(B * H, N, N)
+
+        return data
+
+
+class WeightedNodeEncoder(torch.nn.Module):
+    def __init__(
+        self,
+        embed_dim,
+        num_in_degree,
+        num_out_degree,
+        directed_graphs: bool,
+        combinations_degree: bool,
+        input_dropout=0.0,
+        use_graph_token: bool = True,
+    ):
+        """Implementation of the node encoder of Graphormer modified for attackable model
+
+        Args:
+            embed_dim: The number of hidden dimensions of the model
+            num_in_degree: Maximum size of in-degree to encode
+            num_out_degree: Maximum size of out-degree to encode
+            input_dropout: Dropout applied to the input features
+            use_graph_token: If True, adds the graph token to the incoming batch.
+        """
+        super().__init__()
+        self.directed_graphs = directed_graphs
+        self.combinations_degree = combinations_degree
+        if self.directed_graphs:
+            self.in_degree_encoder = torch.nn.Embedding(num_in_degree, embed_dim)
+            self.out_degree_encoder = torch.nn.Embedding(num_out_degree, embed_dim)
+        else:
+            max_degree = max(num_in_degree, num_out_degree)
+            self.degree_encoder = torch.nn.Embedding(max_degree, embed_dim)
+        self.use_graph_token = use_graph_token
+        if self.use_graph_token:
+            self.graph_token = torch.nn.Parameter(torch.zeros(1, embed_dim))
+        self.input_dropout = torch.nn.Dropout(input_dropout)
+        self.reset_parameters()
+
+    def forward(self, data):
+        if self.directed_graphs:
+            if hasattr(data, "in_degrees"):
+                # precomputed
+                in_degree_encoding = self.in_degree_encoder(data.in_degrees)
+                out_degree_encoding = self.out_degree_encoder(data.out_degrees)
+            else:
+                # continuous relaxation during attack
+                if self.combinations_degree:
+                    in_degree_encoding = data.degree_weights @ self.in_degree_encoder(data.degree_indices)
+                    out_degree_encoding = data.degree_weights @ self.out_degree_encoder(data.degree_indices)
+                else:
+                    raise NotImplementedError
+            degree_encoding = in_degree_encoding + out_degree_encoding
+        else:
+            if hasattr(data, "degrees"):
+                # precomputed
+                degree_encoding = self.degree_encoder(data.degrees)
+            else:
+                # continuous relaxation during attack
+                if self.combinations_degree:
+                    degree_encoding = data.degree_weights @ self.degree_encoder(data.degree_indices)
+                else:
+                    degree_encoding = (
+                        data.degree_weights[:, :, None] * self.degree_encoder(data.degree_indices)
+                    ).sum(1)
+
+        if data.x.size(1) > 0:
+            data.x = data.x + degree_encoding
+        else:
+            data.x = degree_encoding
+
+        if self.use_graph_token:
+            data = add_graph_token(data, self.graph_token)
+        data.x = self.input_dropout(data.x)
+        return data
+
+    def reset_parameters(self):
+        if self.directed_graphs:
+            self.in_degree_encoder.weight.data.normal_(std=0.02)
+            self.out_degree_encoder.weight.data.normal_(std=0.02)
+        else:
+            self.degree_encoder.weight.data.normal_(std=0.02)
+        if self.use_graph_token:
+            self.graph_token.data.normal_(std=0.02)
+
+
+class WeightedPreprocessing(torch.nn.Module):
+    def __init__(
+        self,
+        distance: int,
+        directed_graphs: bool,
+        combinations_degree: bool,
+        num_in_degrees: int,
+        num_out_degrees: int,
+        use_weighted_path_distance: bool,
+    ):
+        """
+        """
+        super().__init__()
+        self.distance = distance
+        self.directed_graphs = directed_graphs
+        self.combinations_degree = combinations_degree
+        self.num_in_degrees = num_in_degrees
+        self.num_out_degrees = num_out_degrees
+        self.use_weighted_path_distance = use_weighted_path_distance
+
+    def forward(self, data):
+        if hasattr(data, "recompute_preprocessing") and data.recompute_preprocessing:
+            data = weighted_graphormer_pre_processing(
+                data,
+                self.distance,
+                self.directed_graphs,
+                self.combinations_degree,
+                self.num_in_degrees,
+                self.num_out_degrees,
+                self.use_weighted_path_distance,
+            )
+        return data
+
+
+
+@register_node_encoder("WeightedGraphormerBias")
+class WeightedGraphormerEncoder(torch.nn.Sequential):
+    def __init__(self, dim_emb, *args, **kwargs):
+        assert not cfg.posenc_GraphormerBias.has_edge_attr, "Weighted graphormer cannot currently use edge attributes"
+        encoders = [
+            WeightedPreprocessing(
+                cfg.posenc_GraphormerBias.num_spatial_types,
+                cfg.posenc_GraphormerBias.directed_graphs,
+                cfg.posenc_GraphormerBias.combinations_degree,
+                cfg.posenc_GraphormerBias.num_in_degrees,
+                cfg.posenc_GraphormerBias.num_out_degrees,
+                cfg.posenc_GraphormerBias.use_weighted_path_distance,
+            ),
+            WeightedBiasEncoder(
+                cfg.graphormer.num_heads,
+                cfg.posenc_GraphormerBias.num_spatial_types,
+                cfg.graphormer.use_graph_token,
+                cfg.posenc_GraphormerBias.use_weighted_path_distance,
+            ),
+            WeightedNodeEncoder(
+                dim_emb,
+                cfg.posenc_GraphormerBias.num_in_degrees,
+                cfg.posenc_GraphormerBias.num_out_degrees,
+                cfg.posenc_GraphormerBias.directed_graphs,
+                cfg.posenc_GraphormerBias.combinations_degree,
+                cfg.graphormer.input_dropout,
+                cfg.graphormer.use_graph_token
+            ),
+        ]
+        if cfg.posenc_GraphormerBias.node_degrees_only:  # No attn. bias encoder
+            encoders = encoders[1:]
+        super().__init__(*encoders)
+
+
+# utils for preprocessing:
+        
+# degrees:
 
 
 def node_degree_weights_undirected(
@@ -135,409 +485,198 @@ def get_degree_weights(
     return all_degree_indices, all_degree_weights
 
 
-def weighted_graphormer_pre_processing(
-    data,
-    distance: int,
+# shortest paths:
+
+
+def weighted_shortest_paths(
+    use_weighted_gradient: bool,
+    num_nodes: int,
+    edge_index: torch.Tensor,
+    edge_attr: torch.Tensor,
+    max_distance: int,
     directed_graphs: bool,
-    combinations_degree: bool,
-    num_in_degrees: int,
-    num_out_degrees: int,
-    use_weighted_path_distance: bool,
-):
-    """
-    """
-    # TODO: only undirected implemented for now, add directed later
-    if directed_graphs:
-        raise NotImplementedError
-
-    n = data.x.size(0)
-    # logging.info(f"num nodes: {n}, num edges: {data.edge_index.size(1)}")
-
-    t = time.perf_counter()
-    if combinations_degree:
-        # TODO: rewrite vectorized -> scatter:
-        #in_degrees_max = torch.scatter(
-        #    input=torch.zeros(n),
-        #    value=1,
-        #    index=data.edge_index[1, :],
-        #    dim=0,
-        #    reduce="add"
-        #)
-        #certain_edges = data.edge_index[:, data.edge_attr == 1]
-        #in_degrees_min = torch.scatter(
-        #    input=torch.zeros(n),
-        #    value=1,
-        #    index=certain_edges[1, :],
-        #    dim=0,
-        #    reduce="add"
-        #)
-        #ns = in_degrees_max - in_degrees_min
-        #n_max = ns.max()
-        raise NotImplementedError
-        # TODO: handle too large degree -> clamping to max
-        data.degree_indices, data.degree_weights = node_degree_weights_undirected(
-            data.x.size(0), data.edge_index, data.edge_attr,
-        )
-    else:
-        in_degrees_weighted = torch.scatter_add(
-            input=torch.zeros(n),
-            src=data.edge_attr,
-            index=data.edge_index[1, :],
-            dim=0,
-        )
-        # clamp to maximum degree
-        max_degree = max(num_in_degrees, num_out_degrees) - 1
-        in_degrees_weighted[in_degrees_weighted > max_degree] = max_degree
-        in_degrees_low = torch.floor(in_degrees_weighted).to(dtype=torch.long)
-        in_degrees_high = torch.ceil(in_degrees_weighted).to(dtype=torch.long)
-        weights_high = in_degrees_weighted - in_degrees_low
-        weights_low = in_degrees_high - in_degrees_weighted
-        weights_low[in_degrees_low == in_degrees_high] = 1
-        # unweighted edges, remove zero degree encoding 
-        # (never used during training, can't appear after discretization)
-        weights_low[in_degrees_low == 0] = 0
-        data.degree_indices = torch.cat((in_degrees_low[:, None], in_degrees_high[:, None]), dim=1)
-        data.degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
-    t = time.perf_counter() - t
-    # logging.info(f"computed degrees in: {t:.5f}")
-
-    if cfg.posenc_GraphormerBias.node_degrees_only:
-        return data
+) -> tuple[torch.Tensor, torch.Tensor]:
     
-    data.graph_index = torch.cat(
-        (
-            torch.arange(n, dtype=torch.long).repeat_interleave(n)[None, :],
-            torch.arange(n, dtype=torch.long).repeat(n)[None, :]),
-        dim=0,
+    # when using the weighted path distance, we can prune away all nodes that we know have a distance > max_distance
+
+    num_distances = num_nodes ** 2
+
+    max_edge_weights = get_node_max_edge_weight(
+        edge_index=edge_index,
+        edge_weights=edge_attr,
+        num_nodes=num_nodes,
+        is_undirected=not directed_graphs,
     )
 
-    # TODO: maybe use the actual tensor edge weight in the computation to get gradient
-    # to get dense inverted adj matrix
-    # idx = n * data.edge_index[0] + data.edge_index[1]
-    # inv_adj = scatter(1 / data.edge_attr, idx, dim=0, dim_size=n**2, reduce='sum')
-    # inv_adj = inv_adj.view((n, n))
-    # inv_adj_np = inv_adj.detach().numpy()
+    min_shortest_path = 1 / max_edge_weights
+    prune_mask = min_shortest_path <= max_distance
+    p_num_nodes = int(prune_mask.sum().item())
+    distances_prune_mask = (prune_mask[:, None] * prune_mask[None, :]).reshape(num_distances)
+    p_edge_index, p_edge_attr = subgraph(prune_mask, edge_index, edge_attr, relabel_nodes=True)
 
-    t = time.perf_counter()
+    distances_weighted = distances_shortest_weighted_paths(
+        use_weighted_gradient=use_weighted_gradient,
+        num_nodes=p_num_nodes,
+        edge_index=p_edge_index,
+        edge_attr=p_edge_attr,
+        max_distance=max_distance,
+        directed_graphs=directed_graphs,
+    )
 
-    # for now calculate the fixed distance values, without any gradient
-    inv_edge_attr = 1 / data.edge_attr.detach()
-    adj_weighted = to_scipy_sparse_matrix(data.edge_index, edge_attr=inv_edge_attr, num_nodes=n).tocsc()
+    debug = False
+    if debug:
+        d_p = torch.full((num_distances, ), max_distance, dtype=torch.float32)
+        # set diagonal to zero
+        _d = torch.arange(num_nodes, dtype=torch.long)
+        diag_idx = num_nodes * _d + _d
+        d_p[diag_idx] = 0
+        d_p[distances_prune_mask] = distances_weighted
+        d_not_p = distances_shortest_weighted_paths(
+            use_weighted_gradient=use_weighted_gradient,
+            num_nodes=num_nodes,
+            edge_index=edge_index,
+            edge_attr=edge_attr,
+            max_distance=max_distance,
+            directed_graphs=directed_graphs,
+        )
+        assert torch.allclose(d_p, d_not_p)
+
+    # dim1: 0 for low, 1 for high
+    spatial_types = torch.full((num_distances, 2), max_distance, dtype=torch.long)
+    spatial_types_weights = torch.zeros((num_distances, 2))
+    spatial_types_weights[:, 0] = 1
+
+    # linear interpolation weights of the discrete distances inserted into the total tensors for all distances
+    spatial_types[distances_prune_mask, 1] = torch.ceil(distances_weighted).to(dtype=torch.long)
+    spatial_types[distances_prune_mask, 0] = torch.floor(distances_weighted).to(dtype=torch.long)
+    spatial_types_weights[distances_prune_mask, 1] = distances_weighted - spatial_types[distances_prune_mask, 0]
+    p_low = spatial_types[distances_prune_mask, 1] - distances_weighted
+    p_low[spatial_types[distances_prune_mask, 0] == spatial_types[distances_prune_mask, 1]] = 1
+    spatial_types_weights[distances_prune_mask, 0] = p_low
+
+    return spatial_types, spatial_types_weights
+
+
+def distances_shortest_weighted_paths(
+    use_weighted_gradient: bool,
+    num_nodes: int,
+    edge_index: torch.Tensor,
+    edge_attr: torch.Tensor,
+    max_distance: int,
+    directed_graphs: bool,
+):
+    num_distances = num_nodes ** 2
+    inv_edge_attr = 1 / edge_attr
+    adj_weighted = to_scipy_sparse_matrix(edge_index, edge_attr=inv_edge_attr.detach(), num_nodes=num_nodes).tocsc()
     distances_weighted_np, predecessors_np = csgraph.shortest_path(
         adj_weighted, method="auto", directed=directed_graphs, return_predecessors=True, unweighted=False,
     )
-    distances_weighted_np = distances_weighted_np.reshape(n**2)
-    clamped_distance_mask_np = distances_weighted_np > distance - 1
-    adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsc()
+    distances_weighted_np = distances_weighted_np.reshape(num_distances)
+    clamped_distance_mask_np = distances_weighted_np > max_distance
+    adj = to_scipy_sparse_matrix(edge_index, num_nodes=num_nodes).tocsc()
     distances_hop_np = csgraph.construct_dist_matrix(adj, predecessors_np, directed=directed_graphs)
-    distances_hop_np[distances_hop_np > distance - 1] = distance - 1
+    distances_hop_np[distances_hop_np > max_distance] = max_distance
     max_hops = int(distances_hop_np.max())
 
-    if use_weighted_path_distance:
+    if use_weighted_gradient:
+        clamped_distance_mask = torch.tensor(clamped_distance_mask_np, dtype=torch.bool)
+        distances_weighted = reconstruct_weighted_distances_over_path(
+            inv_edge_attr=inv_edge_attr,
+            edge_index=edge_index,
+            num_nodes=num_nodes,
+            num_distances=num_distances,
+            max_distance=max_distance,
+            max_hops=max_hops,
+            clamped_distance_mask=clamped_distance_mask,
+            predecessors_np=predecessors_np,
+        )
 
-        use_weighted_gradient = True
+        debug = False
+        if debug:
+            distances_clamped = torch.tensor(distances_weighted_np, dtype=torch.float32)
+            distances_clamped[clamped_distance_mask] = max_distance
+            assert torch.allclose(distances_weighted, distances_clamped)
 
-        if use_weighted_gradient:
-            # get dense inv adj for easier indexing in path reconstruction
-            inv_adj = scatter(
-                inv_edge_attr,
-                n * data.edge_index[0] + data.edge_index[1],
-                dim=0,
-                dim_size=n**2,
-                reduce='sum',
-            )
-            # hack: because we know that the self loops are zero, 
-            # we can just put all the negative indices to (0, 0) -> 0
-            # then we are technically always adding that first self-loop edge for "non-edges", 
-            # but doesn't matter since we are just adding 0
-            assert inv_adj[0].item() == 0
-            clamped_distance_mask = torch.tensor(clamped_distance_mask_np, dtype=torch.bool)
-            true_distance_mask = ~clamped_distance_mask
-            distances_weighted = torch.zeros(n**2)
-
-            p_original = torch.tensor(predecessors_np.reshape((n**2)), dtype=torch.long)
-            adj_col_idx = p_original[true_distance_mask]
-            neg_mask = adj_col_idx < 0
-            adj_col_idx[neg_mask] = 0
-            # ends: torch.arange(n, dtype=torch.long).repeat(n)
-            adj_row_idx = torch.arange(n, dtype=torch.long).repeat(n)[true_distance_mask]
-            adj_row_idx[neg_mask] = 0
-            adj_lin_idx = n * adj_col_idx + adj_row_idx
-            distances_weighted[true_distance_mask] += inv_adj[adj_lin_idx]
-
-            row_idx = torch.zeros((n**2), dtype=torch.long)
-            col_idx = torch.arange(n, dtype=torch.long).repeat_interleave(n)
-            p_prev = p_original
-            for i in range(max_hops - 1):
-                row_idx = p_prev.clone()
-                row_idx[row_idx < 0] = col_idx[row_idx < 0]
-                p_next = p_original[n * col_idx + row_idx]
-                adj_col_idx = p_prev[true_distance_mask]
-                adj_row_idx = p_next[true_distance_mask]
-                neg_mask = torch.logical_or(adj_col_idx < 0, adj_row_idx < 0)
-                adj_lin_idx = n * adj_col_idx + adj_row_idx
-                adj_lin_idx[neg_mask] = 0
-                distances_weighted[true_distance_mask] += inv_adj[adj_lin_idx]
-                p_prev = p_next
-            distances_weighted[clamped_distance_mask] = distance - 1
-
-            debug = True
-            if debug:
-                distances_clamped = torch.tensor(distances_weighted_np, dtype=torch.float32)
-                distances_clamped[clamped_distance_mask] = distance - 1
-                assert torch.allclose(distances_weighted, distances_clamped)
-
-        else:
-            distances_weighted = torch.tensor(distances_weighted_np, dtype=torch.float32)
-            distances_weighted[distances_weighted > distance - 1] = distance - 1
-
-        dw_low = torch.floor(distances_weighted).to(dtype=torch.long)
-        dw_high = torch.ceil(distances_weighted).to(dtype=torch.long)
-        weights_high = distances_weighted - dw_low
-        weights_low = dw_high - distances_weighted
-        weights_low[dw_low == dw_high] = 1
-        spatial_types = torch.cat((dw_low[:, None], dw_high[:, None]), dim=1)
-        data.spatial_types_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
     else:
-        spatial_types = torch.tensor(distances_hop_np.reshape(n ** 2), dtype=torch.long)
-    data.spatial_types = spatial_types
+        distances_weighted = torch.tensor(distances_weighted_np, dtype=torch.float32)
+        distances_weighted[distances_weighted > max_distance] = max_distance
 
-    t = time.perf_counter() - t
-    # logging.info(f"computed shortest paths in: {t:.5f}")
-
-    return data
+    return distances_weighted
 
 
-class WeightedBiasEncoder(torch.nn.Module):
-    def __init__(
-        self,
-        num_heads: int,
-        num_spatial_types: int,
-        use_graph_token: bool,
-        use_weighted_path_distance: bool,
-    ):
-        """Implementation of the bias encoder of Graphormer modified for attackable model
+def reconstruct_weighted_distances_over_path(
+    inv_edge_attr: torch.Tensor,
+    edge_index: torch.Tensor,
+    num_nodes: int,
+    num_distances: int,
+    max_distance: int,
+    max_hops: int,
+    clamped_distance_mask: torch.Tensor,
+    predecessors_np,
+):
+    # get dense inv adj for easier indexing in path reconstruction
+    inv_adj = scatter(
+        inv_edge_attr,
+        num_nodes * edge_index[0] + edge_index[1],
+        dim=0,
+        dim_size=num_distances,
+        reduce='sum',
+    )
+    # "hack": because we know that the self loops are zero, 
+    # we can just put all the negative indices to (0, 0) -> 0
+    # then we are technically always adding that first self-loop edge for "non-edges", 
+    # but doesn't matter since we are just adding 0
+    assert inv_adj[0].item() == 0
+    true_distance_mask = ~clamped_distance_mask
+    distances_weighted = torch.zeros(num_distances)
 
-        Args:
-            num_heads: The number of heads of the Graphormer model
-            num_spatial_types: The total number of different spatial types
-            num_edge_types: The total number of different edge types
-            use_graph_token: If True, pads the attn_bias to account for the
-            additional graph token that can be added by the ``NodeEncoder``.
-        """
-        super().__init__()
-        self.num_heads = num_heads
-        self.spatial_encoder = torch.nn.Embedding(num_spatial_types, num_heads)
-        self.use_graph_token = use_graph_token
-        if self.use_graph_token:
-            self.graph_token = torch.nn.Parameter(torch.zeros(1, num_heads, 1))
-        self.use_weighted_path_distance = use_weighted_path_distance
-        self.reset_parameters()
+    p_original = torch.tensor(predecessors_np.reshape((num_distances)), dtype=torch.long)
+    adj_col_idx = p_original[true_distance_mask]
+    neg_mask = adj_col_idx < 0
+    adj_col_idx[neg_mask] = 0
+    # ends: torch.arange(n, dtype=torch.long).repeat(n)
+    adj_row_idx = torch.arange(num_nodes, dtype=torch.long).repeat(num_nodes)[true_distance_mask]
+    adj_row_idx[neg_mask] = 0
+    adj_lin_idx = num_nodes * adj_col_idx + adj_row_idx
+    distances_weighted[true_distance_mask] += inv_adj[adj_lin_idx]
 
-    def reset_parameters(self):
-        self.spatial_encoder.weight.data.normal_(std=0.02)
-        if self.use_graph_token:
-            self.graph_token.data.normal_(std=0.02)
-
-    def forward(self, data):
-        """Computes the bias matrix that can be induced into multi-head attention
-        via the attention mask.
-
-        Adds the tensor ``attn_bias`` to the data object, optionally accounting
-        for the graph token.
-        """
-        # To convert 2D matrices to dense-batch mode, one needs to decompose
-        # them into index and value. One example is the adjacency matrix
-        # but this generalizes actually to any 2D matrix
-        if self.use_weighted_path_distance and hasattr(data, "spatial_types_weights"):
-            # TODO: multiply and sum like in degrees
-            spatial_types: torch.Tensor = (
-                data.spatial_types_weights[:, :, None] * self.spatial_encoder(data.spatial_types)
-            ).sum(1)
-        else:
-            spatial_types: torch.Tensor = self.spatial_encoder(data.spatial_types)
-        spatial_encodings = to_dense_adj(data.graph_index, data.batch, spatial_types)
-        bias = spatial_encodings.permute(BATCH_HEAD_NODE_NODE)
-
-        # during attack: adds bias for node's probability of being in graph
-        if hasattr(data, "node_probs"):
-            n = data.node_probs.size(0)
-            assert n == bias.size(2) == bias.size(3)
-            # if p is so small that log(p) = -inf, gradient is undefined, so just set -inf for very small p
-            # TODO: or scale to be same as min!
-            l = torch.zeros_like(data.node_probs) - torch.inf
-            min_prob_mask = data.node_probs > 1e-30
-            l[min_prob_mask] = data.node_probs[min_prob_mask].log()
-            bias += l[None, None, None, :]
-
-        if self.use_graph_token:
-            bias = F.pad(bias, INSERT_GRAPH_TOKEN)
-            bias[:, :, 1:, 0] = self.graph_token
-            bias[:, :, 0, :] = self.graph_token
-        B, H, N, _ = bias.shape
-        data.attn_bias = bias.reshape(B * H, N, N)
-        return data
+    row_idx = torch.zeros((num_distances), dtype=torch.long)
+    col_idx = torch.arange(num_nodes, dtype=torch.long).repeat_interleave(num_nodes)
+    p_prev = p_original
+    for i in range(max_hops - 1):
+        row_idx = p_prev.clone()
+        row_idx[row_idx < 0] = col_idx[row_idx < 0]
+        p_next = p_original[num_nodes * col_idx + row_idx]
+        adj_col_idx = p_prev[true_distance_mask]
+        adj_row_idx = p_next[true_distance_mask]
+        neg_mask = torch.logical_or(adj_col_idx < 0, adj_row_idx < 0)
+        adj_lin_idx = num_nodes * adj_col_idx + adj_row_idx
+        adj_lin_idx[neg_mask] = 0
+        distances_weighted[true_distance_mask] += inv_adj[adj_lin_idx]
+        p_prev = p_next
+    distances_weighted[clamped_distance_mask] = max_distance
+    return distances_weighted
 
 
-class WeightedNodeEncoder(torch.nn.Module):
-    def __init__(
-        self,
-        embed_dim,
-        num_in_degree,
-        num_out_degree,
-        directed_graphs: bool,
-        combinations_degree: bool,
-        input_dropout=0.0,
-        use_graph_token: bool = True,
-    ):
-        """Implementation of the node encoder of Graphormer.
-        This encoder is based on the implementation at:
-        https://github.com/microsoft/Graphormer/tree/v1.0
-        Note that this refers to v1 of Graphormer.
+def get_node_max_edge_weight(
+    edge_index: torch.Tensor,
+    edge_weights: torch.Tensor,
+    num_nodes: int,
+    is_undirected: bool,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    """
+    edge_index_nsl, edge_weights_nsl = remove_self_loops(edge_index, edge_weights)
 
-        Args:
-            embed_dim: The number of hidden dimensions of the model
-            num_in_degree: Maximum size of in-degree to encode
-            num_out_degree: Maximum size of out-degree to encode
-            input_dropout: Dropout applied to the input features
-            use_graph_token: If True, adds the graph token to the incoming batch.
-        """
-        super().__init__()
-        self.directed_graphs = directed_graphs
-        self.combinations_degree = combinations_degree
-        if self.directed_graphs:
-            self.in_degree_encoder = torch.nn.Embedding(num_in_degree, embed_dim)
-            self.out_degree_encoder = torch.nn.Embedding(num_out_degree, embed_dim)
-        else:
-            max_degree = max(num_in_degree, num_out_degree)
-            self.degree_encoder = torch.nn.Embedding(max_degree, embed_dim)
-        self.use_graph_token = use_graph_token
-        if self.use_graph_token:
-            self.graph_token = torch.nn.Parameter(torch.zeros(1, embed_dim))
-        self.input_dropout = torch.nn.Dropout(input_dropout)
-        self.reset_parameters()
+    if is_undirected:
+        max_edge_weight = scatter(edge_weights_nsl, edge_index_nsl[0, :], dim=0, dim_size=num_nodes, reduce='max')
+    else:
+        max_edge_weight = scatter(
+            torch.cat((edge_weights_nsl, edge_weights_nsl), dim=0),
+            edge_index_nsl.flatten(),
+            dim=0,
+            dim_size=num_nodes,
+            reduce='max',
+        )
 
-    def forward(self, data):
-        if self.directed_graphs:
-            if hasattr(data, "in_degrees"):
-                # precomputed
-                in_degree_encoding = self.in_degree_encoder(data.in_degrees)
-                out_degree_encoding = self.out_degree_encoder(data.out_degrees)
-            else:
-                # continuous relaxation during attack
-                if self.combinations_degree:
-                    in_degree_encoding = data.degree_weights @ self.in_degree_encoder(data.degree_indices)
-                    out_degree_encoding = data.degree_weights @ self.out_degree_encoder(data.degree_indices)
-                else:
-                    raise NotImplementedError
-            degree_encoding = in_degree_encoding + out_degree_encoding
-        else:
-            if hasattr(data, "degrees"):
-                # precomputed
-                degree_encoding = self.degree_encoder(data.degrees)
-            else:
-                # continuous relaxation during attack
-                if self.combinations_degree:
-                    degree_encoding = data.degree_weights @ self.degree_encoder(data.degree_indices)
-                else:
-                    degree_encoding = (
-                        data.degree_weights[:, :, None] * self.degree_encoder(data.degree_indices)
-                    ).sum(1)
-
-        if data.x.size(1) > 0:
-            data.x = data.x + degree_encoding
-        else:
-            data.x = degree_encoding
-
-        if self.use_graph_token:
-            data = add_graph_token(data, self.graph_token)
-        data.x = self.input_dropout(data.x)
-        return data
-
-    def reset_parameters(self):
-        if self.directed_graphs:
-            self.in_degree_encoder.weight.data.normal_(std=0.02)
-            self.out_degree_encoder.weight.data.normal_(std=0.02)
-        else:
-            self.degree_encoder.weight.data.normal_(std=0.02)
-        if self.use_graph_token:
-            self.graph_token.data.normal_(std=0.02)
-
-
-class WeightedPreprocessing(torch.nn.Module):
-    def __init__(
-        self,
-        distance: int,
-        directed_graphs: bool,
-        combinations_degree: bool,
-        num_in_degrees: int,
-        num_out_degrees: int,
-        use_weighted_path_distance: bool,
-    ):
-        """Implementation of the node encoder of Graphormer.
-        This encoder is based on the implementation at:
-        https://github.com/microsoft/Graphormer/tree/v1.0
-        Note that this refers to v1 of Graphormer.
-
-        Args:
-            embed_dim: The number of hidden dimensions of the model
-            num_in_degree: Maximum size of in-degree to encode
-            num_out_degree: Maximum size of out-degree to encode
-            input_dropout: Dropout applied to the input features
-            use_graph_token: If True, adds the graph token to the incoming batch.
-        """
-        super().__init__()
-        self.distance = distance
-        self.directed_graphs = directed_graphs
-        self.combinations_degree = combinations_degree
-        self.num_in_degrees = num_in_degrees
-        self.num_out_degrees = num_out_degrees
-        self.use_weighted_path_distance = use_weighted_path_distance
-
-    def forward(self, data):
-        if hasattr(data, "recompute_preprocessing") and data.recompute_preprocessing:
-            data = weighted_graphormer_pre_processing(
-                data,
-                self.distance,
-                self.directed_graphs,
-                self.combinations_degree,
-                self.num_in_degrees,
-                self.num_out_degrees,
-                self.use_weighted_path_distance,
-            )
-        return data
-
-
-
-@register_node_encoder("WeightedGraphormerBias")
-class WeightedGraphormerEncoder(torch.nn.Sequential):
-    def __init__(self, dim_emb, *args, **kwargs):
-        assert not cfg.posenc_GraphormerBias.has_edge_attr, "Weighted graphormer cannot currently use edge attributes"
-        encoders = [
-            WeightedPreprocessing(
-                cfg.posenc_GraphormerBias.num_spatial_types,
-                cfg.posenc_GraphormerBias.directed_graphs,
-                cfg.posenc_GraphormerBias.combinations_degree,
-                cfg.posenc_GraphormerBias.num_in_degrees,
-                cfg.posenc_GraphormerBias.num_out_degrees,
-                cfg.posenc_GraphormerBias.use_weighted_path_distance,
-            ),
-            WeightedBiasEncoder(
-                cfg.graphormer.num_heads,
-                cfg.posenc_GraphormerBias.num_spatial_types,
-                cfg.graphormer.use_graph_token,
-                cfg.posenc_GraphormerBias.use_weighted_path_distance,
-            ),
-            WeightedNodeEncoder(
-                dim_emb,
-                cfg.posenc_GraphormerBias.num_in_degrees,
-                cfg.posenc_GraphormerBias.num_out_degrees,
-                cfg.posenc_GraphormerBias.directed_graphs,
-                cfg.posenc_GraphormerBias.combinations_degree,
-                cfg.graphormer.input_dropout,
-                cfg.graphormer.use_graph_token
-            ),
-        ]
-        if cfg.posenc_GraphormerBias.node_degrees_only:  # No attn. bias encoder
-            encoders = encoders[1:]
-        super().__init__(*encoders)
+    return max_edge_weight

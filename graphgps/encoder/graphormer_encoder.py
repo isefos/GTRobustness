@@ -54,7 +54,7 @@ def graphormer_pre_processing(data, distance, is_undirected):
             reduce="add",
         )
         modes = ["in_", "out_"]
-        mode_max = [cfg.posenc_GraphormerBias.num_in_degrees, cfg.posenc_GraphormerBias.num_out_degrees]
+        mode_num = [cfg.posenc_GraphormerBias.num_in_degrees, cfg.posenc_GraphormerBias.num_out_degrees]
         mode_degrees = [data.in_degrees, data.out_degrees]
     else:
         if not is_undirected:
@@ -64,14 +64,14 @@ def graphormer_pre_processing(data, distance, is_undirected):
             )
         data.degrees = in_degrees
         modes = [""]
-        mode_max = [max(cfg.posenc_GraphormerBias.num_in_degrees, cfg.posenc_GraphormerBias.num_out_degrees)]
+        mode_num = [max(cfg.posenc_GraphormerBias.num_in_degrees, cfg.posenc_GraphormerBias.num_out_degrees)]
         mode_degrees = [data.degrees]
     # clamp to be below configured maximum value
-    for mode, max_allowed, degrees in zip(modes, mode_max, mode_degrees):
+    for mode, num_degrees, degrees in zip(modes, mode_num, mode_degrees):
         max_degree = torch.max(degrees)
-        if max_degree >= max_allowed:
-            degrees[degrees >= max_allowed] = max_allowed - 1
-            logging.debug(f"Encountered max {mode}degree: {max_degree}, clamped to: {max_allowed - 1}")
+        if max_degree >= num_degrees:
+            degrees[degrees >= num_degrees] = num_degrees - 1
+            logging.debug(f"Encountered max {mode}degree: {max_degree}, clamped to: {num_degrees - 1}")
 
     if cfg.posenc_GraphormerBias.node_degrees_only:
         return data
@@ -79,7 +79,8 @@ def graphormer_pre_processing(data, distance, is_undirected):
     data.graph_index = torch.cat(
         (
             torch.arange(n, dtype=torch.long).repeat_interleave(n)[None, :],
-            torch.arange(n, dtype=torch.long).repeat(n)[None, :]),
+            torch.arange(n, dtype=torch.long).repeat(n)[None, :],
+        ),
         dim=0,
     )
     if (
@@ -116,14 +117,22 @@ def graphormer_pre_processing(data, distance, is_undirected):
         data.spatial_types = spatial_types
         data.shortest_path_types = shortest_path_types
     else:
-        adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsc()
-        distances = csgraph.shortest_path(
-            adj, method="auto", directed=not is_undirected, unweighted=False,
+        data.spatial_types = get_shortest_paths(
+            edge_index=data.edge_index,
+            num_nodes=n,directed=not is_undirected,
+            max_distance=distance-1
         )
-        spatial_types = torch.tensor(distances.reshape(n ** 2), dtype=torch.long)
-        spatial_types[spatial_types > distance-1] = distance-1
-        data.spatial_types = spatial_types
     return data
+
+
+def get_shortest_paths(edge_index, num_nodes, directed, max_distance):
+    adj = to_scipy_sparse_matrix(edge_index, num_nodes=num_nodes).tocsc()
+    distances = csgraph.shortest_path(
+        adj, method="auto", directed=directed, unweighted=False,
+    )
+    spatial_types = torch.tensor(distances.reshape(num_nodes ** 2), dtype=torch.long)
+    spatial_types[spatial_types > max_distance] = max_distance
+    return spatial_types
 
 
 class BiasEncoder(torch.nn.Module):
@@ -150,7 +159,7 @@ class BiasEncoder(torch.nn.Module):
         super().__init__()
         self.num_heads = num_heads
         # Takes into account disconnected nodes
-        self.spatial_encoder = torch.nn.Embedding(num_spatial_types + 1, num_heads)
+        self.spatial_encoder = torch.nn.Embedding(num_spatial_types, num_heads)
         self.include_edge_feature_bias = include_edge_feature_bias
         if self.include_edge_feature_bias:
             self.edge_dis_encoder = torch.nn.Embedding(num_spatial_types * num_heads * num_heads, 1)
