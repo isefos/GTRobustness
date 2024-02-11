@@ -3,12 +3,18 @@ from functools import partial
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
+from scipy.sparse.csgraph import minimum_spanning_tree
 import torch
 import torch.nn.functional as F
 from torch import Tensor
 from tqdm import tqdm
 
-from torch_geometric.utils import coalesce, to_undirected
+from torch_geometric.utils import (
+    coalesce,
+    to_undirected,
+    to_scipy_sparse_matrix,
+    from_scipy_sparse_matrix,
+)
 from torch_geometric.data import Data, Batch
 
 from graphgps.attack.sampling import WeightedIndexSampler
@@ -111,6 +117,8 @@ class PRBCDAttack(torch.nn.Module):
         log: bool = True,
         existing_node_prob_multiplier: int = 1,
         allow_existing_graph_pert: bool = True,
+        # TODO:
+        sample_only_trees: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -147,8 +155,13 @@ class PRBCDAttack(torch.nn.Module):
         self.included_weighted = not self.existing_node_prob_multiplier == 1
         self.allow_existing_graph_pert = allow_existing_graph_pert
         self.weighted_sampling = not allow_existing_graph_pert or self.included_weighted
-
         # TODO: add sampling only from the connected edges
+
+        # will make sure that perturbations remain trees
+        assert not (sample_only_trees and not is_undirected), (
+            "Sampling only trees is only supported for undirected graphs"
+        )
+        self.sample_only_trees = sample_only_trees
 
         self.coeffs.update(kwargs)
 
@@ -375,11 +388,11 @@ class PRBCDAttack(torch.nn.Module):
         # Calculate metric after the current epoch (overhead
         # for monitoring and early stopping)
         topk_block_edge_weight = torch.zeros_like(self.block_edge_weight)
-        topk_block_edge_weight[torch.topk(self.block_edge_weight,
-                                          budget).indices] = 1
-        edge_index, edge_weight = self._get_modified_adj(
-            self.edge_index, self.edge_weight, self.block_edge_index,
-            topk_block_edge_weight)
+        topk_indices = torch.topk(self.block_edge_weight, budget).indices
+        topk_block_edge_weight[topk_indices] = self.block_edge_weight[topk_indices]
+        
+        edge_index, edge_weight, _ = self._get_discrete_sampled_graph(topk_block_edge_weight)
+        
         prediction = self._forward(x, edge_index, edge_weight, **kwargs)
         metric = self.metric(prediction, labels, idx_attack)
 
@@ -482,6 +495,38 @@ class PRBCDAttack(torch.nn.Module):
         modified_edge_index = modified_edge_index[:, zero_weight_mask]
 
         return modified_edge_index, modified_edge_weight
+
+    def _get_discrete_sampled_graph(self, sampled_edge_weight: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+        edge_index, edge_weight = self._get_modified_adj(
+            self.edge_index,
+            self.edge_weight,
+            self.block_edge_index,
+            sampled_edge_weight,
+        )
+        assert torch.all(edge_weight > 0)
+        if self.sample_only_trees:
+            # ensure that we are sampling a tree
+            g = to_scipy_sparse_matrix(edge_index, edge_attr=(1 / edge_weight.detach()))
+            t = minimum_spanning_tree(g, overwrite=True).tocoo()
+            edges_in_tree = set([frozenset([i, j]) for i, j in zip(*t.nonzero())])
+            row = torch.from_numpy(t.row).to(dtype=torch.long, device=self.device)
+            col = torch.from_numpy(t.col).to(dtype=torch.long, device=self.device)
+            edge_index = torch.stack([row, col], dim=0)
+            # discrete edges
+            edge_weight = torch.ones((edge_index.size(1),), device=self.device)
+            edge_index, edge_weight = to_undirected(edge_index, edge_weight)
+            # find out which edges were removed -> remove from sampled_edge_weight
+            # for edge in block_edge_index[sampled_edge_weight > 0] check if edge in edge_index
+            # if not, it was removed to form the tree -> set the value in sampled_edge_weight to 0
+            for i in sampled_edge_weight.nonzero().flatten().tolist():
+                edge = frozenset(self.block_edge_index[:, i].flatten().tolist())
+                if edge not in edges_in_tree:
+                    sampled_edge_weight[i] = 0
+        else:
+            # discretize the edge weights
+            edge_weight[:] = 1
+        discrete_sampled_edge_weight = (sampled_edge_weight > 0).float()
+        return edge_index, edge_weight, discrete_sampled_edge_weight
 
     def _filter_self_loops_in_block(self, with_weight: bool):
         is_not_sl = self.block_edge_index[0] != self.block_edge_index[1]
@@ -588,28 +633,28 @@ class PRBCDAttack(torch.nn.Module):
         block_edge_weight[block_edge_weight <= self.coeffs['eps']] = 0
 
         for i in range(self.coeffs['max_final_samples']):
+            sampled_edges = torch.zeros_like(block_edge_weight)
             if i == 0:
                 # In first iteration employ top k heuristic instead of sampling
-                sampled_edges = torch.zeros_like(block_edge_weight)
-                sampled_edges[torch.topk(block_edge_weight,
-                                         budget).indices] = 1
+                sampled_edges_idx = torch.topk(block_edge_weight, budget).indices
+                sampled_edges[sampled_edges_idx] = block_edge_weight[sampled_edges_idx]
             else:
-                sampled_edges = torch.bernoulli(block_edge_weight).float()
+                sampled_edges_mask = torch.bernoulli(block_edge_weight).to(bool)
+                sampled_edges[sampled_edges_mask] = block_edge_weight[sampled_edges_mask]
+            
+            edge_index, edge_weight, discrete_sampled_edges = self._get_discrete_sampled_graph(sampled_edges)
 
-            if sampled_edges.sum() > budget:
+            if discrete_sampled_edges.sum() > budget:
                 # Allowed budget is exceeded
                 continue
 
-            edge_index, edge_weight = self._get_modified_adj(
-                self.edge_index, self.edge_weight, self.block_edge_index,
-                sampled_edges)
             prediction = self._forward(x, edge_index, edge_weight, **kwargs)
             metric = self.metric(prediction, labels, idx_attack)
 
             # Save best sample
             if metric > best_metric:
                 best_metric = metric
-                self.block_edge_weight = sampled_edges.clone().cpu()
+                self.block_edge_weight = discrete_sampled_edges.clone().cpu()
 
         # Recover best sample
         self.block_edge_weight = self.block_edge_weight.to(self.device)

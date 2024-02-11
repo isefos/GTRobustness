@@ -126,7 +126,7 @@ def graphormer_pre_processing(data, distance, is_undirected):
 
 
 def get_shortest_paths(edge_index, num_nodes, directed, max_distance):
-    adj = to_scipy_sparse_matrix(edge_index, num_nodes=num_nodes).tocsc()
+    adj = to_scipy_sparse_matrix(edge_index, num_nodes=num_nodes).tocsr()
     distances = csgraph.shortest_path(
         adj, method="auto", directed=directed, unweighted=False,
     )

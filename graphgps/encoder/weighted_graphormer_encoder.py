@@ -119,11 +119,11 @@ def weighted_graphormer_pre_processing(
             # only use the edge weights to find the shortest paths,
             # but then use the actual hops of those paths as distance
             inv_edge_attr = 1 / data.edge_attr.detach()
-            adj_weighted = to_scipy_sparse_matrix(data.edge_index, edge_attr=inv_edge_attr, num_nodes=n).tocsc()
+            adj_weighted = to_scipy_sparse_matrix(data.edge_index, edge_attr=inv_edge_attr, num_nodes=n).tocsr()
             _, predecessors_np = csgraph.shortest_path(
                 adj_weighted, method="auto", directed=directed_graphs, return_predecessors=True, unweighted=False,
             )
-            adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsc()
+            adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsr()
             distances_hop_np = csgraph.construct_dist_matrix(adj, predecessors_np, directed=directed_graphs)
             distances_hop_np[distances_hop_np > max_distance] = max_distance
             spatial_types = torch.tensor(distances_hop_np.reshape(n ** 2), dtype=torch.long)
@@ -567,13 +567,13 @@ def distances_shortest_weighted_paths(
 ):
     num_distances = num_nodes ** 2
     inv_edge_attr = 1 / edge_attr
-    adj_weighted = to_scipy_sparse_matrix(edge_index, edge_attr=inv_edge_attr.detach(), num_nodes=num_nodes).tocsc()
+    adj_weighted = to_scipy_sparse_matrix(edge_index, edge_attr=inv_edge_attr.detach(), num_nodes=num_nodes).tocsr()
     distances_weighted_np, predecessors_np = csgraph.shortest_path(
         adj_weighted, method="auto", directed=directed_graphs, return_predecessors=True, unweighted=False,
     )
     distances_weighted_np = distances_weighted_np.reshape(num_distances)
     clamped_distance_mask_np = distances_weighted_np > max_distance
-    adj = to_scipy_sparse_matrix(edge_index, num_nodes=num_nodes).tocsc()
+    adj = to_scipy_sparse_matrix(edge_index, num_nodes=num_nodes).tocsr()
     distances_hop_np = csgraph.construct_dist_matrix(adj, predecessors_np, directed=directed_graphs)
     distances_hop_np[distances_hop_np > max_distance] = max_distance
     max_hops = int(distances_hop_np.max())

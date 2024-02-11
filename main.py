@@ -110,7 +110,6 @@ def main(cfg):
     # Attack
     attack_results = None
     if cfg.attack.enable:
-        dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
 
         if cfg.attack.load_best_model:
             assert cfg.train.enable_ckpt and cfg.train.ckpt_best, (
@@ -125,12 +124,14 @@ def main(cfg):
             model_dict = model.state_dict()
             model_dict.update(best_model_dict)
             model.load_state_dict(model_dict)
+
+        attack_dataset, injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
         
         attack_results = prbcd_attack_dataset(
             model=model,
-            dataset_to_attack=dataset_to_attack,
+            dataset_to_attack=attack_dataset,
             node_injection_attack=cfg.attack.enable_node_injection,
-            additional_injection_datasets=additional_injection_datasets,
+            additional_injection_datasets=injection_datasets,
             inject_nodes_from_attack_dataset=inject_nodes_from_attack_dataset,
             device=torch.device(cfg.accelerator),
             attack_loss=cfg.attack.loss,
@@ -145,6 +146,7 @@ def main(cfg):
             remove_isolated_components=cfg.attack.remove_isolated_components,
             root_node_idx=cfg.attack.root_node_idx,
             include_root_nodes_for_injection=cfg.attack.include_root_nodes_for_injection,
+            sample_only_trees=cfg.attack.sample_only_trees,
         )
 
     logging.info(f"[*] Finished now: {datetime.datetime.now()}")

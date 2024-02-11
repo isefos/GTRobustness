@@ -93,6 +93,9 @@ def get_node_logprob(
         prob_edge = prob_edge.to(torch.float64)
     mask_prob_edge_one = prob_edge == 1
 
+    if mask_prob_edge_one.all():
+        return torch.zeros((num_nodes, ))
+
     m = "The graph must have a root node or at least one edge with probability 1"
     assert root_node is not None or torch.any(mask_prob_edge_one), m
 

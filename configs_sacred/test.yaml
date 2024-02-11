@@ -89,3 +89,4 @@ graphgym:
     remove_isolated_components: true
     root_node_idx: 0
     include_root_nodes_for_injection: false
+    sample_only_trees: true

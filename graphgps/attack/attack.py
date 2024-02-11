@@ -44,6 +44,7 @@ def prbcd_attack_dataset(
     remove_isolated_components: bool,
     root_node_idx: None | int,
     include_root_nodes_for_injection: bool,
+    sample_only_trees: bool,
 ):
     logging.info("Start of attack:")
     model.eval()
@@ -57,6 +58,7 @@ def prbcd_attack_dataset(
         loss=attack_loss,
         existing_node_prob_multiplier=existing_node_prob_multiplier,
         allow_existing_graph_pert=allow_existing_graph_pert,
+        sample_only_trees=sample_only_trees,
     )
 
     accumulated_stats = {
