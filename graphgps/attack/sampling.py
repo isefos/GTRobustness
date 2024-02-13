@@ -159,7 +159,7 @@ def get_connected_sampling_fun(
         if is_undirected:
             # increment each row by a specific number (cumsum)
             n_total = n_block_edges
-            row_offset = torch.cumsum(torch.arange(n_ex_nodes-1, -1, -1), dim=0, device=device)
+            row_offset = torch.cumsum(torch.arange(n_ex_nodes-1, -1, -1, device=device), dim=0)
             
             def map_fun(x):
                 x += row_offset[x // n_new_nodes]
