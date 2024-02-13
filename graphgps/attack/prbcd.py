@@ -13,11 +13,10 @@ from torch_geometric.utils import (
     coalesce,
     to_undirected,
     to_scipy_sparse_matrix,
-    from_scipy_sparse_matrix,
 )
 from torch_geometric.data import Data, Batch
 
-from graphgps.attack.sampling import WeightedIndexSampler
+from graphgps.attack.sampling import WeightedIndexSampler, get_connected_sampling_fun
 from torch_geometric.graphgym.loss import compute_loss
 import logging
 
@@ -101,7 +100,7 @@ class PRBCDAttack(torch.nn.Module):
         'max_final_samples': 20,
         'max_trials_sampling': 20,
         'with_early_stopping': True,
-        'eps': 1e-7
+        'eps': 1e-7,
     }
 
     def __init__(
@@ -117,7 +116,7 @@ class PRBCDAttack(torch.nn.Module):
         log: bool = True,
         existing_node_prob_multiplier: int = 1,
         allow_existing_graph_pert: bool = True,
-        # TODO:
+        sample_only_connected: bool = True,
         sample_only_trees: bool = False,
         **kwargs,
     ):
@@ -150,12 +149,19 @@ class PRBCDAttack(torch.nn.Module):
         self.epochs_resampling = epochs_resampling
         self.lr = lr
 
-        # settings for node injection
+        # settings different sampling startegies
         self.existing_node_prob_multiplier = existing_node_prob_multiplier
         self.included_weighted = not self.existing_node_prob_multiplier == 1
+        assert not self.included_weighted and sample_only_connected, (
+            "Either sample only from connected edges, or weighted (with relative weight for connected edges)"
+        )
+        self.sample_only_connected = sample_only_connected
+        assert allow_existing_graph_pert or self.sample_only_connected or self.included_weighted, (
+            "not allowing existing graph perturbations is only supported for "
+            "weighted sampling (using existing_node_prob_multiplier != 1) or "
+            "sampling only 'connected' edges (using sample_only_connected=True)"
+        )
         self.allow_existing_graph_pert = allow_existing_graph_pert
-        self.weighted_sampling = not allow_existing_graph_pert or self.included_weighted
-        # TODO: add sampling only from the connected edges
 
         # will make sure that perturbations remain trees
         assert not (sample_only_trees and not is_undirected), (
@@ -165,8 +171,11 @@ class PRBCDAttack(torch.nn.Module):
 
         self.coeffs.update(kwargs)
 
-    def _setup_sampler(self):
-        if self.weighted_sampling:
+    def _setup_sampling(self):
+        num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
+
+        # 'Weighted' sampling
+        if self.included_weighted:
             sorted_included_nodes: torch.Tensor = self.edge_index.unique(sorted=True)
             to_lin_idx = self._triu_to_linear_idx if self.is_undirected else self._full_to_linear_idx
             idx_to_included = None
@@ -184,12 +193,35 @@ class PRBCDAttack(torch.nn.Module):
                 )
                 idx_between_included = to_lin_idx(self.num_nodes, edges_between_included)
             # Now use these for sampling
-            self.weighted_index_sampler = WeightedIndexSampler(
-                idx_to_included,
-                idx_between_included,
-                self.existing_node_prob_multiplier,
-                self._num_possible_edges(self.num_nodes, self.is_undirected)-1,
+            self._weighted_sampler = WeightedIndexSampler(
+                weighted_idx=idx_to_included,
+                zero_idx=idx_between_included,
+                weight=self.existing_node_prob_multiplier,
+                max_index=num_possible_edges-1,
+                output_device=self.device,
             )
+            self.sample_edge_indices = lambda n: self._weighted_sampler.sample(n)
+        
+        # 'Only connected' sampling
+        elif self.sample_only_connected:
+            # assume the existing nodes are the first ones:
+            sorted_included_nodes: torch.Tensor = self.edge_index.unique(sorted=True)
+            num_existing_nodes = sorted_included_nodes.size(0)
+            num_new_nodes = self.num_nodes - num_existing_nodes
+            num_existing_edges = self._num_possible_edges(num_existing_nodes, self.is_undirected)
+            self.sample_edge_indices = get_connected_sampling_fun(
+                allow_existing_graph_pert=self.allow_existing_graph_pert,
+                is_undirected=self.is_undirected,
+                n_ex_edges=num_existing_edges,
+                n_ex_nodes=num_existing_nodes,
+                n_new_nodes=num_new_nodes,
+                device=self.device,
+            )
+        
+        # 'Normal' sampling (all possible edges)
+        else:
+            self.sample_edge_indices = lambda n: torch.randint(num_possible_edges, (n, ), device=self.device)
+            
 
     def attack(
         self,
@@ -230,7 +262,7 @@ class PRBCDAttack(torch.nn.Module):
         self.num_nodes = x.size(0)
 
         # handles settings for node injection attacks:
-        self._setup_sampler()
+        self._setup_sampling()
 
         # For collecting attack statistics
         self.attack_statistics = defaultdict(list)
@@ -297,7 +329,7 @@ class PRBCDAttack(torch.nn.Module):
         self.num_nodes = x.size(0)
 
         # handles settings for node injection attacks:
-        self._setup_sampler()
+        self._setup_sampling()
 
         highest_loss = float('-inf')
         best_edge_index = None
@@ -307,13 +339,7 @@ class PRBCDAttack(torch.nn.Module):
             disable=not self.log,
             desc='Random attack',
         ):
-            if not self.weighted_sampling:
-                num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
-                self.current_block = torch.randint(
-                    num_possible_edges, (budget, ), device=self.device,
-                )
-            else:
-                self.current_block = self.weighted_index_sampler.sample(budget).to(device=self.device)
+            self.current_block = self.sample_edge_indices(budget)
             self.current_block = torch.unique(self.current_block, sorted=True)
 
             if self.is_undirected:
@@ -346,8 +372,8 @@ class PRBCDAttack(torch.nn.Module):
         """Prepare attack."""
         if self.block_size <= budget:
             raise ValueError(
-                f'The search space size ({self.block_size}) must be '
-                f'greater than the number of permutations ({budget})')
+                f'The search space size ({self.block_size}) must be greater than the number of permutations ({budget})'
+            )
 
         # For early stopping (not explicitly covered by pseudo code)
         self.best_metric = float('-Inf')
@@ -359,29 +385,34 @@ class PRBCDAttack(torch.nn.Module):
         return steps
 
     @torch.no_grad()
-    def _update(self, epoch: int, gradient: Tensor, x: Tensor, labels: Tensor,
-                budget: int, idx_attack: Optional[Tensor] = None,
-                **kwargs) -> Dict[str, float]:
+    def _update(
+        self,
+        epoch: int,
+        gradient: Tensor,
+        x: Tensor,
+        labels: Tensor,
+        budget: int,
+        idx_attack: Optional[Tensor] = None,
+        **kwargs,
+    ) -> Dict[str, float]:
         """Update edge weights given gradient."""
         # Gradient update step (Algorithm 1, line 7)
-        self.block_edge_weight = self._update_edge_weights(
-            budget, self.block_edge_weight, epoch, gradient)
+        self.block_edge_weight = self._update_edge_weights(budget, self.block_edge_weight, epoch, gradient)
 
         # For monitoring
         pmass_update = torch.clamp(self.block_edge_weight, 0, 1)
         # Projection to stay within relaxed `L_0` budget
         # (Algorithm 1, line 8)
-        self.block_edge_weight = self._project(budget, self.block_edge_weight,
-                                               self.coeffs['eps'])
+        self.block_edge_weight = self._project(budget, self.block_edge_weight, self.coeffs['eps'])
 
         # For monitoring
         scalars = dict(
             prob_mass_after_update=pmass_update.sum().item(),
             prob_mass_after_update_max=pmass_update.max().item(),
             prob_mass_after_projection=self.block_edge_weight.sum().item(),
-            prob_mass_after_projection_nonzero_weights=(
-                self.block_edge_weight > self.coeffs['eps']).sum().item(),
-            prob_mass_after_projection_max=self.block_edge_weight.max().item())
+            prob_mass_after_projection_nonzero_weights=(self.block_edge_weight > self.coeffs['eps']).sum().item(),
+            prob_mass_after_projection_max=self.block_edge_weight.max().item(),
+        )
         if not self.coeffs['with_early_stopping']:
             return scalars
 
@@ -419,9 +450,14 @@ class PRBCDAttack(torch.nn.Module):
         return scalars
 
     @torch.no_grad()
-    def _close(self, x: Tensor, labels: Tensor, budget: int,
-               idx_attack: Optional[Tensor] = None,
-               **kwargs) -> Tuple[Tensor, Tensor]:
+    def _close(
+        self,
+        x: Tensor,
+        labels: Tensor,
+        budget: int,
+        idx_attack: Optional[Tensor] = None,
+        **kwargs,
+    ) -> Tuple[Tensor, Tensor]:
         """Clean up and prepare return argument."""
         # Retrieve best epoch if early stopping is active
         # (not explicitly covered by pseudo code)
@@ -431,29 +467,33 @@ class PRBCDAttack(torch.nn.Module):
             self.block_edge_weight = self.best_pert_edge_weight.to(self.device)
 
         # Sample final discrete graph (Algorithm 1, line 16)
-        edge_index, flipped_edges = self._sample_final_edges(
-            x, labels, budget, idx_attack=idx_attack, **kwargs)
-
+        edge_index, flipped_edges = self._sample_final_edges(x, labels, budget, idx_attack=idx_attack, **kwargs)
         return edge_index, flipped_edges
 
-    def _forward(self, x: Tensor, edge_index: Tensor, edge_weight: Tensor,
-                 **kwargs) -> Tensor:
+    def _forward(self, x: Tensor, edge_index: Tensor, edge_weight: Tensor, **kwargs) -> Tensor:
         """Forward model."""
         # create a data / batch object, clone x, since it gets modified inplace in the forward pass
         data = Batch.from_data_list([Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight)])
         return self.model(data, **kwargs)
 
-    def _forward_and_gradient(self, x: Tensor, labels: Tensor,
-                              idx_attack: Optional[Tensor] = None,
-                              **kwargs) -> Tuple[Tensor, Tensor]:
+    def _forward_and_gradient(
+        self,
+        x: Tensor,
+        labels: Tensor,
+        idx_attack: Optional[Tensor] = None,
+        **kwargs,
+    ) -> Tuple[Tensor, Tensor]:
         """Forward and update edge weights."""
         self.block_edge_weight.requires_grad = True
 
         # Retrieve sparse perturbed adjacency matrix `A \oplus p_{t-1}`
         # (Algorithm 1, line 6 / Algorithm 2, line 7)
         edge_index, edge_weight = self._get_modified_adj(
-            self.edge_index, self.edge_weight, self.block_edge_index,
-            self.block_edge_weight)
+            self.edge_index,
+            self.edge_weight,
+            self.block_edge_index,
+            self.block_edge_weight,
+        )
 
         # Get prediction (Algorithm 1, line 6 / Algorithm 2, line 7)
         prediction = self._forward(x, edge_index, edge_weight, **kwargs)
@@ -466,28 +506,35 @@ class PRBCDAttack(torch.nn.Module):
 
         return loss, gradient
 
-    def _get_modified_adj(self, edge_index: Tensor, edge_weight: Tensor,
-                          block_edge_index: Tensor,
-                          block_edge_weight: Tensor) -> Tuple[Tensor, Tensor]:
+    def _get_modified_adj(
+        self,
+        edge_index: Tensor,
+        edge_weight: Tensor,
+        block_edge_index: Tensor,
+        block_edge_weight: Tensor,
+    ) -> Tuple[Tensor, Tensor]:
         """Merges adjacency matrix with current block (incl. weights)."""
         if self.is_undirected:
             block_edge_index, block_edge_weight = to_undirected(
-                block_edge_index, block_edge_weight, num_nodes=self.num_nodes,
-                reduce='mean')
+                block_edge_index,
+                block_edge_weight,
+                num_nodes=self.num_nodes,
+                reduce='mean',
+            )
 
-        modified_edge_index = torch.cat(
-            (edge_index.to(self.device), block_edge_index), dim=-1)
-        modified_edge_weight = torch.cat(
-            (edge_weight.to(self.device), block_edge_weight))
+        modified_edge_index = torch.cat((edge_index.to(self.device), block_edge_index), dim=-1)
+        modified_edge_weight = torch.cat((edge_weight.to(self.device), block_edge_weight))
 
         modified_edge_index, modified_edge_weight = coalesce(
-            modified_edge_index, modified_edge_weight,
-            num_nodes=self.num_nodes, reduce='sum')
+            modified_edge_index,
+            modified_edge_weight,
+            num_nodes=self.num_nodes,
+            reduce='sum',
+        )
 
         # Allow (soft) removal of edges
         is_edge_in_clean_adj = modified_edge_weight > 1
-        modified_edge_weight[is_edge_in_clean_adj] = (
-            2 - modified_edge_weight[is_edge_in_clean_adj])
+        modified_edge_weight[is_edge_in_clean_adj] = (2 - modified_edge_weight[is_edge_in_clean_adj])
         
         # remove zero weight edges, not needed in sparse representation
         zero_weight_mask = modified_edge_weight > 0
@@ -537,36 +584,22 @@ class PRBCDAttack(torch.nn.Module):
 
     def _sample_random_block(self, budget: int = 0):
         for _ in range(self.coeffs['max_trials_sampling']):
-            num_possible_edges = self._num_possible_edges(
-                self.num_nodes, self.is_undirected)
-            if not self.weighted_sampling:
-                self.current_block = torch.randint(
-                    num_possible_edges, (self.block_size, ), device=self.device,
-                )
-            else:
-                self.current_block = self.weighted_index_sampler.sample(self.block_size).to(device=self.device)
+            self.current_block = self.sample_edge_indices(self.block_size)
             self.current_block = torch.unique(self.current_block, sorted=True)
             if self.is_undirected:
-                self.block_edge_index = self._linear_to_triu_idx(
-                    self.num_nodes, self.current_block)
+                self.block_edge_index = self._linear_to_triu_idx(self.num_nodes, self.current_block)
             else:
-                self.block_edge_index = self._linear_to_full_idx(
-                    self.num_nodes, self.current_block)
+                self.block_edge_index = self._linear_to_full_idx(self.num_nodes, self.current_block)
                 self._filter_self_loops_in_block(with_weight=False)
-
-            self.block_edge_weight = torch.full(self.current_block.shape,
-                                                self.coeffs['eps'],
-                                                device=self.device)
+            self.block_edge_weight = torch.full(self.current_block.shape, self.coeffs['eps'], device=self.device)
             if self.current_block.size(0) >= budget:
                 return
-        raise RuntimeError('Sampling random block was not successful. '
-                           'Please decrease `budget`.')
+        raise RuntimeError('Sampling random block was not successful. Please decrease `budget`.')
 
     def _resample_random_block(self, budget: int):
         # Keep at most half of the block (i.e. resample low weights)
         sorted_idx = torch.argsort(self.block_edge_weight)
-        keep_above = (self.block_edge_weight
-                      <= self.coeffs['eps']).sum().long()
+        keep_above = (self.block_edge_weight <= self.coeffs['eps']).sum().long()
         if keep_above < sorted_idx.size(0) // 2:
             keep_above = sorted_idx.size(0) // 2
         sorted_idx = sorted_idx[keep_above:]
@@ -584,32 +617,18 @@ class PRBCDAttack(torch.nn.Module):
                 )
 
             n_edges_resample = self.block_size - self.current_block.size(0)
-
-            if not self.weighted_sampling:
-                num_possible_edges = self._num_possible_edges(
-                    self.num_nodes, self.is_undirected)
-                lin_index = torch.randint(
-                    num_possible_edges, (n_edges_resample, ), device=self.device,
-                )
-            else:
-                lin_index = self.weighted_index_sampler.sample(n_edges_resample).to(device=self.device)
-
+            lin_index = self.sample_edge_indices(n_edges_resample)
             current_block = torch.cat((self.current_block, lin_index))
-            self.current_block, unique_idx = torch.unique(
-                current_block, sorted=True, return_inverse=True)
+            self.current_block, unique_idx = torch.unique(current_block, sorted=True, return_inverse=True)
 
             if self.is_undirected:
-                self.block_edge_index = self._linear_to_triu_idx(
-                    self.num_nodes, self.current_block)
+                self.block_edge_index = self._linear_to_triu_idx(self.num_nodes, self.current_block)
             else:
-                self.block_edge_index = self._linear_to_full_idx(
-                    self.num_nodes, self.current_block)
+                self.block_edge_index = self._linear_to_full_idx(self.num_nodes, self.current_block)
 
             # Merge existing weights with new edge weights
             block_edge_weight_prev = self.block_edge_weight[sorted_idx]
-            self.block_edge_weight = torch.full(self.current_block.shape,
-                                                self.coeffs['eps'],
-                                                device=self.device)
+            self.block_edge_weight = torch.full(self.current_block.shape, self.coeffs['eps'], device=self.device)
             self.block_edge_weight[
                 unique_idx[:sorted_idx.size(0)]] = block_edge_weight_prev
 
@@ -618,12 +637,16 @@ class PRBCDAttack(torch.nn.Module):
 
             if self.current_block.size(0) > budget:
                 return
-        raise RuntimeError('Sampling random block was not successful.'
-                           'Please decrease `budget`.')
+        raise RuntimeError('Sampling random block was not successful. Please decrease `budget`.')
 
-    def _sample_final_edges(self, x: Tensor, labels: Tensor, budget: int,
-                            idx_attack: Optional[Tensor] = None,
-                            **kwargs) -> Tuple[Tensor, Tensor]:
+    def _sample_final_edges(
+        self,
+        x: Tensor,
+        labels: Tensor,
+        budget: int,
+        idx_attack: Optional[Tensor] = None,
+        **kwargs,
+    ) -> Tuple[Tensor, Tensor]:
         best_metric = float('-Inf')
         block_edge_weight = self.block_edge_weight
         block_edge_weight[block_edge_weight <= self.coeffs['eps']] = 0
@@ -657,21 +680,25 @@ class PRBCDAttack(torch.nn.Module):
         flipped_edges = self.block_edge_index[:, self.block_edge_weight > 0]
 
         edge_index, edge_weight = self._get_modified_adj(
-            self.edge_index, self.edge_weight, self.block_edge_index,
-            self.block_edge_weight)
+            self.edge_index, self.edge_weight, self.block_edge_index, self.block_edge_weight,
+        )
         edge_mask = edge_weight == 1
         edge_index = edge_index[:, edge_mask]
 
         return edge_index, flipped_edges
 
-    def _update_edge_weights(self, budget: int, block_edge_weight: Tensor,
-                             epoch: int, gradient: Tensor) -> Tensor:
+    def _update_edge_weights(
+        self,
+        budget: int,
+        block_edge_weight: Tensor,
+        epoch: int,
+        gradient: Tensor
+    ) -> Tensor:
         # The learning rate is refined heuristically, s.t. (1) it is
         # independent of the number of perturbations (assuming an undirected
         # adjacency matrix) and (2) to decay learning rate during fine-tuning
         # (i.e. fixed search space).
-        lr = (budget / self.num_nodes * self.lr /
-              np.sqrt(max(0, epoch - self.epochs_resampling) + 1))
+        lr = (budget / self.num_nodes * self.lr / np.sqrt(max(0, epoch - self.epochs_resampling) + 1))
         return block_edge_weight + lr * gradient
 
     @staticmethod
@@ -687,8 +714,7 @@ class PRBCDAttack(torch.nn.Module):
         return torch.clamp(values, min=eps, max=1 - eps)
 
     @staticmethod
-    def _bisection(edge_weights: Tensor, a: float, b: float, n_pert: int,
-                   eps=1e-5, max_iter=1e3) -> Tensor:
+    def _bisection(edge_weights: Tensor, a: float, b: float, n_pert: int, eps=1e-5, max_iter=1e3) -> Tensor:
         """Bisection search for projection."""
         def shift(offset: float):
             return (torch.clamp(edge_weights - offset, 0, 1).sum() - n_pert)
@@ -725,9 +751,11 @@ class PRBCDAttack(torch.nn.Module):
         """
         nn = n * (n - 1)
         row_idx = n - 2 - torch.floor(
-            torch.sqrt(-8 * lin_idx.double() + 4 * nn - 7) / 2.0 - 0.5).long()
+            torch.sqrt(-8 * lin_idx.double() + 4 * nn - 7) / 2.0 - 0.5
+        ).long()
         col_idx = 1 + lin_idx + row_idx - nn // 2 + torch.div(
-            (n - row_idx) * (n - row_idx - 1), 2, rounding_mode='floor')
+            (n - row_idx) * (n - row_idx - 1), 2, rounding_mode='floor',
+        )
         return torch.stack((row_idx, col_idx))
     
     @staticmethod
@@ -816,9 +844,12 @@ class PRBCDAttack(torch.nn.Module):
         return edges
 
     @staticmethod
-    def _margin_loss(score: Tensor, labels: Tensor,
-                     idx_mask: Optional[Tensor] = None,
-                     reduce: Optional[str] = None) -> Tensor:
+    def _margin_loss(
+        score: Tensor,
+        labels: Tensor,
+        idx_mask: Optional[Tensor] = None,
+        reduce: Optional[str] = None,
+    ) -> Tensor:
         r"""Margin loss between true score and highest non-target score.
 
         .. math::
@@ -855,8 +886,11 @@ class PRBCDAttack(torch.nn.Module):
         return margin_.mean()
 
     @staticmethod
-    def _tanh_margin_loss(prediction: Tensor, labels: Tensor,
-                          idx_mask: Optional[Tensor] = None) -> Tensor:
+    def _tanh_margin_loss(
+        prediction: Tensor,
+        labels: Tensor,
+        idx_mask: Optional[Tensor] = None,
+    ) -> Tensor:
         """Calculate tanh margin loss, a node-classification loss that focuses
         on nodes next to decision boundary.
 
@@ -874,8 +908,11 @@ class PRBCDAttack(torch.nn.Module):
         return loss
 
     @staticmethod
-    def _probability_margin_loss(prediction: Tensor, labels: Tensor,
-                                 idx_mask: Optional[Tensor] = None) -> Tensor:
+    def _probability_margin_loss(
+        prediction: Tensor,
+        labels: Tensor,
+        idx_mask: Optional[Tensor] = None,
+    ) -> Tensor:
         """Calculate probability margin loss, a node-classification loss that
         focuses  on nodes next to decision boundary. See `Are Defenses for
         Graph Neural Networks Robust?
@@ -894,8 +931,11 @@ class PRBCDAttack(torch.nn.Module):
         return margin_.mean()
 
     @staticmethod
-    def _masked_cross_entropy(log_prob: Tensor, labels: Tensor,
-                              idx_mask: Optional[Tensor] = None) -> Tensor:
+    def _masked_cross_entropy(
+        log_prob: Tensor,
+        labels: Tensor,
+        idx_mask: Optional[Tensor] = None,
+    ) -> Tensor:
         """Calculate masked cross entropy loss, a node-classification loss that
         focuses on nodes next to decision boundary.
 

@@ -1,8 +1,6 @@
 # TODO: update README
 ### Python environment setup with Conda
 
-Because of a bug in the latest release of `seml` which is already fixed in the main branch `seml` is added as a git submodule and should to be installed locally. 
-
 ```bash
 conda create -n gtr python=3.11
 conda activate gtr
@@ -17,11 +15,7 @@ conda install -c pyg pyg pytorch-scatter
 
 conda install -c conda-forge yacs tensorboardx lightning torchmetrics performer-pytorch ogb wandb
 
-cd seml
-# if you didn't clone with --recurse-submodules:
-# git submodule init
-# git submodule update
-pip install .
+pip install seml
 
 # RDKit is required for OGB-LSC PCQM4Mv2 and datasets derived from it.  
 # conda install openbabel fsspec rdkit -c conda-forge

@@ -9,6 +9,7 @@ class WeightedIndexSampler:
         zero_idx: None | torch.Tensor,
         weight: int,
         max_index: int,
+        output_device,
     ):
         """
         """
@@ -43,6 +44,7 @@ class WeightedIndexSampler:
         else:
             self.zero_idx = None
 
+        self.output_device = output_device
         self.max_index: int = max_index
         self.n_w: int = weighted_idx.size(0) if weighted_idx is not None else 0
         self.n_z: int = zero_idx.size(0) if zero_idx is not None else 0
@@ -62,7 +64,7 @@ class WeightedIndexSampler:
         )
 
         if self.weighted_idx is None and self.zero_idx is None:
-            return values
+            return values.to(device=self.output_device)
 
         weighted_idx_sample = torch.zeros_like(values, dtype=torch.int64) - 1
 
@@ -112,7 +114,7 @@ class WeightedIndexSampler:
 
             if value_reached_mask.all():
                 assert torch.all(weighted_idx_sample >= 0)
-                return weighted_idx_sample
+                return weighted_idx_sample.to(device=self.output_device)
 
             remaining_mask = ~value_reached_mask
             l = l[remaining_mask]
@@ -122,6 +124,57 @@ class WeightedIndexSampler:
             values = values[remaining_mask]
 
         raise Exception("Sampling (binary search) should have concluded, something went wrong...")
+    
+
+def get_connected_sampling_fun(
+    allow_existing_graph_pert: bool,
+    is_undirected: bool,
+    n_ex_edges: int,
+    n_ex_nodes: int,
+    n_new_nodes: int,
+    device,
+):
+    """
+    n_ex_edges is already precalculated (depends on is_undirected)
+    """
+    n_block_edges = n_ex_nodes * n_new_nodes
+    if allow_existing_graph_pert:
+        if is_undirected:
+            # indices stay the same, but max number is capped to exclude the non-connected
+            n_total = n_ex_edges + n_block_edges
+            map_fun = lambda x: x
+
+        else:
+            # remap the indices that belong to 'second block'
+            n_total = n_ex_edges + 2 * n_block_edges
+            n_threshold = n_ex_edges + n_block_edges
+            offset = n_ex_edges + n_block_edges
+
+            def map_fun(x):
+                mask = x >= n_threshold
+                x[mask] += ((x[mask] - offset) // n_ex_nodes) * n_new_nodes
+                return x
+
+    else:
+        if is_undirected:
+            # increment each row by a specific number (cumsum)
+            n_total = n_block_edges
+            row_offset = torch.cumsum(torch.arange(n_ex_nodes-1, -1, -1), dim=0)
+            
+            def map_fun(x):
+                x += row_offset[x // n_ex_nodes]
+                return x
+
+        else:
+            n_total = 2 * n_block_edges
+            # TODO: increment first block by (row_num+1)*n_ex_nodes
+            # second block row num with offset by n_block_edges + global offset -> 
+            raise NotImplementedError
+
+    def sampling_fun(n):
+        return map_fun(torch.randint(n_total, (n, ), device=device))
+    
+    return sampling_fun
     
 
 if __name__ == "__main__":
@@ -134,6 +187,7 @@ if __name__ == "__main__":
         zero_idx=zero_idx,
         weight=w,
         max_index=max_index,
+        output_device=torch.device("cpu"),
     )
     n = 10000
     s = sampler.sample(n)
