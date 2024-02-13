@@ -47,7 +47,7 @@ fixed:
       loss_fun: cross_entropy
 
     gnn:
-      head: gcnconvweighted
+      layer_type: gcnconvweighted
       stage_type: stack
       batchnorm: true
       act: relu
@@ -56,6 +56,7 @@ fixed:
       layers_mp: 1
       layers_post_mp: 1
       dim_inner: 64  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+      head: weighted_add_pool_graph
     
     optim:
       base_lr: 0.0003
