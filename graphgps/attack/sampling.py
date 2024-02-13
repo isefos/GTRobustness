@@ -50,7 +50,7 @@ class WeightedIndexSampler:
         self.n_total: int = self.max_index + self.w_minus_1 * self.n_w - self.n_z + 1
         assert self.n_total < 2 ** 63 - 1  # If we sample values of 64 bit integers
 
-    def sample(self, num_samples: int, device):
+    def sample(self, num_samples: int):
         """
         maps a uniform sample to the weighted distribution using binary search(es)
         """
@@ -59,17 +59,16 @@ class WeightedIndexSampler:
             high=self.n_total,
             size=(num_samples, ),
             dtype=torch.int64,
-            device=device,
         )
 
         if self.weighted_idx is None and self.zero_idx is None:
             return values
 
-        weighted_idx_sample = torch.zeros_like(values, dtype=torch.int64, device=device) - 1
+        weighted_idx_sample = torch.zeros_like(values, dtype=torch.int64) - 1
 
-        l = torch.zeros_like(values, dtype=torch.int64, device=device)
-        r = torch.zeros_like(values, dtype=torch.int64, device=device) + self.max_index
-        step_size = torch.ones_like(values, dtype=torch.int64, device=device)
+        l = torch.zeros_like(values, dtype=torch.int64)
+        r = torch.zeros_like(values, dtype=torch.int64) + self.max_index
+        step_size = torch.ones_like(values, dtype=torch.int64)
 
         max_steps = math.ceil(math.log2(self.n_total))
         for _ in range(max_steps):
@@ -137,7 +136,7 @@ if __name__ == "__main__":
         max_index=max_index,
     )
     n = 10000
-    s = sampler.sample(n, torch.device("cpu"))
+    s = sampler.sample(n)
     sample_values, sample_frequencies = torch.unique(s, sorted=True, return_counts=True)
     d = {i: 0.0 for i in range(max_index + 1)}
     for v, f in zip(list(sample_values), list(sample_frequencies)):

@@ -52,10 +52,11 @@ def get_only_root_graph(batch: Batch, root_node: int):
     assert torch.all(batch.batch == 0)
     data: Data = batch.get_example(0)
     num_nodes = data.x.size(0)
+    device = data.x.device
     # do graph traversal starting from root to find the root component
     adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=num_nodes)
     bfs_order = breadth_first_order(adj, root_node, return_predecessors=False)
-    subset_mask = index_to_mask(torch.tensor(bfs_order, dtype=torch.long), size=num_nodes)
+    subset_mask = index_to_mask(torch.tensor(bfs_order, dtype=torch.long, device=device), size=num_nodes)
     data_root_component = data.subgraph(subset_mask)
     new_data = Batch.from_data_list([data_root_component])
     new_root_node = int(subset_mask[:root_node].sum().item())
@@ -81,8 +82,9 @@ def get_node_logprob(
     (with current implementation and a graph that is not guaranteed to exist,
     iterataions will keep decreasing node probabilities forever without convergence)
     """
+    device = edge_index.device
     if edge_weights is None:
-        return torch.zeros((num_nodes, ))
+        return torch.zeros((num_nodes, ), device=device)
 
     assert len(edge_weights.shape) == 1, "Only scalar edge weights are supported"
     m = "Edge weights represent probabilities, so they must be between 0 and 1"
@@ -94,14 +96,14 @@ def get_node_logprob(
     mask_prob_edge_one = prob_edge == 1
 
     if mask_prob_edge_one.all():
-        return torch.zeros((num_nodes, ))
+        return torch.zeros((num_nodes, ), device=device)
 
     m = "The graph must have a root node or at least one edge with probability 1"
     assert root_node is not None or torch.any(mask_prob_edge_one), m
 
     log1m_prob_edge = torch.full_like(prob_edge, -float('inf'))
     log1m_prob_edge[~mask_prob_edge_one] = (-prob_edge[~mask_prob_edge_one]).log1p()
-    logprob_not_node = torch.full((num_nodes, ), -float('inf'))
+    logprob_not_node = torch.full((num_nodes, ), -float('inf'), device=device)
     if use_64bit:
         logprob_not_node = logprob_not_node.to(torch.float64)
     for _ in range(num_iterations):
@@ -135,7 +137,10 @@ def get_node_logprob(
     logprob_node = log1mexp(logprob_not_node)
     assert torch.all(logprob_node <= 0)
     assert torch.all(-float("inf") < logprob_node)
-    return logprob_node.to(torch.float32)
+    if use_64bit:
+        # convert back to 32bit after computations
+        logprob_node = logprob_node.to(torch.float32)
+    return logprob_node
 
 
 def get_msg(

@@ -96,6 +96,7 @@ def prbcd_attack_dataset(
             additional_injection_datasets=additional_injection_datasets,
             include_root_nodes=include_root_nodes_for_injection,
             root_node_idx=root_node_idx,
+            device=device,
         )
 
     clean_loader = DataLoader(dataset_to_attack, batch_size=1, shuffle=False)
@@ -198,7 +199,7 @@ def prbcd_attack_dataset(
 
         pert_data = attack_graph_data.clone()
         pert_data.edge_index = pert_edge_index
-        pert_data.edge_attr = torch.ones(pert_edge_index.size(1))
+        pert_data.edge_attr = torch.ones(pert_edge_index.size(1), device=device)
         with torch.no_grad():
             output_pert = model(
                 Batch.from_data_list([pert_data.clone()]),
@@ -254,7 +255,7 @@ def prbcd_attack_dataset(
 
         rand_pert_data = attack_graph_data.clone()
         rand_pert_data.edge_index = rand_pert_edge_index
-        rand_pert_data.edge_attr = torch.ones(rand_pert_edge_index.size(1))
+        rand_pert_data.edge_attr = torch.ones(rand_pert_edge_index.size(1), device=device)
         with torch.no_grad():
             output_rand_pert = model(
                 Batch.from_data_list([rand_pert_data.clone()]),

@@ -37,6 +37,7 @@ def weighted_graphormer_pre_processing(
         raise NotImplementedError
 
     n = data.x.size(0)
+    device = data.x.device
 
     if combinations_degree:
         # TODO: rewrite vectorized -> scatter:
@@ -64,7 +65,7 @@ def weighted_graphormer_pre_processing(
         )
     else:
         in_degrees_weighted = torch.scatter_add(
-            input=torch.zeros(n),
+            input=torch.zeros(n, device=device),
             src=data.edge_attr,
             index=data.edge_index[1, :],
             dim=0,
@@ -88,8 +89,8 @@ def weighted_graphormer_pre_processing(
     
     data.graph_index = torch.cat(
         (
-            torch.arange(n, dtype=torch.long).repeat_interleave(n)[None, :],
-            torch.arange(n, dtype=torch.long).repeat(n)[None, :],
+            torch.arange(n, dtype=torch.long, device=device).repeat_interleave(n)[None, :],
+            torch.arange(n, dtype=torch.long, device=device).repeat(n)[None, :],
         ),
         dim=0,
     )
@@ -126,7 +127,7 @@ def weighted_graphormer_pre_processing(
             adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsr()
             distances_hop_np = csgraph.construct_dist_matrix(adj, predecessors_np, directed=directed_graphs)
             distances_hop_np[distances_hop_np > max_distance] = max_distance
-            spatial_types = torch.tensor(distances_hop_np.reshape(n ** 2), dtype=torch.long)
+            spatial_types = torch.tensor(distances_hop_np.reshape(n ** 2), dtype=torch.long, device=device)
 
     else:
         # just ignore the edge weights etirely
@@ -496,18 +497,15 @@ def weighted_shortest_paths(
     max_distance: int,
     directed_graphs: bool,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    
+    device = edge_index.device
     # when using the weighted path distance, we can prune away all nodes that we know have a distance > max_distance
-
     num_distances = num_nodes ** 2
-
     max_edge_weights = get_node_max_edge_weight(
         edge_index=edge_index,
         edge_weights=edge_attr,
         num_nodes=num_nodes,
         is_undirected=not directed_graphs,
     )
-
     min_shortest_path = 1 / max_edge_weights
     prune_mask = min_shortest_path <= max_distance
     p_num_nodes = int(prune_mask.sum().item())
@@ -525,9 +523,9 @@ def weighted_shortest_paths(
 
     debug = False
     if debug:
-        d_p = torch.full((num_distances, ), max_distance, dtype=torch.float32)
+        d_p = torch.full((num_distances, ), max_distance, dtype=torch.float32, device=device)
         # set diagonal to zero
-        _d = torch.arange(num_nodes, dtype=torch.long)
+        _d = torch.arange(num_nodes, dtype=torch.long, device=device)
         diag_idx = num_nodes * _d + _d
         d_p[diag_idx] = 0
         d_p[distances_prune_mask] = distances_weighted
@@ -542,8 +540,8 @@ def weighted_shortest_paths(
         assert torch.allclose(d_p, d_not_p)
 
     # dim1: 0 for low, 1 for high
-    spatial_types = torch.full((num_distances, 2), max_distance, dtype=torch.long)
-    spatial_types_weights = torch.zeros((num_distances, 2))
+    spatial_types = torch.full((num_distances, 2), max_distance, dtype=torch.long, device=device)
+    spatial_types_weights = torch.zeros((num_distances, 2), device=device)
     spatial_types_weights[:, 0] = 1
 
     # linear interpolation weights of the discrete distances inserted into the total tensors for all distances
@@ -553,6 +551,8 @@ def weighted_shortest_paths(
     p_low = spatial_types[distances_prune_mask, 1] - distances_weighted
     p_low[spatial_types[distances_prune_mask, 0] == spatial_types[distances_prune_mask, 1]] = 1
     spatial_types_weights[distances_prune_mask, 0] = p_low
+
+    assert torch.all(spatial_types_weights >= 0)
 
     return spatial_types, spatial_types_weights
 
@@ -578,8 +578,9 @@ def distances_shortest_weighted_paths(
     distances_hop_np[distances_hop_np > max_distance] = max_distance
     max_hops = int(distances_hop_np.max())
 
+    device = edge_index.device
     if use_weighted_gradient:
-        clamped_distance_mask = torch.tensor(clamped_distance_mask_np, dtype=torch.bool)
+        clamped_distance_mask = torch.tensor(clamped_distance_mask_np, dtype=torch.bool, device=device)
         distances_weighted = reconstruct_weighted_distances_over_path(
             inv_edge_attr=inv_edge_attr,
             edge_index=edge_index,
@@ -593,12 +594,12 @@ def distances_shortest_weighted_paths(
 
         debug = False
         if debug:
-            distances_clamped = torch.tensor(distances_weighted_np, dtype=torch.float32)
+            distances_clamped = torch.tensor(distances_weighted_np, dtype=torch.float32, device=device)
             distances_clamped[clamped_distance_mask] = max_distance
             assert torch.allclose(distances_weighted, distances_clamped)
 
     else:
-        distances_weighted = torch.tensor(distances_weighted_np, dtype=torch.float32)
+        distances_weighted = torch.tensor(distances_weighted_np, dtype=torch.float32, device=device)
         distances_weighted[distances_weighted > max_distance] = max_distance
 
     return distances_weighted
@@ -614,6 +615,7 @@ def reconstruct_weighted_distances_over_path(
     clamped_distance_mask: torch.Tensor,
     predecessors_np,
 ):
+    device = edge_index.device
     # get dense inv adj for easier indexing in path reconstruction
     inv_adj = scatter(
         inv_edge_attr,
@@ -628,20 +630,20 @@ def reconstruct_weighted_distances_over_path(
     # but doesn't matter since we are just adding 0
     assert inv_adj[0].item() == 0
     true_distance_mask = ~clamped_distance_mask
-    distances_weighted = torch.zeros(num_distances)
+    distances_weighted = torch.zeros((num_distances, ), device=device)
 
-    p_original = torch.tensor(predecessors_np.reshape((num_distances)), dtype=torch.long)
+    p_original = torch.tensor(predecessors_np.reshape((num_distances, )), dtype=torch.long, device=device)
     adj_col_idx = p_original[true_distance_mask]
     neg_mask = adj_col_idx < 0
     adj_col_idx[neg_mask] = 0
     # ends: torch.arange(n, dtype=torch.long).repeat(n)
-    adj_row_idx = torch.arange(num_nodes, dtype=torch.long).repeat(num_nodes)[true_distance_mask]
+    adj_row_idx = torch.arange(num_nodes, dtype=torch.long, device=device).repeat(num_nodes)[true_distance_mask]
     adj_row_idx[neg_mask] = 0
     adj_lin_idx = num_nodes * adj_col_idx + adj_row_idx
     distances_weighted[true_distance_mask] += inv_adj[adj_lin_idx]
 
-    row_idx = torch.zeros((num_distances), dtype=torch.long)
-    col_idx = torch.arange(num_nodes, dtype=torch.long).repeat_interleave(num_nodes)
+    row_idx = torch.zeros((num_distances, ), dtype=torch.long, device=device)
+    col_idx = torch.arange(num_nodes, dtype=torch.long, device=device).repeat_interleave(num_nodes)
     p_prev = p_original
     for i in range(max_hops - 1):
         row_idx = p_prev.clone()

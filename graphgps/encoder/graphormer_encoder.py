@@ -130,7 +130,7 @@ def get_shortest_paths(edge_index, num_nodes, directed, max_distance):
     distances = csgraph.shortest_path(
         adj, method="auto", directed=directed, unweighted=False,
     )
-    spatial_types = torch.tensor(distances.reshape(num_nodes ** 2), dtype=torch.long)
+    spatial_types = torch.tensor(distances.reshape(num_nodes ** 2), dtype=torch.long, device=edge_index.device)
     spatial_types[spatial_types > max_distance] = max_distance
     return spatial_types
 

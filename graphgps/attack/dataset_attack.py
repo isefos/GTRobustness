@@ -22,6 +22,7 @@ def get_total_dataset_graphs(
     additional_injection_datasets: None | list[Dataset],
     include_root_nodes: bool,
     root_node_idx: None | int,
+    device,
 ) -> tuple[None | Data, None | list[tuple[int, int]], None | Data]:
     """
     """
@@ -47,7 +48,7 @@ def get_total_dataset_graphs(
             add_batch=False,
             exclude_keys=["y"],
         )
-        total_attack_dataset_graph = merge_result[0]
+        total_attack_dataset_graph = merge_result[0].to(device=device)
 
     if additional_injection_datasets is None:
         total_additional_datasets_graph = None
@@ -66,7 +67,7 @@ def get_total_dataset_graphs(
             add_batch=False,
             exclude_keys=["y"],
         )
-        total_additional_datasets_graph = merge_result[0]
+        total_additional_datasets_graph = merge_result[0].to(device=device)
     
     return total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph
 
@@ -86,7 +87,7 @@ def get_augmented_graph(
         attack_dataset_graph_to_add = None
     else:
         n = total_attack_dataset_graph.x.size(0)
-        current_mask = torch.ones(n, dtype=torch.bool)
+        current_mask = torch.ones(n, dtype=torch.bool, device=total_attack_dataset_graph.x.device)
         current_mask[attack_dataset_slice[0]:attack_dataset_slice[1]] = 0
         attack_dataset_graph_to_add = total_attack_dataset_graph.subgraph(current_mask)
     graphs_to_join = [g for g in (graph, attack_dataset_graph_to_add, total_additional_datasets_graph) if g is not None]

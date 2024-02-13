@@ -174,13 +174,13 @@ class PRBCDAttack(torch.nn.Module):
             if self.included_weighted:
                 # give edges to included nodes a higher probability of getting sampled
                 edges_to_included = self._get_new_1hop_edges(
-                    sorted_included_nodes, self.num_nodes, self.is_undirected, self.device,
+                    sorted_included_nodes, self.num_nodes, self.is_undirected,
                 )
                 idx_to_included = to_lin_idx(self.num_nodes, edges_to_included)
             if not self.allow_existing_graph_pert:
                 # don't allow the edges between to included nodes to change, only adding new edges
                 edges_between_included = self._get_fully_connected_edges(
-                    sorted_included_nodes, self.is_undirected, self.device,
+                    sorted_included_nodes, self.is_undirected,
                 )
                 idx_between_included = to_lin_idx(self.num_nodes, edges_between_included)
             # Now use these for sampling
@@ -313,7 +313,7 @@ class PRBCDAttack(torch.nn.Module):
                     num_possible_edges, (budget, ), device=self.device,
                 )
             else:
-                self.current_block = self.weighted_index_sampler.sample(budget, device=self.device)
+                self.current_block = self.weighted_index_sampler.sample(budget).to(device=self.device)
             self.current_block = torch.unique(self.current_block, sorted=True)
 
             if self.is_undirected:
@@ -340,7 +340,7 @@ class PRBCDAttack(torch.nn.Module):
                 best_block_edge_index = self.block_edge_index.cpu().clone()
                 highest_loss = loss
         
-        return best_edge_index, best_block_edge_index
+        return best_edge_index.to(self.device), best_block_edge_index.to(self.device)
 
     def _prepare(self, budget: int) -> Iterable[int]:
         """Prepare attack."""
@@ -544,9 +544,7 @@ class PRBCDAttack(torch.nn.Module):
                     num_possible_edges, (self.block_size, ), device=self.device,
                 )
             else:
-                self.current_block = self.weighted_index_sampler.sample(
-                    self.block_size, device=self.device,
-                )
+                self.current_block = self.weighted_index_sampler.sample(self.block_size).to(device=self.device)
             self.current_block = torch.unique(self.current_block, sorted=True)
             if self.is_undirected:
                 self.block_edge_index = self._linear_to_triu_idx(
@@ -594,9 +592,7 @@ class PRBCDAttack(torch.nn.Module):
                     num_possible_edges, (n_edges_resample, ), device=self.device,
                 )
             else:
-                lin_index = self.weighted_index_sampler.sample(
-                    n_edges_resample, device=self.device,
-                )
+                lin_index = self.weighted_index_sampler.sample(n_edges_resample).to(device=self.device)
 
             current_block = torch.cat((self.current_block, lin_index))
             self.current_block, unique_idx = torch.unique(
@@ -771,13 +767,13 @@ class PRBCDAttack(torch.nn.Module):
         sorted_included_node_idx: torch.Tensor,
         num_nodes: int,
         is_undirected: bool,
-        device,
     ) -> torch.Tensor:
         """Returns edge_index including all edges between included nodes and injection nodes
         indices given as [i_row, j_col]
         when is_undirected: only one direction given with i_row < j_col
         """
         n_inc = sorted_included_node_idx.size(0)
+        device = sorted_included_node_idx.device
         mask = torch.ones(num_nodes, dtype=torch.bool, device=device)
         mask[sorted_included_node_idx] = 0
         injection_nodes = torch.arange(0, num_nodes, dtype=torch.long, device=device)[mask]
@@ -798,7 +794,6 @@ class PRBCDAttack(torch.nn.Module):
     def _get_fully_connected_edges(
         sorted_included_node_idx: torch.Tensor,
         is_undirected: bool,
-        device,
     ) -> torch.Tensor:
         """Returns edge_index for all edges between included nodes
         indices given as [i_row, j_col]
@@ -806,6 +801,7 @@ class PRBCDAttack(torch.nn.Module):
         when is_undirected: only one direction given with i_row > j_col
         """
         n = sorted_included_node_idx.size(0)
+        device = sorted_included_node_idx.device
         repeats_upper = torch.arange(n-1, -1, -1, dtype=torch.long, device=device)
         repeated_lower = torch.cat([sorted_included_node_idx[i:] for i in range(1, n)], dim=0)
         edges = torch.cat(

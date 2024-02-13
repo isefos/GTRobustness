@@ -1,6 +1,6 @@
 graphgym:
 
-  accelerator: cpu
+  accelerator: auto
   out_dir: configs_seml/results
   metric_best: accuracy
   metric_agg: argmax
