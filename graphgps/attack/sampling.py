@@ -162,7 +162,7 @@ def get_connected_sampling_fun(
             row_offset = torch.cumsum(torch.arange(n_ex_nodes-1, -1, -1), dim=0)
             
             def map_fun(x):
-                x += row_offset[x // n_ex_nodes]
+                x += row_offset[x // n_new_nodes]
                 return x
 
         else:

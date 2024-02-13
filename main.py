@@ -146,6 +146,7 @@ def main(cfg):
             remove_isolated_components=cfg.attack.remove_isolated_components,
             root_node_idx=cfg.attack.root_node_idx,
             include_root_nodes_for_injection=cfg.attack.include_root_nodes_for_injection,
+            sample_only_connected=cfg.attack.sample_only_connected,
             sample_only_trees=cfg.attack.sample_only_trees,
         )
 

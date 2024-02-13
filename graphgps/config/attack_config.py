@@ -64,4 +64,7 @@ def dataset_cfg(cfg):
     cfg.attack.include_root_nodes_for_injection = True
 
     # bla
+    cfg.attack.sample_only_connected = False
+
+    # bla
     cfg.attack.sample_only_trees = False

@@ -152,7 +152,7 @@ class PRBCDAttack(torch.nn.Module):
         # settings different sampling startegies
         self.existing_node_prob_multiplier = existing_node_prob_multiplier
         self.included_weighted = not self.existing_node_prob_multiplier == 1
-        assert not self.included_weighted and sample_only_connected, (
+        assert not (self.included_weighted and sample_only_connected), (
             "Either sample only from connected edges, or weighted (with relative weight for connected edges)"
         )
         self.sample_only_connected = sample_only_connected
@@ -272,21 +272,18 @@ class PRBCDAttack(torch.nn.Module):
 
         # Loop over the epochs (Algorithm 1, line 5)
         for step in tqdm(step_sequence, disable=not self.log, desc='Attack'):
-            loss, gradient = self._forward_and_gradient(
-                x, labels, idx_attack, **kwargs)
+            loss, gradient = self._forward_and_gradient(x, labels, idx_attack, **kwargs)
 
-            scalars = self._update(step, gradient, x, labels, budget,
-                                   idx_attack, **kwargs)
+            scalars = self._update(step, gradient, x, labels, budget, idx_attack, **kwargs)
 
             scalars['loss'] = loss.item()
             self._append_statistics(scalars)
 
-        perturbed_edge_index, flipped_edges = self._close(
-            x, labels, budget, idx_attack, **kwargs)
+        perturbed_edge_index, flipped_edges = self._close(x, labels, budget, idx_attack, **kwargs)
 
         assert flipped_edges.size(1) <= budget, (
-            f'# perturbed edges {flipped_edges.size(1)} '
-            f'exceeds budget {budget}')
+            f'# perturbed edges {flipped_edges.size(1)} exceeds budget {budget}'
+        )
 
         return perturbed_edge_index, flipped_edges
     
@@ -629,8 +626,7 @@ class PRBCDAttack(torch.nn.Module):
             # Merge existing weights with new edge weights
             block_edge_weight_prev = self.block_edge_weight[sorted_idx]
             self.block_edge_weight = torch.full(self.current_block.shape, self.coeffs['eps'], device=self.device)
-            self.block_edge_weight[
-                unique_idx[:sorted_idx.size(0)]] = block_edge_weight_prev
+            self.block_edge_weight[unique_idx[:sorted_idx.size(0)]] = block_edge_weight_prev
 
             if not self.is_undirected:
                 self._filter_self_loops_in_block(with_weight=True)

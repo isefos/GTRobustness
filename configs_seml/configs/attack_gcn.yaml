@@ -5,13 +5,13 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 1
+  experiments_per_job: 3
   sbatch_options:
     partition: gpu_limited
     gres: gpu:1       # num GPUs
     mem: 16G          # memory
     cpus-per-task: 1  # num cores
-    time: 0-08:00     # max time, D-HH:MM
+    time: 0-12:00     # max time, D-HH:MM
 
 ###### BEGIN PARAMETER CONFIGURATION ######
 
@@ -19,7 +19,7 @@ fixed:
 
   graphgym:
 
-    accelerator: cpu
+    accelerator: auto
     out_dir: configs_seml/results
     metric_best: accuracy
     tensorboard_each_run: false
@@ -63,7 +63,7 @@ fixed:
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       optimizer: adamW
-      max_epoch: 300
+      max_epoch: 150
       scheduler: cosine_with_warmup
       num_warmup_epochs: 20
       early_stopping: true
@@ -84,11 +84,13 @@ fixed:
       node_injection_from_train: true
       node_injection_from_val: true
       node_injection_from_test: true
-      existing_node_prob_multiplier: 1_000
+      existing_node_prob_multiplier: 1  # 1_000
       allow_existing_graph_pert: false
       remove_isolated_components: true
       root_node_idx: 0
       include_root_nodes_for_injection: false
+      sample_only_connected: true
+      sample_only_trees: true
 
 # experiment random configs
 
