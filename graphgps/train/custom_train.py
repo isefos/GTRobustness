@@ -229,9 +229,25 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
     if cfg.wandb.use:
         run.finish()
         run = None
-
     logging.info('Task done, results saved in %s', cfg.run_dir)
-    results = {split: p for split, p in zip(["train", "val", "test"], perf)}
+    # return the logged results per epoch in a differently organized way:
+    results = _get_epoch_log_results(perf, best_epoch)
+    return results
+
+
+def _get_epoch_log_results(perf, best_epoch: int):
+    results = {}
+    for split, p in zip(["train", "val", "test"], perf):
+        results[split] = {}
+        for p_epoch in p:
+            for k, v in p_epoch.items():
+                if k in ["epoch", "eta", "eta_hours", "params"]:
+                    continue
+                if split in ["val", "test"] and k == "lr":
+                    continue
+                if k not in results[split]:
+                    results[split][k] = []
+                results[split][k].append(v)
     results["best_val_epoch"] = best_epoch
     results["best_val_" + cfg.metric_best] = perf[1][best_epoch].get(cfg.metric_best)
     results["best_val_train_" + cfg.metric_best] = perf[0][best_epoch].get(cfg.metric_best)
