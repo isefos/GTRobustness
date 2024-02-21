@@ -13,8 +13,6 @@ slurm:
     cpus-per-task: 4  # num cores
     time: 0-12:00     # max time, D-HH:MM
 
-###### BEGIN PARAMETER CONFIGURATION ######
-
 fixed:
 
   graphgym:
@@ -89,24 +87,35 @@ fixed:
 
     attack:
       enable: true
+      log_progress: false
       split: test
       num_attacked_graphs: 0  # 0 means attack all
+      skip_incorrect_graph_classification: true
+      run_random_baseline: true
+      epochs: 125
+      epochs_resampling: 100
       lr: 4_000
       block_size: 2_000
       e_budget: 0.1
+      minimum_budget: 0
+      eps: 1e-7
       is_undirected: true
       loss: train
+      metric: null
+      max_final_samples: 20
+      max_trials_sampling: 20
+      with_early_stopping: true
       enable_node_injection: true
       node_injection_from_train: true
       node_injection_from_val: true
       node_injection_from_test: true
-      existing_node_prob_multiplier: 1  # 1_000
-      allow_existing_graph_pert: false
       remove_isolated_components: true
       root_node_idx: 0
       include_root_nodes_for_injection: false
+      existing_node_prob_multiplier: 1  # 1_000
       sample_only_connected: true
       sample_only_trees: true
+      allow_existing_graph_pert: false
 
 # experiment random configs
 

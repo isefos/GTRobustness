@@ -8,15 +8,22 @@ import torch
 import torch_geometric.transforms as T
 from numpy.random import default_rng
 from ogb.graphproppred import PygGraphPropPredDataset
-from torch_geometric.datasets import (Actor, GNNBenchmarkDataset, Planetoid,
-                                      TUDataset, WebKB, WikipediaNetwork, ZINC)
+from torch_geometric.datasets import (
+    Actor,
+    GNNBenchmarkDataset,
+    Planetoid,
+    TUDataset,
+    WebKB,
+    WikipediaNetwork,
+    ZINC,
+    MalNetTiny,
+)
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.loader import load_pyg, load_ogb, set_dataset_attr
 from torch_geometric.graphgym.register import register_loader
 
 from graphgps.loader.dataset.aqsol_molecules import AQSOL
 from graphgps.loader.dataset.coco_superpixels import COCOSuperpixels
-from graphgps.loader.dataset.malnet_tiny import MalNetTiny
 from graphgps.loader.dataset.voc_superpixels import VOCSuperpixels
 from graphgps.loader.dataset.upfd import UPFD
 from graphgps.loader.split_generator import (prepare_splits,
@@ -587,7 +594,6 @@ def preformat_UPFD(dataset_dir, name: str):
          for split in ['train', 'val', 'test']]
     )
     pre_transform_in_memory(dataset, T.ToUndirected())
-    # TODO: add the root features to data objects
     return dataset
 
 
