@@ -3,6 +3,7 @@ from torch_geometric.utils import remove_self_loops, scatter
 from torch_geometric.data import Data, Batch
 from torch_geometric.utils import to_scipy_sparse_matrix, index_to_mask
 from scipy.sparse.csgraph import breadth_first_order
+from graphgps.attack.utils_attack import get_largest_connected_subgraph
 from typing import Callable
 import functools
 from torch_geometric.graphgym.config import cfg
@@ -21,8 +22,7 @@ def forward_wrapper(forward: Callable, is_undirected: bool) -> Callable:
             if root_node is not None:
                 data, root_node = get_only_root_graph(data, root_node)
             else:
-                # TODO: add option when root is None -> select the largest connected subgraph as new graph
-                raise NotImplementedError
+                data = get_largest_connected_subgraph(data)
             
         use_64bit = False
         num_iterations = 5

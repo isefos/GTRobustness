@@ -1,7 +1,8 @@
 import torch
+import numpy as np
 import logging
 from torch_geometric.utils import to_scipy_sparse_matrix, index_to_mask, subgraph
-from scipy.sparse.csgraph import breadth_first_order
+from scipy.sparse.csgraph import breadth_first_order, connected_components
 from torch_geometric.graphgym.config import cfg
 
 
@@ -175,10 +176,13 @@ def basic_edge_and_node_stats(
             torch.tensor(bfs_order, dtype=torch.long, device=edge_index.device),
             size=num_nodes_pert,
         )
-        edge_index_pert_connected = subgraph(subset_mask, edge_index_pert)[0]
     else:
-        # TODO: add option when root is None -> select the largest connected subgraph as new graph
-        raise NotImplementedError
+        _, component = connected_components(adj, connection="weak")
+        _, count = np.unique(component, return_counts=True)
+        subset_np = np.in1d(component, count.argsort()[-1:])
+        subset_mask = torch.from_numpy(subset_np)
+        subset_mask = subset_mask.to(edge_index.device, torch.bool)
+    edge_index_pert_connected = subgraph(subset_mask, edge_index_pert)[0]
     
     edges, nodes = _get_edges_nodes_from_index(edge_index)
     edges_pert, nodes_pert = _get_edges_nodes_from_index(edge_index_pert)

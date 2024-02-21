@@ -174,12 +174,16 @@ def check_budget_and_clean_data(model, clean_data):
         skip_msg = "because budget is 0."
         skip = True
 
+    output_clean = None
+    output_stats_clean = None
+    
     if not skip:
         clean_data.to(device=cfg.accelerator)
         with torch.no_grad():
             output_clean = model(clean_data.clone(), unmodified=True)
 
         output_stats_clean = get_output_stats(clean_data.y, output_clean)
+
         if (
             cfg.dataset.task == "graph"
             and cfg.attack.skip_incorrect_graph_classification

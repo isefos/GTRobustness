@@ -1,7 +1,11 @@
 import torch
+from torch_geometric.transforms import LargestConnectedComponents
 
 
-# Not used anymore, may be useful for fast debugging
+get_largest_connected_subgraph = LargestConnectedComponents(num_components=1, connection="weak")
+
+
+# Not used anymore, may be useful for quick debugging:
 
 
 def get_reached_nodes(root: int, edge_index: torch.Tensor) -> set[int]:
