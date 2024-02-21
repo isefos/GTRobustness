@@ -2,10 +2,34 @@ import torch
 from torch_geometric.data import Data, Dataset
 from torch_geometric.data.collate import collate
 import logging
+from torch_geometric.graphgym.config import cfg
 
 
-def filter_out_root_node(graph: Data, root_node_idx: None | int) -> Data:
+def get_attack_datasets(loaders):
+    splits = ["train", "val", "test"]
+    split_to_attack_idx = splits.index(cfg.attack.split)
+    dataset_to_attack = loaders[split_to_attack_idx].dataset
+
+    additional_injection_datasets = None
+    inject_nodes_from_attack_dataset = False
+
+    if cfg.attack.enable_node_injection:
+        include_additional_datasets = [
+            cfg.attack.node_injection_from_train,
+            cfg.attack.node_injection_from_val,
+            cfg.attack.node_injection_from_test,
+        ]
+        inject_nodes_from_attack_dataset = include_additional_datasets[split_to_attack_idx]
+        include_additional_datasets[split_to_attack_idx] = False
+        additional_injection_datasets = [l.dataset for i, l in enumerate(loaders) if include_additional_datasets[i]]
+
+    return dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset
+
+
+def filter_out_root_node(graph: Data) -> Data:
+    root_node_idx = cfg.attack.root_node_idx
     assert root_node_idx is not None, "If specified to not inlcude root nodes, must also specify the root node index!"
+    assert isinstance(root_node_idx, int), "Root node index must be an integer!"
     n = graph.x.size(0)
     graph = graph.subgraph(
         subset=torch.tensor(
@@ -21,8 +45,6 @@ def get_total_dataset_graphs(
     dataset_to_attack: Dataset,
     additional_injection_datasets: None | list[Dataset],
     include_root_nodes: bool,
-    root_node_idx: None | int,
-    device,
 ) -> tuple[None | Data, None | list[tuple[int, int]], None | Data]:
     """
     """
@@ -36,7 +58,7 @@ def get_total_dataset_graphs(
         for graph_to_add in dataset_to_attack:
             graph_to_add.edge_index = torch.empty((2, 0), dtype=torch.long)
             if not include_root_nodes:
-                graph_to_add = filter_out_root_node(graph_to_add, root_node_idx)
+                graph_to_add = filter_out_root_node(graph_to_add)
             graphs_to_join.append(graph_to_add)
             next_idx = current_idx + graph_to_add.x.size(0)
             attack_dataset_slices.append((current_idx, next_idx))
@@ -48,7 +70,7 @@ def get_total_dataset_graphs(
             add_batch=False,
             exclude_keys=["y"],
         )
-        total_attack_dataset_graph = merge_result[0].to(device=device)
+        total_attack_dataset_graph = merge_result[0].to(device=cfg.accelerator)
 
     if additional_injection_datasets is None:
         total_additional_datasets_graph = None
@@ -58,7 +80,7 @@ def get_total_dataset_graphs(
             for graph_to_add in additional_dataset:
                 graph_to_add.edge_index = torch.empty((2, 0), dtype=torch.long)
                 if not include_root_nodes:
-                    graph_to_add = filter_out_root_node(graph_to_add, root_node_idx)
+                    graph_to_add = filter_out_root_node(graph_to_add)
                 graphs_to_join.append(graph_to_add)
         merge_result = collate(
             cls=Data,
@@ -67,7 +89,7 @@ def get_total_dataset_graphs(
             add_batch=False,
             exclude_keys=["y"],
         )
-        total_additional_datasets_graph = merge_result[0].to(device=device)
+        total_additional_datasets_graph = merge_result[0].to(device=cfg.accelerator)
     
     return total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph
 

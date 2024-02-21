@@ -142,7 +142,9 @@ def get_connected_sampling_fun(
         if is_undirected:
             # indices stay the same, but max number is capped to exclude the non-connected
             n_total = n_ex_edges + n_block_edges
-            map_fun = lambda x: x
+            
+            def map_fun(x):
+                return x
 
         else:
             # remap the indices that belong to 'second block'
@@ -167,35 +169,16 @@ def get_connected_sampling_fun(
 
         else:
             n_total = 2 * n_block_edges
-            # TODO: increment first block by (row_num+1)*n_ex_nodes
-            # second block row num with offset by n_block_edges + global offset -> 
-            raise NotImplementedError
+            # increment first block by (row_num + 1) * n_ex_nodes
+            # increment second block by n_ex_edges + (row_num) * n_new_nodes 
+
+            def map_fun(x):
+                mask = x < n_block_edges
+                x[mask] += ((x[mask] // n_new_nodes) + 1) * n_ex_nodes
+                x[~mask] += n_ex_edges + ((x[~mask] - n_block_edges) // n_ex_nodes) * n_new_nodes
+                return x
 
     def sampling_fun(n):
         return map_fun(torch.randint(n_total, (n, ), device=device))
     
     return sampling_fun
-    
-
-if __name__ == "__main__":
-    max_index = 12
-    weighted_idx = torch.tensor([7, 1, 5], dtype=torch.int64)
-    zero_idx = torch.tensor([8, 9, 3], dtype=torch.int64)
-    w = 3
-    sampler = WeightedIndexSampler(
-        weighted_idx=weighted_idx,
-        zero_idx=zero_idx,
-        weight=w,
-        max_index=max_index,
-        output_device=torch.device("cpu"),
-    )
-    n = 10000
-    s = sampler.sample(n)
-    sample_values, sample_frequencies = torch.unique(s, sorted=True, return_counts=True)
-    d = {i: 0.0 for i in range(max_index + 1)}
-    for v, f in zip(list(sample_values), list(sample_frequencies)):
-        d[int(v.item())] = ((f / n) * sampler.n_total).item()
-    for v, relative_f in d.items():
-        rounded = round(relative_f)
-        error = relative_f - rounded
-        print(f"{v:>2}:  {rounded}  ({error:+.3f})")

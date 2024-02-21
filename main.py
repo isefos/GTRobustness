@@ -3,11 +3,10 @@ import datetime
 import os
 import torch
 import logging
-import seml
 import yaml
 from yacs.config import CfgNode
 from argparse import Namespace
-from sacred import Experiment
+from seml.experiment import Experiment
 
 import graphgps  # noqa, register custom modules
 from graphgps.optimizer.extra_optimizers import ExtendedSchedulerConfig
@@ -22,6 +21,7 @@ from torch_geometric.graphgym.model_builder import create_model
 from torch_geometric.graphgym.utils.comp_budget import params_count
 from torch_geometric.graphgym.utils.device import auto_select_device
 from torch_geometric.graphgym.register import train_dict
+from torch_geometric.graphgym.checkpoint import MODEL_STATE
 from torch_geometric import seed_everything
 from graphgps.finetuning import (
     load_pretrained_model_cfg, init_model_from_pretrained,
@@ -54,25 +54,18 @@ def new_scheduler_config(cfg):
     )
 
 
-def get_attack_datasets(loaders):
-    splits = ["train", "val", "test"]
-    split_to_attack_idx = splits.index(cfg.attack.split)
-    dataset_to_attack = loaders[split_to_attack_idx].dataset
-
-    additional_injection_datasets = None
-    inject_nodes_from_attack_dataset = False
-
-    if cfg.attack.enable_node_injection:
-        include_additional_datasets = [
-            cfg.attack.node_injection_from_train,
-            cfg.attack.node_injection_from_val,
-            cfg.attack.node_injection_from_test,
-        ]
-        inject_nodes_from_attack_dataset = include_additional_datasets[split_to_attack_idx]
-        include_additional_datasets[split_to_attack_idx] = False
-        additional_injection_datasets = [l.dataset for i, l in enumerate(loaders) if include_additional_datasets[i]]
-
-    return dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset
+def load_best_val_model(model, training_results):
+    assert cfg.train.enable_ckpt and cfg.train.ckpt_best, (
+        "To load best model, enable checkpointing and set ckpt_best"
+    )
+    # load best model checkpoint before attack
+    ckpt_file = os.path.join(cfg.run_dir, "ckpt", f"{training_results['best_val_epoch']}.ckpt")
+    ckpt = torch.load(ckpt_file, map_location=torch.device('cpu'))
+    best_model_dict = ckpt[MODEL_STATE]
+    model_dict = model.state_dict()
+    model_dict.update(best_model_dict)
+    model.load_state_dict(model_dict)
+    return model
 
     
 def main(cfg):
@@ -105,66 +98,21 @@ def main(cfg):
 
     # Train
     assert cfg.train.mode != 'standard', "Default train.mode not supported, use `custom` (or other specific mode)"
-    train_results = train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
+    training_results = train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
 
     # Attack
     attack_results = None
     if cfg.attack.enable:
-
         if cfg.attack.load_best_model:
-            assert cfg.train.enable_ckpt and cfg.train.ckpt_best, (
-                "To load best model, enable checkpointing and set ckpt_best"
-            )
-            # load best model checkpoint before attack
-            from torch_geometric.graphgym.checkpoint import MODEL_STATE
-
-            ckpt_file = os.path.join(cfg.run_dir, "ckpt", f"{train_results['best_val_epoch']}.ckpt")
-            ckpt = torch.load(ckpt_file, map_location=torch.device('cpu'))
-            best_model_dict = ckpt[MODEL_STATE]
-            model_dict = model.state_dict()
-            model_dict.update(best_model_dict)
-            model.load_state_dict(model_dict)
-
-        attack_dataset, injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
-        
-        attack_results = prbcd_attack_dataset(
-            model=model,
-            dataset_to_attack=attack_dataset,
-            node_injection_attack=cfg.attack.enable_node_injection,
-            additional_injection_datasets=injection_datasets,
-            inject_nodes_from_attack_dataset=inject_nodes_from_attack_dataset,
-            device=torch.device(cfg.accelerator),
-            attack_loss=cfg.attack.loss,
-            num_attacked_graphs=cfg.attack.num_attacked_graphs,
-            e_budget=cfg.attack.e_budget,
-            block_size=cfg.attack.block_size,
-            lr=cfg.attack.lr,
-            is_undirected=cfg.attack.is_undirected,
-            sigmoid_threshold=cfg.model.thresh,
-            existing_node_prob_multiplier=cfg.attack.existing_node_prob_multiplier,
-            allow_existing_graph_pert=cfg.attack.allow_existing_graph_pert,
-            remove_isolated_components=cfg.attack.remove_isolated_components,
-            root_node_idx=cfg.attack.root_node_idx,
-            include_root_nodes_for_injection=cfg.attack.include_root_nodes_for_injection,
-            sample_only_connected=cfg.attack.sample_only_connected,
-            sample_only_trees=cfg.attack.sample_only_trees,
-        )
+            model = load_best_val_model(model, training_results)
+        attack_results = prbcd_attack_dataset(model, loaders)
 
     logging.info(f"[*] Finished now: {datetime.datetime.now()}")
-    results = {"train": train_results, "attack": attack_results}
+    results = {"training": training_results, "attack": attack_results}
     return results
 
 
 ex = Experiment()
-seml.setup_logger(ex)
-
-
-@ex.config
-def config():
-    overwrite = None
-    db_collection = None
-    if db_collection is not None:
-        ex.observers.append(seml.create_mongodb_observer(db_collection, overwrite=overwrite))
 
 
 def convert_cfg_to_dict(cfg_node):

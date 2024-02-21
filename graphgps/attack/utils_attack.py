@@ -1,6 +1,9 @@
 import torch
 
 
+# Not used anymore, may be useful for fast debugging
+
+
 def get_reached_nodes(root: int, edge_index: torch.Tensor) -> set[int]:
     children_nodes = get_undirected_graph_node_children(edge_index)
     # DFS to find all reachable nodes:
@@ -34,9 +37,6 @@ def get_undirected_graph_node_children(edge_index: torch.Tensor) -> dict[int, se
 
 
 def check_if_tree(edge_index: torch.Tensor) -> bool:
-    # TODO: better library way to check this (pyg or scipy)? 
-    # -> also instead of checking when constructing attack dataset, 
-    #    could check in master loader already if cfg says it is tree, error if not tree...
     root = int(edge_index[0, 0])
     children_nodes = get_undirected_graph_node_children(edge_index)
     # DFS check wheather a child has already been visited from different parent

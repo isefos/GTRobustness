@@ -20,6 +20,8 @@ from graphgps.attack.sampling import WeightedIndexSampler, get_connected_samplin
 from torch_geometric.graphgym.loss import compute_loss
 import logging
 
+from torch_geometric.graphgym.config import cfg
+
 
 # (predictions, labels, ids/mask) -> Tensor with one element
 LOSS_TYPE = Callable[[Tensor, Tensor, Optional[Tensor]], Tensor]
@@ -70,62 +72,18 @@ class PRBCDAttack(torch.nn.Module):
 
     Args:
         model (torch.nn.Module): The GNN module to assess.
-        block_size (int): Number of randomly selected elements in the
-            adjacency matrix to consider.
-        epochs (int, optional): Number of epochs (aborts early if
-            :obj:`mode='greedy'` and budget is satisfied) (default: :obj:`125`)
-        epochs_resampling (int, optional): Number of epochs to resample the
-            random block. (default: obj:`100`)
-        loss (str or callable, optional): A loss to quantify the "strength" of
-            an attack. Note that this function must match the output format of
-            :attr:`model`. By default, it is assumed that the task is
-            classification and that the model returns raw predictions (*i.e.*,
-            no output activation) or uses :obj:`logsoftmax`. Moreover, and the
-            number of predictions should match the number of labels passed to
-            :attr:`attack`. Either pass a callable or one of: :obj:`'masked'`,
-            :obj:`'margin'`, :obj:`'prob_margin'`, :obj:`'tanh_margin'`.
-            (default: :obj:`'prob_margin'`)
-        metric (callable, optional): Second (potentially
-            non-differentiable) loss for monitoring or early stopping (if
-            :obj:`mode='greedy'`). (default: same as :attr:`loss`)
-        lr (float, optional): Learning rate for updating edge weights.
-            Additionally, it is heuristically corrected for :attr:`block_size`,
-            budget (see :attr:`attack`) and graph size. (default: :obj:`1_000`)
         is_undirected (bool, optional): If :obj:`True` the graph is
             assumed to be undirected. (default: :obj:`True`)
-        log (bool, optional): If set to :obj:`False`, will not log any learning
-            progress. (default: :obj:`True`)
     """
-    coeffs = {
-        'max_final_samples': 20,
-        'max_trials_sampling': 20,
-        'with_early_stopping': True,
-        'eps': 1e-7,
-    }
 
-    def __init__(
-        self,
-        model: torch.nn.Module,
-        block_size: int,
-        epochs: int = 125,
-        epochs_resampling: int = 100,
-        loss: Optional[Union[str, LOSS_TYPE]] = 'prob_margin',
-        metric: Optional[Union[str, LOSS_TYPE]] = None,
-        lr: float = 1_000,
-        is_undirected: bool = True,
-        log: bool = True,
-        existing_node_prob_multiplier: int = 1,
-        allow_existing_graph_pert: bool = True,
-        sample_only_connected: bool = True,
-        sample_only_trees: bool = False,
-        **kwargs,
-    ):
+    def __init__(self, model: torch.nn.Module, is_undirected: bool = True):
         super().__init__()
 
         self.model = model
-        self.block_size = block_size
-        self.epochs = epochs
+        self.block_size = cfg.attack.block_size
+        self.epochs = cfg.attack.epochs
 
+        loss: Optional[Union[str, LOSS_TYPE]] = cfg.attack.loss
         if isinstance(loss, str):
             if loss == 'masked':
                 self.loss = self._masked_cross_entropy
@@ -143,33 +101,38 @@ class PRBCDAttack(torch.nn.Module):
             self.loss = loss
 
         self.is_undirected = is_undirected
-        self.log = log
-        self.metric = metric or self.loss
+        self.log = cfg.attack.log_progress
+        self.metric = cfg.attack.metric or self.loss
 
-        self.epochs_resampling = epochs_resampling
-        self.lr = lr
+        self.epochs_resampling = cfg.attack.epochs_resampling
+        self.lr = cfg.attack.lr
 
         # settings different sampling startegies
-        self.existing_node_prob_multiplier = existing_node_prob_multiplier
+        self.existing_node_prob_multiplier = cfg.attack.existing_node_prob_multiplier
         self.included_weighted = not self.existing_node_prob_multiplier == 1
-        assert not (self.included_weighted and sample_only_connected), (
+        assert not (self.included_weighted and cfg.attack.sample_only_connected), (
             "Either sample only from connected edges, or weighted (with relative weight for connected edges)"
         )
-        self.sample_only_connected = sample_only_connected
-        assert allow_existing_graph_pert or self.sample_only_connected or self.included_weighted, (
+        self.sample_only_connected = cfg.attack.sample_only_connected
+        assert cfg.attack.allow_existing_graph_pert or self.sample_only_connected or self.included_weighted, (
             "not allowing existing graph perturbations is only supported for "
             "weighted sampling (using existing_node_prob_multiplier != 1) or "
             "sampling only 'connected' edges (using sample_only_connected=True)"
         )
-        self.allow_existing_graph_pert = allow_existing_graph_pert
+        self.allow_existing_graph_pert = cfg.attack.allow_existing_graph_pert
 
         # will make sure that perturbations remain trees
-        assert not (sample_only_trees and not is_undirected), (
+        assert not (cfg.attack.sample_only_trees and not is_undirected), (
             "Sampling only trees is only supported for undirected graphs"
         )
-        self.sample_only_trees = sample_only_trees
+        self.sample_only_trees = cfg.attack.sample_only_trees
 
-        self.coeffs.update(kwargs)
+        self.coeffs = {
+            'max_final_samples': cfg.attack.max_final_samples,
+            'max_trials_sampling': cfg.attack.max_trials_sampling,
+            'with_early_stopping': cfg.attack.with_early_stopping,
+            'eps': cfg.attack.eps,
+        }
 
     def _setup_sampling(self):
         num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)

@@ -5,26 +5,23 @@ from torch_geometric.utils import to_scipy_sparse_matrix, index_to_mask
 from scipy.sparse.csgraph import breadth_first_order
 from typing import Callable
 import functools
+from torch_geometric.graphgym.config import cfg
 
 
 def forward_wrapper(forward: Callable, is_undirected: bool) -> Callable:
 
     @functools.wraps(forward)
-    def wrapped_forward(
-        data: Batch,
-        root_node: None | int = None,
-        remove_not_connected: bool = False,
-        recompute_preprocessing: bool = False,
-        unmodified: bool = True,
-    ):
+    def wrapped_forward(data: Batch, unmodified: bool = False):
         if unmodified:
+            data.recompute_preprocessing = False
             return forward(data)[0]
         assert data.num_graphs == 1
-        if remove_not_connected:
+        if cfg.attack.remove_isolated_components:
+            root_node = cfg.attack.root_node_idx
             if root_node is not None:
                 data, root_node = get_only_root_graph(data, root_node)
             else:
-                # TODO: add option when root is None -> select the largest conected subgraph as new graph
+                # TODO: add option when root is None -> select the largest connected subgraph as new graph
                 raise NotImplementedError
             
         use_64bit = False
@@ -40,8 +37,7 @@ def forward_wrapper(forward: Callable, is_undirected: bool) -> Callable:
             num_iterations=num_iterations,
             use_64bit=use_64bit,
         )
-        if recompute_preprocessing:
-            data.recompute_preprocessing = True
+        data.recompute_preprocessing = True
         return forward(data)[0]
 
     return wrapped_forward

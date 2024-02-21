@@ -183,7 +183,6 @@ class WeightedBiasEncoder(torch.nn.Module):
         # them into index and value. One example is the adjacency matrix
         # but this generalizes actually to any 2D matrix
         if self.use_weighted_path_distance and hasattr(data, "spatial_types_weights"):
-            # TODO: multiply and sum like in degrees
             spatial_types: torch.Tensor = (
                 data.spatial_types_weights[:, :, None] * self.spatial_encoder(data.spatial_types)
             ).sum(1)

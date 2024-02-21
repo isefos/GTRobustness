@@ -1,19 +1,24 @@
 import torch
 from torch_geometric.loader import DataLoader
-from torch_geometric.data import Dataset
 from graphgps.attack.prbcd import PRBCDAttack
 from torch_geometric.data import Data, Batch
-from graphgps.attack.dataset_attack import get_total_dataset_graphs, get_augmented_graph
-from graphgps.attack.utils_attack import check_if_tree
+from graphgps.attack.dataset_attack import (
+    get_total_dataset_graphs,
+    get_augmented_graph,
+    get_attack_datasets,
+)
 from graphgps.attack.preprocessing import forward_wrapper
 from graphgps.attack.postprocessing import (
-    get_prediction_stats,
-    log_and_accumulate_output,
+    get_empty_accumulated_stats,
+    accumulate_output_stats,
+    get_output_stats,
+    log_and_accumulate_pert_output_stats,
     basic_edge_and_node_stats,
     log_and_accumulate_num_stats,
     log_summary_stats,
 )
 import logging
+from torch_geometric.graphgym.config import cfg
 
 
 # TODO: dataset analysis:
@@ -25,119 +30,40 @@ import logging
 #     - In other graphs?
 
 
-def prbcd_attack_dataset(
-    model,
-    dataset_to_attack: Dataset,
-    node_injection_attack: bool,
-    additional_injection_datasets: None | list[Dataset],
-    inject_nodes_from_attack_dataset: bool,
-    device: torch.device,
-    attack_loss: str,
-    num_attacked_graphs: int,
-    e_budget: float,
-    block_size: int,  # e.g. 1_000
-    lr: float,  # e.g. 1_000
-    is_undirected: bool,
-    sigmoid_threshold: float,
-    existing_node_prob_multiplier: int,
-    allow_existing_graph_pert: bool,
-    remove_isolated_components: bool,
-    root_node_idx: None | int,
-    include_root_nodes_for_injection: bool,
-    sample_only_connected: bool,
-    sample_only_trees: bool,
-):
+def prbcd_attack_dataset(model, loaders):
     logging.info("Start of attack:")
+    is_undirected = cfg.attack.is_undirected
     model.eval()
     model.forward = forward_wrapper(model.forward, is_undirected)
 
-    prbcd = PRBCDAttack(
-        model,
-        block_size=block_size,
-        lr=lr,
-        is_undirected=is_undirected,
-        loss=attack_loss,
-        existing_node_prob_multiplier=existing_node_prob_multiplier,
-        allow_existing_graph_pert=allow_existing_graph_pert,
-        sample_only_connected=sample_only_connected,
-        sample_only_trees=sample_only_trees,
-    )
+    prbcd = PRBCDAttack(model, is_undirected)
 
-    accumulated_stats = {
-        "correct_clean": [],
-        "correct_pert": [],
-        "correct_pert_random": [],
-        "margin_clean": [],
-        "margin_pert": [],
-        "margin_pert_random": [],
-        "num_edges_clean": [],
-        "num_edges_added": [],
-        "num_edges_added_random": [],
-        "num_edges_added_connected": [],
-        "num_edges_added_connected_random": [],
-        "num_edges_removed": [],
-        "num_edges_removed_random": [],
-        "num_nodes_clean": [],
-        "num_nodes_added": [],
-        "num_nodes_added_random": [],
-        "num_nodes_added_connected": [],
-        "num_nodes_added_connected_random": [],
-        "num_nodes_removed": [],
-        "num_nodes_removed_random": [],
-    }
+    accumulated_stats = get_empty_accumulated_stats()
 
+    dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
     total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = None, None, None
-    if node_injection_attack:
-        
+    if cfg.attack.enable_node_injection:
         # TODO: attach a global index to all possible nodes, that can later be used to trace which nodes where added
         # how many times
-
         total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = get_total_dataset_graphs(
             inject_nodes_from_attack_dataset=inject_nodes_from_attack_dataset,
             dataset_to_attack=dataset_to_attack,
             additional_injection_datasets=additional_injection_datasets,
-            include_root_nodes=include_root_nodes_for_injection,
-            root_node_idx=root_node_idx,
-            device=device,
+            include_root_nodes=cfg.attack.include_root_nodes_for_injection,
         )
 
     clean_loader = DataLoader(dataset_to_attack, batch_size=1, shuffle=False)
 
     for i, clean_data in enumerate(clean_loader):
-        if num_attacked_graphs and i >= num_attacked_graphs:
+        if cfg.attack.num_attacked_graphs and i >= cfg.attack.num_attacked_graphs:
             break
 
         num_nodes = clean_data.x.size(0)
         num_edges = clean_data.edge_index.size(1)
 
-        skip = False
-        skip_msg = ""
-
-        # TODO: allow for other ways to define the budget
-            
-        budget_edges = num_edges / 2 if is_undirected else num_edges
-        global_budget = int(e_budget * budget_edges)
-
-        # TODO: make argument
-        set_minimum_budget = False
-        if not global_budget:
-            if set_minimum_budget:
-                global_budget = 1
-                logging.info("Budget would be 0, setting it to 1 to enable attack.")
-            else:
-                skip_msg = "because budget is 0."
-                skip = True
-
-        if not skip:
-            clean_data.to(device)
-            with torch.no_grad():
-                output_clean = model(clean_data.clone())
-            probs_clean, logits_clean, correct_clean, margin_clean = get_prediction_stats(
-                clean_data.y, output_clean, sigmoid_threshold,
-            )
-            if not correct_clean:
-                skip_msg = "because it is already incorrectly classified by model."
-                skip = True
+        skip, skip_msg, global_budget, output_clean, output_stats_clean = check_budget_and_clean_data(
+            model, clean_data,
+        )
 
         if skip:
             logging.info(f"Skipping graph {i + 1}, {skip_msg}")
@@ -151,11 +77,14 @@ def prbcd_attack_dataset(
 
         logging.info(f"Attacking graph {i + 1}")
 
-        # get the graph to attack (potentioally augmented)
+        if skip_msg:
+            logging.info(skip_msg)
 
+        accumulate_output_stats(accumulated_stats, output_stats_clean, mode="clean", random=False)
+
+        # get the graph to attack (potentially augmented)
         attack_graph_data = get_attack_graph(
             graph_data=clean_data.get_example(0),
-            node_injection_attack=node_injection_attack,
             total_attack_dataset_graph=total_attack_dataset_graph,
             attack_dataset_slice=None if attack_dataset_slices is None else attack_dataset_slices[i],
             total_additional_datasets_graph=total_additional_datasets_graph,
@@ -166,137 +95,105 @@ def prbcd_attack_dataset(
         if _check_augmentation_correctness:
             attack_graph_data.edge_attr = torch.ones(attack_graph_data.edge_index.size(1))
             with torch.no_grad():
-                augmented_output = model(
-                    Batch.from_data_list([attack_graph_data.clone()]),
-                    root_node=root_node_idx,
-                    remove_not_connected=remove_isolated_components,
-                    recompute_preprocessing=True,
-                    unmodified=False,
-                )
+                augmented_output = model(Batch.from_data_list([attack_graph_data.clone()]))
             assert torch.allclose(output_clean, augmented_output, atol=0.001, rtol=0.001)
 
-        # attack
+        # attack (with PRBCD then random baseline if specified)
+        random_attacks = [False, True] if cfg.attack.run_random_baseline else [False]
+        for random_attack in random_attacks:
 
-        pert_edge_index, perts = attack_single_graph(
-            attack_graph_data=attack_graph_data,
-            is_undirected=is_undirected,
-            model=model,
-            attack=prbcd,
-            global_budget=global_budget,
-            root_node_idx=root_node_idx,
-            remove_isolated_components=remove_isolated_components,
-            random_attack=False,
-            _model_forward_already_wrapped=True,
-            _keep_forward_wrapped=True,
-        )
-
-        num_modified_edges = perts.size(1)
-        logging.info(f"Perturbation uses {100 * num_modified_edges / global_budget:.1f}% of the given attack budget.")
-
-        if not check_if_tree(pert_edge_index):
-            # TODO: add tree generation (minimum spanning tree) to attack (when specified)
-            logging.info("WARNING: PERTURBATION IS NOT A TREE ANYMORE!")
-
-        # check output of the perturbed graph
-
-        pert_data = attack_graph_data.clone()
-        pert_data.edge_index = pert_edge_index
-        pert_data.edge_attr = torch.ones(pert_edge_index.size(1), device=device)
-        with torch.no_grad():
-            output_pert = model(
-                Batch.from_data_list([pert_data.clone()]),
-                root_node=root_node_idx,
-                remove_not_connected=remove_isolated_components,
-                recompute_preprocessing=True,
-                unmodified=False,
+            pert_edge_index, perts = attack_single_graph(
+                attack_graph_data=attack_graph_data,
+                is_undirected=is_undirected,
+                model=model,
+                attack=prbcd,
+                global_budget=global_budget,
+                random_attack=random_attack,
+                _model_forward_already_wrapped=True,
+                _keep_forward_wrapped=True,
             )
 
-        log_and_accumulate_output(
-            clean_data.y,
-            probs_clean,
-            logits_clean,
-            correct_clean,
-            margin_clean,
-            output_pert,
-            sigmoid_threshold,
-            accumulated_stats,
-            random=False,
-        )
-        stats, num_stats = basic_edge_and_node_stats(
-            clean_data.edge_index,
-            pert_edge_index,
-            root=root_node_idx,
-            num_edges=num_edges,
-            num_nodes=num_nodes,
-            is_undirected=is_undirected,
-        )
-        log_and_accumulate_num_stats(accumulated_stats, num_stats, random=False)
+            num_modified_edges = perts.size(1)
+            relative_budget_used = num_modified_edges / global_budget
+            key = "budget_used_random" if random_attack else "budget_used"
+            accumulated_stats[key].append(relative_budget_used)
+            m = "Random perturbation" if random_attack else "Perturbation"
+            logging.info(f"{m} uses {100 * relative_budget_used:.1f}% of the given attack budget.")
 
-        # random baseline attack
+            # check output of the perturbed graph
+            pert_data = attack_graph_data.clone()
+            pert_data.edge_index = pert_edge_index
+            pert_data.edge_attr = torch.ones(pert_edge_index.size(1), device=cfg.accelerator)
+            with torch.no_grad():
+                output_pert = model(Batch.from_data_list([pert_data.clone()]))
 
-        rand_pert_edge_index, rand_perts = attack_single_graph(
-            attack_graph_data=attack_graph_data,
-            is_undirected=is_undirected,
-            model=model,
-            attack=prbcd,
-            global_budget=global_budget,
-            root_node_idx=root_node_idx,
-            remove_isolated_components=remove_isolated_components,
-            random_attack=True,
-            _model_forward_already_wrapped=True,
-            _keep_forward_wrapped=True,
-        )
-
-        num_modified_edges = rand_perts.size(1)
-        logging.info(
-            f"Random perturbation uses {100 * num_modified_edges / global_budget:.1f}% of the given attack budget."
-        )
-
-        if not check_if_tree(rand_pert_edge_index):
-            logging.info("WARNING: RANDOM PERTURBATION IS NOT A TREE ANYMORE!")
-
-        rand_pert_data = attack_graph_data.clone()
-        rand_pert_data.edge_index = rand_pert_edge_index
-        rand_pert_data.edge_attr = torch.ones(rand_pert_edge_index.size(1), device=device)
-        with torch.no_grad():
-            output_rand_pert = model(
-                Batch.from_data_list([rand_pert_data.clone()]),
-                root_node=root_node_idx,
-                remove_not_connected=remove_isolated_components,
-                recompute_preprocessing=True,
-                unmodified=False,
+            log_and_accumulate_pert_output_stats(
+                y_gt=clean_data.y,
+                output_pert=output_pert,
+                output_stats_clean=output_stats_clean,
+                accumulated_stats=accumulated_stats,
+                random=random_attack,
             )
+            stats, num_stats = basic_edge_and_node_stats(
+                clean_data.edge_index,
+                pert_edge_index,
+                num_edges_clean=num_edges,
+                num_nodes_clean=num_nodes,
+                is_undirected=is_undirected,
+            )
+            log_and_accumulate_num_stats(
+                accumulated_stats,
+                num_stats,
+                random=random_attack,
+            )
+
         
-        log_and_accumulate_output(
-            clean_data.y,
-            probs_clean,
-            logits_clean,
-            correct_clean,
-            margin_clean,
-            output_rand_pert,
-            sigmoid_threshold,
-            accumulated_stats,
-            random=True,
-        )
-        stats_rand, num_stats_rand = basic_edge_and_node_stats(
-            clean_data.edge_index,
-            rand_pert_edge_index,
-            root=root_node_idx,
-            num_edges=num_edges,
-            num_nodes=num_nodes,
-            is_undirected=is_undirected,
-        )
-        log_and_accumulate_num_stats(accumulated_stats, num_stats_rand, random=True)
-
     summary_stats = log_summary_stats(accumulated_stats)
     model.forward = model.forward.__wrapped__
     logging.info("End of attack.")
-    return {"avg": summary_stats, "all": accumulated_stats}
+    return {"avg": summary_stats, "all": dict(accumulated_stats)}
+
+
+def check_budget_and_clean_data(model, clean_data):
+    skip = False
+    skip_msg = ""
+
+    # TODO: allow for other ways to define the budget
+    num_edges = clean_data.edge_index.size(1)
+    budget_edges = num_edges / 2 if cfg.attack.is_undirected else num_edges
+    global_budget = int(cfg.attack.e_budget * budget_edges)
+
+    if cfg.attack.minimum_budget > global_budget:
+        global_budget = cfg.attack.minimum_budget
+        skip_msg = (
+            f"Budget would be smaller than set minimum. Budget set to minimum, this means the relative budget "
+            f"was effectively increased from {cfg.attack.e_budget} to {cfg.attack.minimum_budget / budget_edges} "
+            f"for this graph."
+        )
+    if not global_budget:
+        skip_msg = "because budget is 0."
+        skip = True
+
+    if not skip:
+        clean_data.to(device=cfg.accelerator)
+        with torch.no_grad():
+            output_clean = model(clean_data.clone(), unmodified=True)
+
+        output_stats_clean = get_output_stats(clean_data.y, output_clean)
+        if (
+            cfg.dataset.task == "graph"
+            and cfg.attack.skip_incorrect_graph_classification
+            and "correct" in output_stats_clean
+            and not output_stats_clean["correct"]
+        ):
+            skip_msg = "because it is already incorrectly classified by model."
+            skip = True
+
+    return skip, skip_msg, global_budget, output_clean, output_stats_clean
 
 
 def get_attack_graph(
     graph_data: Data,
-    node_injection_attack: bool,
     total_attack_dataset_graph: None | Data,
     attack_dataset_slice: None | tuple[int, int],
     total_additional_datasets_graph: None | Data,
@@ -304,7 +201,7 @@ def get_attack_graph(
     """
     """
     num_edges = graph_data.edge_index.size(1)
-    if node_injection_attack:
+    if cfg.attack.enable_node_injection:
         assert attack_dataset_slice is not None
         graph_data_augmented = get_augmented_graph(
             graph=graph_data.clone(),
@@ -324,8 +221,6 @@ def attack_single_graph(
     model,
     attack: PRBCDAttack,
     global_budget: int,
-    root_node_idx: None | int,
-    remove_isolated_components: bool,
     random_attack: bool = False,
     _model_forward_already_wrapped: bool = False,
     _keep_forward_wrapped: bool = False,
@@ -342,10 +237,6 @@ def attack_single_graph(
         attack_graph_data.edge_index,
         attack_graph_data.y,
         budget=global_budget,
-        root_node=root_node_idx,
-        remove_not_connected=remove_isolated_components,
-        recompute_preprocessing=True,
-        unmodified=False,
     )
 
     if not _keep_forward_wrapped:

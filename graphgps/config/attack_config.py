@@ -12,14 +12,38 @@ def dataset_cfg(cfg):
     # whether to attack or not
     cfg.attack.enable = False
 
+    # whether to also run a random baseline attack
+    cfg.attack.run_random_baseline = True
+
     # load the best validation model before attack or not
     cfg.attack.load_best_model = True
+
+    # show progress bar or not
+    cfg.attack.log_progress = True
 
     # which split to attack, "train", "val", or "test"
     cfg.attack.split = "test"
 
     # set to 0 to attack all, n for only the first n
     cfg.attack.num_attacked_graphs = 0
+
+    # bla
+    cfg.attack.epochs = 125
+
+    # bla
+    cfg.attack.epochs_resampling = 100
+
+    # bla
+    cfg.attack.max_final_samples = 20
+
+    # bla
+    cfg.attack.max_trials_sampling = 20
+    
+    # bla
+    cfg.attack.with_early_stopping = True
+
+    # bla
+    cfg.attack.eps = 1e-7
 
     # bla
     cfg.attack.lr = 4_000
@@ -31,10 +55,19 @@ def dataset_cfg(cfg):
     cfg.attack.e_budget = 0.1
 
     # bla
-    cfg.attack.is_undirected = True
+    cfg.attack.minimum_budget = 0
 
     # bla
+    cfg.attack.is_undirected = True
+
+    # 'train', 'masked', 'margin', 'prob_margin', or 'tanh_margin' (or callable)
     cfg.attack.loss = "train"
+
+    # None (set to same as loss), 'train', 'masked', 'margin', 'prob_margin', or 'tanh_margin' (or callable)
+    cfg.attack.metric = None
+
+    # bla
+    cfg.attack.skip_incorrect_graph_classification = True
 
     # set True to do a node injection attack
     cfg.attack.enable_node_injection = False
@@ -58,7 +91,7 @@ def dataset_cfg(cfg):
     cfg.attack.remove_isolated_components = True
 
     # None or int -> give an int (e.g. 0) to tell the execution that the root node of a graph will always be on the given index
-    cfg.attack.root_node_idx: None | int = None
+    cfg.attack.root_node_idx = None
 
     # bla
     cfg.attack.include_root_nodes_for_injection = True
