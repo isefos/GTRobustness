@@ -8,10 +8,10 @@ graphgym:
   seed: 42
 
   dataset:
-    format: PyG-UPFD
-    name: politifact-spacy
-    task: graph
-    task_type: classification_binary
+    format: PyG
+    name: Cora
+    task: node
+    task_type: classification
     transductive: false
     split_mode: standard
     node_encoder: true
@@ -21,12 +21,11 @@ graphgym:
   posenc_GraphormerBias:
     enable: true
     node_degrees_only: false
-    num_spatial_types: 16
-    num_in_degrees: 32
-    num_out_degrees: 32
-    directed_graphs: false
+    num_spatial_types: 4
+    num_in_degrees: 10
+    num_out_degrees: 10
+    directed_graphs: true
     has_edge_attr: false
-    # next 2 only matter for attack, set to fixed false
     combinations_degree: false
     use_weighted_path_distance: true
 
@@ -52,7 +51,7 @@ graphgym:
     input_dropout: 0.0  # 0.1
 
   gnn:
-    dim_inner:  32
+    dim_inner: 32
     head: graphormer_graph
     layers_pre_mp: 0
     layers_post_mp: 2
@@ -85,20 +84,20 @@ graphgym:
     e_budget: 0.1
     minimum_budget: 0
     eps: 1e-7
-    is_undirected: true
-    loss: train
+    is_undirected: false
+    loss: tanh_margin
     metric: null
     max_final_samples: 20
     max_trials_sampling: 20
     with_early_stopping: true
-    enable_node_injection: true
-    node_injection_from_train: true
-    node_injection_from_val: true
-    node_injection_from_test: true
+    enable_node_injection: false
+    node_injection_from_train: false
+    node_injection_from_val: false
+    node_injection_from_test: false
     remove_isolated_components: true
-    root_node_idx: 0
-    include_root_nodes_for_injection: false
+    root_node_idx: null
+    include_root_nodes_for_injection: true
     existing_node_prob_multiplier: 1  # 1_000
-    sample_only_connected: true
-    sample_only_trees: true
-    allow_existing_graph_pert: false
+    sample_only_connected: false
+    sample_only_trees: false
+    allow_existing_graph_pert: true

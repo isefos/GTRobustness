@@ -45,8 +45,7 @@ def get_empty_accumulated_stats():
 
 def get_output_stats(y_gt, model_output):
     if cfg.dataset.task == "node":
-        # TODO: implement for node classification
-        raise NotImplementedError
+        return get_node_output_stats(y_gt, model_output)
     
     elif cfg.dataset.task == "graph":
         return get_graph_output_stats(y_gt, model_output)
@@ -55,7 +54,44 @@ def get_output_stats(y_gt, model_output):
         raise NotImplementedError
 
 
-def get_graph_output_stats(y_gt, model_output) -> tuple[torch.Tensor, torch.Tensor, bool, float]:
+def get_node_output_stats(y_gt, model_output):
+
+    if cfg.dataset.task_type.startswith("classification"):
+        logits = model_output[0, :]
+        y_multiclass: torch.Tensor
+        class_index_pred: int
+        probs: torch.Tensor
+
+        if cfg.dataset.task_type == "classification_binary":
+            y_binary = int(y_gt[0].item())
+            y_multiclass = torch.zeros(2, dtype=torch.long)
+            y_multiclass[y_binary] = 1
+            prob_binary = torch.sigmoid(logits)
+            class_index_pred = int(prob_binary > cfg.model.thresh)
+            probs = torch.cat([1 - prob_binary, prob_binary], dim=0)
+        
+        elif cfg.dataset.task_type == "classification":
+            y_multiclass = y_gt
+            class_index_pred = int(logits.argmax().item())
+            probs = logits.softmax(dim=0)
+
+        class_index_gt = int(y_multiclass.argmax().item())
+        y_correct_mask = y_multiclass.to(dtype=torch.bool)
+        margin = float((probs[y_correct_mask] - probs[~y_correct_mask].max()).item())
+        correct = class_index_pred == class_index_gt
+        output_stats = {
+            "probs": probs.tolist(),
+            "logits": logits.tolist(),
+            "correct": correct,
+            "margin": margin,
+        }
+        return output_stats
+
+    else:
+        raise NotImplementedError
+
+
+def get_graph_output_stats(y_gt, model_output):
 
     if cfg.dataset.task_type.startswith("classification"):
         logits = model_output[0, :]

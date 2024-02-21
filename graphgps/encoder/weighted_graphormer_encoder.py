@@ -32,10 +32,6 @@ def weighted_graphormer_pre_processing(
 ):
     """
     """
-    # TODO: only undirected implemented for now, add directed later
-    if directed_graphs:
-        raise NotImplementedError
-
     n = data.x.size(0)
     device = data.x.device
 
@@ -64,6 +60,7 @@ def weighted_graphormer_pre_processing(
             data.x.size(0), data.edge_index, data.edge_attr,
         )
     else:
+        # TODO: refactor!
         in_degrees_weighted = torch.scatter_add(
             input=torch.zeros(n, device=device),
             src=data.edge_attr,
@@ -81,8 +78,32 @@ def weighted_graphormer_pre_processing(
         # unweighted edges, remove zero degree encoding 
         # (never used during training, can't appear after discretization)
         weights_low[in_degrees_low == 0] = 0
-        data.degree_indices = torch.cat((in_degrees_low[:, None], in_degrees_high[:, None]), dim=1)
-        data.degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
+        if directed_graphs:
+            data.in_degree_indices = torch.cat((in_degrees_low[:, None], in_degrees_high[:, None]), dim=1)
+            data.in_degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
+            # now for out degrees as well
+            out_degrees_weighted = torch.scatter_add(
+                input=torch.zeros(n, device=device),
+                src=data.edge_attr,
+                index=data.edge_index[0, :],
+                dim=0,
+            )
+            # clamp to maximum degree
+            max_degree = max(num_in_degrees, num_out_degrees) - 1
+            out_degrees_weighted[out_degrees_weighted > max_degree] = max_degree
+            out_degrees_low = torch.floor(out_degrees_weighted).to(dtype=torch.long)
+            out_degrees_high = torch.ceil(out_degrees_weighted).to(dtype=torch.long)
+            weights_high = out_degrees_weighted - out_degrees_low
+            weights_low = out_degrees_high - out_degrees_weighted
+            weights_low[out_degrees_low == out_degrees_high] = 1
+            # unweighted edges, remove zero degree encoding 
+            # (never used during training, can't appear after discretization)
+            weights_low[out_degrees_low == 0] = 0
+            data.out_degree_indices = torch.cat((out_degrees_low[:, None], out_degrees_high[:, None]), dim=1)
+            data.out_degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
+        else:
+            data.degree_indices = torch.cat((in_degrees_low[:, None], in_degrees_high[:, None]), dim=1)
+            data.degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
 
     if cfg.posenc_GraphormerBias.node_degrees_only:
         return data
@@ -133,7 +154,8 @@ def weighted_graphormer_pre_processing(
         # just ignore the edge weights etirely
         spatial_types = get_shortest_paths(
             edge_index=data.edge_index,
-            num_nodes=n,directed=directed_graphs,
+            num_nodes=n,
+            directed=directed_graphs,
             max_distance=max_distance,
         )
 
@@ -253,10 +275,16 @@ class WeightedNodeEncoder(torch.nn.Module):
             else:
                 # continuous relaxation during attack
                 if self.combinations_degree:
+                    # TODO: this doesn't quite seem right...
                     in_degree_encoding = data.degree_weights @ self.in_degree_encoder(data.degree_indices)
                     out_degree_encoding = data.degree_weights @ self.out_degree_encoder(data.degree_indices)
                 else:
-                    raise NotImplementedError
+                    in_degree_encoding = (
+                        data.in_degree_weights[:, :, None] * self.in_degree_encoder(data.in_degree_indices)
+                    ).sum(1)
+                    out_degree_encoding = (
+                        data.out_degree_weights[:, :, None] * self.out_degree_encoder(data.out_degree_indices)
+                    ).sum(1)
             degree_encoding = in_degree_encoding + out_degree_encoding
         else:
             if hasattr(data, "degrees"):

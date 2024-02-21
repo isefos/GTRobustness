@@ -316,15 +316,13 @@ def preformat_MalNetTiny(dataset_dir, feature_set):
     else:
         raise ValueError(f"Unexpected transform function: {feature_set}")
 
-    dataset = MalNetTiny(dataset_dir)
+    dataset = join_dataset_splits(
+        [MalNetTiny(root=dataset_dir, split=split) for split in ['train', 'val', 'test']]
+    )
     dataset.name = 'MalNetTiny'
+
     logging.info(f'Computing "{feature_set}" node features for MalNetTiny.')
     pre_transform_in_memory(dataset, tf)
-
-    split_dict = dataset.get_idx_split()
-    dataset.split_idxs = [split_dict['train'],
-                          split_dict['valid'],
-                          split_dict['test']]
 
     return dataset
 
