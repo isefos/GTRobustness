@@ -142,8 +142,12 @@ def weighted_graphormer_pre_processing(
             # but then use the actual hops of those paths as distance
             inv_edge_attr = 1 / data.edge_attr.detach()
             adj_weighted = to_scipy_sparse_matrix(data.edge_index, edge_attr=inv_edge_attr, num_nodes=n).tocsr()
-            _, predecessors_np = csgraph.shortest_path(
-                adj_weighted, method="auto", directed=directed_graphs, return_predecessors=True, unweighted=False,
+            _, predecessors_np = csgraph.dijkstra(
+                adj_weighted,
+                directed=directed_graphs,
+                return_predecessors=True,
+                unweighted=False,
+                limit=max_distance,
             )
             adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsr()
             distances_hop_np = csgraph.construct_dist_matrix(adj, predecessors_np, directed=directed_graphs)
@@ -595,14 +599,20 @@ def distances_shortest_weighted_paths(
     num_distances = num_nodes ** 2
     inv_edge_attr = 1 / edge_attr
     adj_weighted = to_scipy_sparse_matrix(edge_index, edge_attr=inv_edge_attr.detach(), num_nodes=num_nodes).tocsr()
-    distances_weighted_np, predecessors_np = csgraph.shortest_path(
-        adj_weighted, method="auto", directed=directed_graphs, return_predecessors=True, unweighted=False,
+    distances_weighted_np, predecessors_np = csgraph.dijkstra(
+        adj_weighted,
+        directed=directed_graphs,
+        return_predecessors=True,
+        unweighted=False,
+        limit=max_distance,
     )
     distances_weighted_np = distances_weighted_np.reshape(num_distances)
     clamped_distance_mask_np = distances_weighted_np > max_distance
+    distances_weighted_np[clamped_distance_mask_np] = max_distance
     adj = to_scipy_sparse_matrix(edge_index, num_nodes=num_nodes).tocsr()
     distances_hop_np = csgraph.construct_dist_matrix(adj, predecessors_np, directed=directed_graphs)
-    distances_hop_np[distances_hop_np > max_distance] = max_distance
+    distances_hop_np = distances_hop_np.reshape(num_distances)
+    distances_hop_np[clamped_distance_mask_np] = max_distance
     max_hops = int(distances_hop_np.max())
 
     device = edge_index.device
@@ -617,17 +627,10 @@ def distances_shortest_weighted_paths(
             max_hops=max_hops,
             clamped_distance_mask=clamped_distance_mask,
             predecessors_np=predecessors_np,
+            distances_weighted_np=distances_weighted_np,
         )
-
-        debug = False
-        if debug:
-            distances_clamped = torch.tensor(distances_weighted_np, dtype=torch.float32, device=device)
-            distances_clamped[clamped_distance_mask] = max_distance
-            assert torch.allclose(distances_weighted, distances_clamped)
-
     else:
         distances_weighted = torch.tensor(distances_weighted_np, dtype=torch.float32, device=device)
-        distances_weighted[distances_weighted > max_distance] = max_distance
 
     return distances_weighted
 
@@ -641,6 +644,7 @@ def reconstruct_weighted_distances_over_path(
     max_hops: int,
     clamped_distance_mask: torch.Tensor,
     predecessors_np,
+    distances_weighted_np,
 ):
     device = edge_index.device
     # get dense inv adj for easier indexing in path reconstruction
@@ -651,39 +655,29 @@ def reconstruct_weighted_distances_over_path(
         dim_size=num_distances,
         reduce='sum',
     )
-    # "hack": because we know that the self loops are zero, 
-    # we can just put all the negative indices to (0, 0) -> 0
-    # then we are technically always adding that first self-loop edge for "non-edges", 
-    # but doesn't matter since we are just adding 0
-    assert inv_adj[0].item() == 0
-    true_distance_mask = ~clamped_distance_mask
+
     distances_weighted = torch.zeros((num_distances, ), device=device)
-
-    p_original = torch.tensor(predecessors_np.reshape((num_distances, )), dtype=torch.long, device=device)
-    adj_col_idx = p_original[true_distance_mask]
-    neg_mask = adj_col_idx < 0
-    adj_col_idx[neg_mask] = 0
-    # ends: torch.arange(n, dtype=torch.long).repeat(n)
-    adj_row_idx = torch.arange(num_nodes, dtype=torch.long, device=device).repeat(num_nodes)[true_distance_mask]
-    adj_row_idx[neg_mask] = 0
-    adj_lin_idx = num_nodes * adj_col_idx + adj_row_idx
-    distances_weighted[true_distance_mask] += inv_adj[adj_lin_idx]
-
-    row_idx = torch.zeros((num_distances, ), dtype=torch.long, device=device)
-    col_idx = torch.arange(num_nodes, dtype=torch.long, device=device).repeat_interleave(num_nodes)
-    p_prev = p_original
-    for i in range(max_hops - 1):
-        row_idx = p_prev.clone()
-        row_idx[row_idx < 0] = col_idx[row_idx < 0]
-        p_next = p_original[num_nodes * col_idx + row_idx]
-        adj_col_idx = p_prev[true_distance_mask]
-        adj_row_idx = p_next[true_distance_mask]
-        neg_mask = torch.logical_or(adj_col_idx < 0, adj_row_idx < 0)
-        adj_lin_idx = num_nodes * adj_col_idx + adj_row_idx
-        adj_lin_idx[neg_mask] = 0
-        distances_weighted[true_distance_mask] += inv_adj[adj_lin_idx]
-        p_prev = p_next
     distances_weighted[clamped_distance_mask] = max_distance
+    predecessors = torch.tensor(predecessors_np.reshape((num_distances, )), dtype=torch.long, device=device)
+    has_next_mask = predecessors >= 0
+
+    # note that "current" and "next" are essentialy reversed here,
+    # we start at the end of the path (index j -> row) and make our way to the start (index i -> col)
+    cols = torch.arange(num_nodes, dtype=torch.long, device=device).repeat_interleave(num_nodes)[has_next_mask]
+    current_nodes = torch.arange(num_nodes, dtype=torch.long, device=device).repeat(num_nodes)[has_next_mask]
+    adj_pairs_idx = num_nodes * cols + current_nodes
+
+    for _ in range(max_hops):
+        next_nodes = predecessors[num_nodes * cols + current_nodes]
+        distances_weighted[adj_pairs_idx] += inv_adj[num_nodes * next_nodes + current_nodes]
+        current_nodes = next_nodes
+        path_incomplete_mask = current_nodes != cols
+        current_nodes = current_nodes[path_incomplete_mask]
+        cols = cols[path_incomplete_mask]
+        adj_pairs_idx = adj_pairs_idx[path_incomplete_mask]
+
+    assert current_nodes.numel() == 0
+    assert torch.allclose(distances_weighted, torch.tensor(distances_weighted_np, dtype=torch.float32, device=device))
     return distances_weighted
 
 

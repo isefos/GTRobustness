@@ -12,7 +12,7 @@ graphgym:
     name: Cora
     task: node
     task_type: classification
-    transductive: false
+    transductive: true
     split_mode: standard
     node_encoder: true
     node_encoder_name: LinearNode+WeightedGraphormerBias
@@ -42,6 +42,7 @@ graphgym:
     graph_pooling: graph_token
 
   graphormer:
+    use_graph_token: false
     num_layers: 2
     num_heads: 2
     embed_dim: 32
@@ -52,9 +53,9 @@ graphgym:
 
   gnn:
     dim_inner: 32
-    head: graphormer_graph
+    head: node
     layers_pre_mp: 0
-    layers_post_mp: 2
+    layers_post_mp: 1
 
   optim:
     clip_grad_norm: true
@@ -73,6 +74,7 @@ graphgym:
   attack:
     enable: true
     log_progress: true
+    load_best_model: true
     split: test
     num_attacked_graphs: 0  # 0 means attack all
     skip_incorrect_graph_classification: true
@@ -90,11 +92,12 @@ graphgym:
     max_final_samples: 20
     max_trials_sampling: 20
     with_early_stopping: true
+    iterations_node_prob: 5
     enable_node_injection: false
     node_injection_from_train: false
     node_injection_from_val: false
     node_injection_from_test: false
-    remove_isolated_components: true
+    remove_isolated_components: false
     root_node_idx: null
     include_root_nodes_for_injection: true
     existing_node_prob_multiplier: 1  # 1_000

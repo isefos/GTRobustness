@@ -88,6 +88,7 @@ fixed:
     attack:
       enable: true
       log_progress: false
+      load_best_model: true
       split: test
       num_attacked_graphs: 0  # 0 means attack all
       skip_incorrect_graph_classification: true
@@ -105,6 +106,7 @@ fixed:
       max_final_samples: 20
       max_trials_sampling: 20
       with_early_stopping: true
+      iterations_node_prob: 5
       enable_node_injection: true
       node_injection_from_train: true
       node_injection_from_val: true

@@ -35,10 +35,13 @@ def prbcd_attack_dataset(model, loaders):
     is_undirected = cfg.attack.is_undirected
     model.eval()
     model.forward = forward_wrapper(model.forward, is_undirected)
-
     prbcd = PRBCDAttack(model, is_undirected)
+    accumulated_stats, zero_budget_keymap = get_empty_accumulated_stats()
 
-    accumulated_stats = get_empty_accumulated_stats()
+    if cfg.dataset.task == "node" and (cfg.attack.enable_node_injection or cfg.attack.remove_isolated_components):
+        raise NotImplementedError(
+            "Need to handle the node mask with node injection and or pruning away isolated components."
+        )
 
     dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
     total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = None, None, None
@@ -53,34 +56,46 @@ def prbcd_attack_dataset(model, loaders):
         )
 
     clean_loader = DataLoader(dataset_to_attack, batch_size=1, shuffle=False)
-
     for i, clean_data in enumerate(clean_loader):
         if cfg.attack.num_attacked_graphs and i >= cfg.attack.num_attacked_graphs:
             break
 
         num_nodes = clean_data.x.size(0)
         num_edges = clean_data.edge_index.size(1)
+        # currently only does global attack (entire split),
+        # but could technically select any subset of (single / local) nodes to attack
+        node_mask = None if f'{cfg.attack.split}_mask' not in clean_data else clean_data[f'{cfg.attack.split}_mask']
+        if node_mask is not None:
+            assert not cfg.dataset.task == "graph"
+            # we need to remove the split attribute, such that no nodes are already masked out
+            # and we can apply our own node mask
+            del clean_data.split
 
-        skip, skip_msg, global_budget, output_clean, output_stats_clean = check_budget_and_clean_data(
-            model, clean_data,
+        skip, global_budget, output_clean, output_stats_clean, y_gt = check_budget_and_clean_data(
+            model, clean_data, node_mask,
         )
 
-        if skip:
-            logging.info(f"Skipping graph {i + 1}, {skip_msg}")
-            # still need to log that it is incorrect, to compute the accuracy
+        if skip["skip"]:
+            logging.info(f"Skipping graph {i + 1}, {skip['msg']}")
+            # still need to log if graph prediction is correct 
+            # (since we don't attack it remains unchanged from clean)
             for key, s in accumulated_stats.items():
-                if key.startswith("correct"):
-                    s.append(False)
+                if skip["type"] == "budget" and key.endswith("_with_zero_budget"):
+                    s.append(output_stats_clean[zero_budget_keymap[key]])
                 else:
                     s.append(None)
             continue
 
         logging.info(f"Attacking graph {i + 1}")
-
-        if skip_msg:
-            logging.info(skip_msg)
-
-        accumulate_output_stats(accumulated_stats, output_stats_clean, mode="clean", random=False)
+        accumulate_output_stats(
+            accumulated_stats,
+            output_stats_clean,
+            mode="clean",
+            random=False,
+            zero_budget_keymap=zero_budget_keymap,
+        )
+        if skip["msg"]:
+            logging.info(skip["msg"])
 
         # get the graph to attack (potentially augmented)
         attack_graph_data = get_attack_graph(
@@ -95,7 +110,9 @@ def prbcd_attack_dataset(model, loaders):
         if _check_augmentation_correctness:
             attack_graph_data.edge_attr = torch.ones(attack_graph_data.edge_index.size(1))
             with torch.no_grad():
-                augmented_output = model(Batch.from_data_list([attack_graph_data.clone()]))
+                data = Batch.from_data_list([attack_graph_data.clone()])
+                augmented_output = model(data)
+            augmented_output = apply_node_mask(augmented_output, node_mask)
             assert torch.allclose(output_clean, augmented_output, atol=0.001, rtol=0.001)
 
         # attack (with PRBCD then random baseline if specified)
@@ -109,29 +126,38 @@ def prbcd_attack_dataset(model, loaders):
                 attack=prbcd,
                 global_budget=global_budget,
                 random_attack=random_attack,
+                node_mask=node_mask,
                 _model_forward_already_wrapped=True,
                 _keep_forward_wrapped=True,
             )
+
+            if not random_attack:
+                accumulated_stats["perturbation"].append(perts.tolist())
 
             num_modified_edges = perts.size(1)
             relative_budget_used = num_modified_edges / global_budget
             key = "budget_used_random" if random_attack else "budget_used"
             accumulated_stats[key].append(relative_budget_used)
             m = "Random perturbation" if random_attack else "Perturbation"
-            logging.info(f"{m} uses {100 * relative_budget_used:.1f}% of the given attack budget.")
+            logging.info(
+                f"{m} uses {100 * relative_budget_used:.1f}% "
+                f"[{num_modified_edges}/{global_budget}] of the given attack budget."
+            )
 
-            # check output of the perturbed graph
             pert_data = attack_graph_data.clone()
             pert_data.edge_index = pert_edge_index
             pert_data.edge_attr = torch.ones(pert_edge_index.size(1), device=cfg.accelerator)
             with torch.no_grad():
-                output_pert = model(Batch.from_data_list([pert_data.clone()]))
-
+                data = Batch.from_data_list([pert_data.clone()])
+                output_pert = model(data)
+            output_pert = apply_node_mask(output_pert, node_mask)
+            
             log_and_accumulate_pert_output_stats(
-                y_gt=clean_data.y,
+                y_gt=y_gt,
                 output_pert=output_pert,
                 output_stats_clean=output_stats_clean,
                 accumulated_stats=accumulated_stats,
+                zero_budget_keymap=zero_budget_keymap,
                 random=random_attack,
             )
             stats, num_stats = basic_edge_and_node_stats(
@@ -146,7 +172,6 @@ def prbcd_attack_dataset(model, loaders):
                 num_stats,
                 random=random_attack,
             )
-
         
     summary_stats = log_summary_stats(accumulated_stats)
     model.forward = model.forward.__wrapped__
@@ -154,9 +179,14 @@ def prbcd_attack_dataset(model, loaders):
     return {"avg": summary_stats, "all": dict(accumulated_stats)}
 
 
-def check_budget_and_clean_data(model, clean_data):
-    skip = False
-    skip_msg = ""
+def apply_node_mask(tensor_to_mask, mask):
+    if mask is not None:
+        return tensor_to_mask[mask]
+    return tensor_to_mask
+
+
+def check_budget_and_clean_data(model, clean_data, node_mask):
+    skip = {"skip": False, "type": "", "msg": ""}
 
     # TODO: allow for other ways to define the budget
     num_edges = clean_data.edge_index.size(1)
@@ -165,35 +195,34 @@ def check_budget_and_clean_data(model, clean_data):
 
     if cfg.attack.minimum_budget > global_budget:
         global_budget = cfg.attack.minimum_budget
-        skip_msg = (
+        skip["msg"] = (
             f"Budget would be smaller than set minimum. Budget set to minimum, this means the relative budget "
             f"was effectively increased from {cfg.attack.e_budget} to {cfg.attack.minimum_budget / budget_edges} "
             f"for this graph."
         )
     if not global_budget:
-        skip_msg = "because budget is 0."
-        skip = True
-
-    output_clean = None
-    output_stats_clean = None
+        skip["msg"] = "because budget is 0."
+        skip["skip"] = True
+        skip["type"] = "budget"
     
-    if not skip:
-        clean_data.to(device=cfg.accelerator)
-        with torch.no_grad():
-            output_clean = model(clean_data.clone(), unmodified=True)
+    clean_data.to(device=cfg.accelerator)
+    with torch.no_grad():
+        output_clean = model(clean_data.clone(), unmodified=True)
+    output_clean = apply_node_mask(output_clean, node_mask)
+    y_gt = apply_node_mask(clean_data.y, node_mask)
+    output_stats_clean = get_output_stats(y_gt, output_clean)
 
-        output_stats_clean = get_output_stats(clean_data.y, output_clean)
+    if (
+        cfg.dataset.task == "graph"
+        and cfg.attack.skip_incorrect_graph_classification
+        and "correct" in output_stats_clean
+        and not output_stats_clean["correct"]
+    ):
+        skip["msg"] = "because it is already incorrectly classified by model."
+        skip["skip"] = True
+        skip["type"] = "incorrect"
 
-        if (
-            cfg.dataset.task == "graph"
-            and cfg.attack.skip_incorrect_graph_classification
-            and "correct" in output_stats_clean
-            and not output_stats_clean["correct"]
-        ):
-            skip_msg = "because it is already incorrectly classified by model."
-            skip = True
-
-    return skip, skip_msg, global_budget, output_clean, output_stats_clean
+    return skip, global_budget, output_clean, output_stats_clean, y_gt
 
 
 def get_attack_graph(
@@ -226,6 +255,7 @@ def attack_single_graph(
     attack: PRBCDAttack,
     global_budget: int,
     random_attack: bool = False,
+    node_mask: None | torch.Tensor = None,
     _model_forward_already_wrapped: bool = False,
     _keep_forward_wrapped: bool = False,
 ) -> tuple[Data, torch.Tensor, torch.Tensor]:
@@ -241,6 +271,7 @@ def attack_single_graph(
         attack_graph_data.edge_index,
         attack_graph_data.y,
         budget=global_budget,
+        idx_attack=node_mask,
     )
 
     if not _keep_forward_wrapped:

@@ -3,42 +3,52 @@ from torch_geometric.utils import remove_self_loops, scatter
 from torch_geometric.data import Data, Batch
 from torch_geometric.utils import to_scipy_sparse_matrix, index_to_mask
 from scipy.sparse.csgraph import breadth_first_order
-from graphgps.attack.utils_attack import get_largest_connected_subgraph
+from torch_geometric.transforms import LargestConnectedComponents
 from typing import Callable
 import functools
 from torch_geometric.graphgym.config import cfg
+
+
+get_largest_connected_subgraph = LargestConnectedComponents(num_components=1, connection="weak")
+
+
+def remove_isolated_components(data: Batch):
+    root_node = cfg.attack.root_node_idx
+    if root_node is not None:
+        data, root_node = get_only_root_graph(data, root_node)
+    else:
+        data = get_largest_connected_subgraph(data)
+    return data, root_node
 
 
 def forward_wrapper(forward: Callable, is_undirected: bool) -> Callable:
 
     @functools.wraps(forward)
     def wrapped_forward(data: Batch, unmodified: bool = False):
-        if unmodified:
-            data.recompute_preprocessing = False
-            return forward(data)[0]
-        assert data.num_graphs == 1
-        if cfg.attack.remove_isolated_components:
-            root_node = cfg.attack.root_node_idx
-            if root_node is not None:
-                data, root_node = get_only_root_graph(data, root_node)
+        if not unmodified:
+            assert data.num_graphs == 1
+            if cfg.attack.remove_isolated_components:
+                data, root_node = remove_isolated_components(data)
             else:
-                data = get_largest_connected_subgraph(data)
-            
-        use_64bit = False
-        num_iterations = 5
-        num_nodes = data.x.size(0)
+                root_node = cfg.attack.root_node_idx
+                
+            use_64bit = False
+            num_nodes = data.x.size(0)
 
-        data.node_logprob = get_node_logprob(
-            edge_index=data.edge_index,
-            edge_weights=data.edge_attr,
-            num_nodes=num_nodes,
-            is_undirected=is_undirected,
-            root_node=root_node,
-            num_iterations=num_iterations,
-            use_64bit=use_64bit,
-        )
-        data.recompute_preprocessing = True
-        return forward(data)[0]
+            data.node_logprob = get_node_logprob(
+                edge_index=data.edge_index,
+                edge_weights=data.edge_attr,
+                num_nodes=num_nodes,
+                is_undirected=is_undirected,
+                root_node=root_node,
+                num_iterations=cfg.attack.iterations_node_prob,
+                use_64bit=use_64bit,
+            )
+            data.recompute_preprocessing = True
+        else:
+            data.recompute_preprocessing = False
+        model_prediction, _ = forward(data)  # don't need the y ground truth
+        return model_prediction
 
     return wrapped_forward
 

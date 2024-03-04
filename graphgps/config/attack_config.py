@@ -66,6 +66,9 @@ def dataset_cfg(cfg):
     # None (set to same as loss), 'train', 'masked', 'margin', 'prob_margin', or 'tanh_margin' (or callable)
     cfg.attack.metric = None
 
+    # how many iterations of the node probability approximation computation to do
+    cfg.attack.iterations_node_prob = 5
+
     # bla
     cfg.attack.skip_incorrect_graph_classification = True
 

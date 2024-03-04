@@ -147,7 +147,7 @@ os.makedirs("configs_seml/logs", exist_ok=True)
 def run(seed, graphgym, dims_per_head: int):
     graphgym = convert_readonly_to_dict(graphgym)
     model_type = graphgym["model"]["type"]
-    if dims_per_head > 0 and model_type in ["Graphormer"] and graphgym["gnn"]["dim_inner"] == 0:
+    if dims_per_head > 0 and graphgym["gnn"]["dim_inner"] == 0:
         if model_type == "Graphormer":
             dim_inner = dims_per_head * graphgym["graphormer"]["num_heads"]
             graphgym["graphormer"]["embed_dim"] = dim_inner

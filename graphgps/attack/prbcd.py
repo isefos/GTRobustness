@@ -95,6 +95,10 @@ class PRBCDAttack(torch.nn.Module):
                 self.loss = self._tanh_margin_loss
             elif loss == 'train':
                 self.loss = self._train_loss
+            elif loss == 'raw_prediction':
+                self.loss = self._raw_prediction_loss
+            elif loss == 'reflected_cross_entropy':
+                self.loss = self._reflected_cross_entropy_loss
             else:
                 raise ValueError(f'Unknown loss `{loss}`')
         else:
@@ -183,8 +187,7 @@ class PRBCDAttack(torch.nn.Module):
         
         # 'Normal' sampling (all possible edges)
         else:
-            self.sample_edge_indices = lambda n: torch.randint(num_possible_edges, (n, ), device=self.device)
-            
+            self.sample_edge_indices = lambda n: torch.randint(num_possible_edges, (n, ), device=self.device)   
 
     def attack(
         self,
@@ -503,12 +506,17 @@ class PRBCDAttack(torch.nn.Module):
 
         return modified_edge_index, modified_edge_weight
 
-    def _get_discrete_sampled_graph(self, sampled_edge_weight: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+    def _get_discrete_sampled_graph(self, sampled_block_edge_weight: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+        """
+        returns:
+        - edge_index and edge_weight -> define the entire discrete graph
+        - discrete_block_edge_weight -> are the discrete values for just the block edges
+        """
         edge_index, edge_weight = self._get_modified_adj(
             self.edge_index,
             self.edge_weight,
             self.block_edge_index,
-            sampled_edge_weight,
+            sampled_block_edge_weight,
         )
         assert torch.all(edge_weight > 0)
         if self.sample_only_trees:
@@ -525,15 +533,19 @@ class PRBCDAttack(torch.nn.Module):
             # find out which edges were removed -> remove from sampled_edge_weight
             # for edge in block_edge_index[sampled_edge_weight > 0] check if edge in edge_index
             # if not, it was removed to form the tree -> set the value in sampled_edge_weight to 0
-            for i in sampled_edge_weight.nonzero().flatten().tolist():
+            num_removed_edges = 0 
+            for i in sampled_block_edge_weight.nonzero().flatten().tolist():
                 edge = frozenset(self.block_edge_index[:, i].flatten().tolist())
                 if edge not in edges_in_tree:
-                    sampled_edge_weight[i] = 0
+                    sampled_block_edge_weight[i] = 0
+                    num_removed_edges += 1
+            if num_removed_edges > 0:
+                logging.info(f"Removed {num_removed_edges} edges to ensure tree structure.")
         else:
             # discretize the edge weights
             edge_weight[:] = 1
-        discrete_sampled_edge_weight = (sampled_edge_weight > 0).float()
-        return edge_index, edge_weight, discrete_sampled_edge_weight
+        discrete_block_edge_weight = (sampled_block_edge_weight > 0).float()
+        return edge_index, edge_weight, discrete_block_edge_weight
 
     def _filter_self_loops_in_block(self, with_weight: bool):
         is_not_sl = self.block_edge_index[0] != self.block_edge_index[1]
@@ -620,9 +632,9 @@ class PRBCDAttack(torch.nn.Module):
                 sampled_edges_mask = torch.bernoulli(block_edge_weight).to(bool)
                 sampled_edges[sampled_edges_mask] = block_edge_weight[sampled_edges_mask]
             
-            edge_index, edge_weight, discrete_sampled_edges = self._get_discrete_sampled_graph(sampled_edges)
+            edge_index, edge_weight, discrete_block_edge_weight = self._get_discrete_sampled_graph(sampled_edges)
 
-            if discrete_sampled_edges.sum() > budget:
+            if discrete_block_edge_weight.sum() > budget:
                 # Allowed budget is exceeded
                 continue
 
@@ -632,7 +644,7 @@ class PRBCDAttack(torch.nn.Module):
             # Save best sample
             if metric > best_metric:
                 best_metric = metric
-                self.block_edge_weight = discrete_sampled_edges.clone().cpu()
+                self.block_edge_weight = discrete_block_edge_weight.clone().cpu()
 
         # Recover best sample
         self.block_edge_weight = self.block_edge_weight.to(self.device)
@@ -906,6 +918,7 @@ class PRBCDAttack(torch.nn.Module):
 
         :rtype: (Tensor)
         """
+        # TODO: take prediction as imput and transform to logprob...
         if idx_mask is not None:
             log_prob = log_prob[idx_mask]
             labels = labels[idx_mask]
@@ -918,8 +931,97 @@ class PRBCDAttack(torch.nn.Module):
         return F.nll_loss(log_prob, labels)
     
     @staticmethod
-    def _train_loss(prediction: Tensor, labels: Tensor, idx_mask: Optional[Tensor] = None) -> Tensor:
+    def _train_loss(
+        prediction: Tensor,
+        labels: Tensor,
+        idx_mask: Optional[Tensor] = None
+    ) -> Tensor:
+        """Calculate the same loss that is configured for training the model.
+        """
+        if idx_mask is not None:
+            prediction = prediction[idx_mask]
+            labels = labels[idx_mask]
         return compute_loss(prediction, labels)[0]
+    
+    @staticmethod
+    def _raw_prediction_loss(
+        prediction: Tensor,
+        labels: Tensor,
+        idx_mask: Optional[Tensor] = None
+    ) -> Tensor:
+        """Loss for classification (node/ graph)
+        
+        Calculates the negative raw prediction of the correct class as loss.
+        Linear function provides constant gradient everywhere, independent of the
+        prediction (if it is good or bad).
+        The benefit is that it is never zero -> can get gradients even if the
+        prediction is "perfect" and e.g. BCE gives loss==0 wich returns no gradients.
+        """
+        if idx_mask is not None:
+            prediction = prediction[idx_mask]
+            labels = labels[idx_mask]
+
+        if cfg.dataset.task_type == "classification_binary":
+            invert_mask = labels.to(bool)
+            prediction[:, invert_mask] = -prediction[:, invert_mask]
+        elif cfg.dataset.task_type == "classification":
+            num_classes = prediction.size(1)
+            labels_mask = F.one_hot(labels, num_classes).to(bool)
+            prediction[labels_mask] = -prediction[labels_mask]
+        else:
+            raise NotImplementedError
+        loss = prediction.mean()
+        return loss
+
+    @staticmethod
+    def _reflected_cross_entropy_loss(
+        prediction: Tensor,
+        labels: Tensor,
+        idx_mask: Optional[Tensor] = None
+    ) -> Tensor:
+        """Loss for classification (node/ graph)
+        
+        Reverts the logic of cross entropy:
+         - cross entropy is almost linear (constant gradient) when prediction is bad, to promote
+           updates to better predictions, but goes to zero when prediction gets better (no need 
+           to update weights to further improve this prediction)
+         - the 'reflected' cross entropy does the opposite: it is almost linear when the prediction
+           is good, but goes to zero when the prediction is really bad.
+
+        BCE with raw logits x: 
+         - bce_loss(x, y=1) = -log(sigmoid(x))     = log(1 + exp(-x))
+         - bce_loss(x, y=0) = -log(1 - sigmoid(x)) = log(1 + exp( x))
+        reflected:
+         - loss(x, y=1) = -log(1 + exp( x))
+         - loss(x, y=0) = -log(1 + exp(-x))
+
+        multiclass CE with raw logits x:
+         - ce_loss(x, y) = -log(softmax(x)[y]) = -log( exp(x[y]) / sum(exp(x)) ) = -logsoftmax(x)[y]
+        reflected multiclass CE:
+         - loss(x, y) = log( sum(exp(x[i] if i != y) / sum(exp(x)) ) = log(sum(exp(x[i] if i != y)) - log(sum(exp(x)))
+                      = log( sum(exp(x[i] / sum(exp(x)) if i != y) )
+                      = log( sum(softmax(x)[i] if i != y) )
+                      = log( 1 - softmax(x)[y] ) = log(1-softmax(x))[y]
+
+        (reflected, because this new function has the same asymptotes as the original cross 
+        entropy but mirrored -> is the positive log likelihood of prediction being a wrong class)
+        """
+        if idx_mask is not None:
+            prediction = prediction[idx_mask]
+            labels = labels[idx_mask]
+
+        if cfg.dataset.task_type == "classification_binary":
+            invert_mask = ~labels.to(bool)
+            prediction[:, invert_mask] = -prediction[:, invert_mask]
+            loss = (-torch.log1p(prediction.exp())).mean()
+        elif cfg.dataset.task_type == "classification":
+            num_classes = prediction.size(1)
+            labels_mask = ~F.one_hot(labels, num_classes).to(bool)
+            masked_prediction = prediction[labels_mask].reshape((-1, prediction.size(1)-1))
+            loss = (torch.logsumexp(masked_prediction, 1) - torch.logsumexp(prediction, 1)).mean()
+        else:
+            raise NotImplementedError        
+        return loss
 
     def _append_statistics(self, mapping: Dict[str, Any]):
         for key, value in mapping.items():

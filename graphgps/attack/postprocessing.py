@@ -4,6 +4,7 @@ import logging
 from torch_geometric.utils import to_scipy_sparse_matrix, index_to_mask, subgraph
 from scipy.sparse.csgraph import breadth_first_order, connected_components
 from torch_geometric.graphgym.config import cfg
+import torch.nn.functional as F
 
 
 def get_empty_accumulated_stats():
@@ -16,31 +17,36 @@ def get_empty_accumulated_stats():
         "num_nodes_added_connected",
         "num_nodes_removed",
     ]
-
     if cfg.attack.run_random_baseline:
         keys.extend([k + "_random" for k in keys])
+    keys.extend(["num_edges_clean", "num_nodes_clean", "perturbation"])
+    zero_budget_keymap = {}
 
-    keys.extend(["num_edges_clean", "num_nodes_clean"])
+    if cfg.dataset.task_type.startswith("classification"):
 
-    if cfg.dataset.task == "node":
-        # TODO: implement for node classification
-        raise NotImplementedError
-    
-    elif cfg.dataset.task == "graph":
-        if cfg.dataset.task_type.startswith("classification"):
-            graph_cls_keys = ["probs", "logits", "correct", "margin"]
-            keys.extend([k + "_clean" for k in graph_cls_keys])
-            keys.extend([k + "_pert" for k in graph_cls_keys])
-            if cfg.attack.run_random_baseline:
-                keys.extend([k + "_pert_random" for k in graph_cls_keys])
-
+        key_prefixes = ["probs", "logits", "correct", "margin"]
+        if cfg.dataset.task == "node":
+            key_prefixes.extend(["correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max"])
+            zero_budget_prefixes = ["correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max"]
+        elif cfg.dataset.task == "graph":
+            zero_budget_prefixes = ["correct", "margin"]
         else:
             raise NotImplementedError
-    
+        
+        keys.extend([k + "_clean" for k in key_prefixes])
+        keys.extend([k + "_pert" for k in key_prefixes])
+        if cfg.attack.run_random_baseline:
+            keys.extend([k + "_pert_random" for k in key_prefixes])
+
+        for p in zero_budget_prefixes:
+            zero_budget_keys = [k + "_with_zero_budget" for k in keys if k.startswith(p)]
+            zero_budget_keymap.update({k: p for k in zero_budget_keys})
+            keys.extend(zero_budget_keys)
+
     else:
         raise NotImplementedError
     
-    return {k: [] for k in sorted(keys)}
+    return {k: [] for k in sorted(keys)}, zero_budget_keymap
 
 
 def get_output_stats(y_gt, model_output):
@@ -54,36 +60,39 @@ def get_output_stats(y_gt, model_output):
         raise NotImplementedError
 
 
-def get_node_output_stats(y_gt, model_output):
+def get_node_output_stats(y_gt, logits):
 
     if cfg.dataset.task_type.startswith("classification"):
-        logits = model_output[0, :]
-        y_multiclass: torch.Tensor
-        class_index_pred: int
-        probs: torch.Tensor
 
         if cfg.dataset.task_type == "classification_binary":
-            y_binary = int(y_gt[0].item())
-            y_multiclass = torch.zeros(2, dtype=torch.long)
-            y_multiclass[y_binary] = 1
+            # TODO: debug to check if logits is (N, 1) or (N, )
             prob_binary = torch.sigmoid(logits)
-            class_index_pred = int(prob_binary > cfg.model.thresh)
-            probs = torch.cat([1 - prob_binary, prob_binary], dim=0)
+            class_idx_pred = (prob_binary > cfg.model.thresh).to(dtype=torch.long)
+            probs = torch.cat([1 - prob_binary, prob_binary], dim=1)
         
         elif cfg.dataset.task_type == "classification":
-            y_multiclass = y_gt
-            class_index_pred = int(logits.argmax().item())
-            probs = logits.softmax(dim=0)
+            class_idx_pred = logits.argmax(dim=1)
+            probs = logits.softmax(dim=1)
 
-        class_index_gt = int(y_multiclass.argmax().item())
-        y_correct_mask = y_multiclass.to(dtype=torch.bool)
-        margin = float((probs[y_correct_mask] - probs[~y_correct_mask].max()).item())
-        correct = class_index_pred == class_index_gt
+        num_classes = probs.size(1)
+        y_correct_mask = F.one_hot(y_gt, num_classes).to(dtype=torch.bool)
+        margin = probs[y_correct_mask] - probs[~y_correct_mask].reshape(-1, num_classes-1).max(dim=1)[0]
+        mean_margin = margin.mean().item()
+        median_margin = margin.median().item()
+        min_margin = margin.min().item()
+        max_margin = margin.max().item()
+        correct = class_idx_pred == y_gt
+        acc = correct.float().mean().item()
         output_stats = {
             "probs": probs.tolist(),
             "logits": logits.tolist(),
-            "correct": correct,
-            "margin": margin,
+            "correct": correct.tolist(),
+            "correct_acc": acc,
+            "margin": margin.tolist(),
+            "margin_mean": mean_margin,
+            "margin_median": median_margin,
+            "margin_min": min_margin,
+            "margin_max": max_margin,
         }
         return output_stats
 
@@ -95,25 +104,21 @@ def get_graph_output_stats(y_gt, model_output):
 
     if cfg.dataset.task_type.startswith("classification"):
         logits = model_output[0, :]
-        y_multiclass: torch.Tensor
+        class_index_gt = int(y_gt[0].item())
         class_index_pred: int
         probs: torch.Tensor
 
         if cfg.dataset.task_type == "classification_binary":
-            y_binary = int(y_gt[0].item())
-            y_multiclass = torch.zeros(2, dtype=torch.long)
-            y_multiclass[y_binary] = 1
             prob_binary = torch.sigmoid(logits)
             class_index_pred = int(prob_binary > cfg.model.thresh)
             probs = torch.cat([1 - prob_binary, prob_binary], dim=0)
         
         elif cfg.dataset.task_type == "classification":
-            y_multiclass = y_gt
             class_index_pred = int(logits.argmax().item())
             probs = logits.softmax(dim=0)
 
-        class_index_gt = int(y_multiclass.argmax().item())
-        y_correct_mask = y_multiclass.to(dtype=torch.bool)
+        num_classes = probs.size(0)
+        y_correct_mask = F.one_hot(y_gt, num_classes).to(dtype=torch.bool)
         margin = float((probs[y_correct_mask] - probs[~y_correct_mask].max()).item())
         correct = class_index_pred == class_index_gt
         output_stats = {
@@ -133,10 +138,17 @@ def log_and_accumulate_pert_output_stats(
     output_pert,
     output_stats_clean,
     accumulated_stats,
+    zero_budget_keymap,
     random=False,
 ):
     output_stats_pert = get_output_stats(y_gt, output_pert)  
-    accumulate_output_stats(accumulated_stats, output_stats_pert, mode="pert", random=random)
+    accumulate_output_stats(
+        accumulated_stats,
+        output_stats_pert,
+        mode="pert",
+        random=random,
+        zero_budget_keymap=zero_budget_keymap,
+    )
 
     if cfg.dataset.task == "graph":
         if cfg.dataset.task_type.startswith("classification"):
@@ -145,8 +157,10 @@ def log_and_accumulate_pert_output_stats(
             raise NotImplementedError
 
     elif cfg.dataset.task == "node":
-        # TODO: implement for node classification
-        raise NotImplementedError
+        if cfg.dataset.task_type.startswith("classification"):
+            log_node_classification_output_stats(output_stats_pert, output_stats_clean, random)
+        else:
+            raise NotImplementedError
     
     else:
         raise NotImplementedError
@@ -157,12 +171,16 @@ def accumulate_output_stats(
     output_stats,
     mode: str,
     random: bool,
+    zero_budget_keymap,
 ):
     for key, stat in output_stats.items():
         k = key + "_" + mode
         if random:
             k = k + "_random"
         accumulated_stats[k].append(stat)
+        k_zero_budget = k + "_with_zero_budget"
+        if k_zero_budget in zero_budget_keymap:
+            accumulated_stats[k_zero_budget].append(stat)
 
 
 def log_graph_classification_output_stats(
@@ -171,17 +189,37 @@ def log_graph_classification_output_stats(
     random=False,
 ):
     for name, output_stats in zip(
-        ["clean", "pert rand" if random else "pert"],
+        ["clean", "pert_rand" if random else "pert"],
         [output_stats_clean, output_stats_pert]
     ):
         correct_str = f"{str(output_stats['correct']):5}"
         margin = output_stats['margin']
-        margin_str = f"{f'{margin:.4}':>7}"
+        margin_str = f"{f'{margin:.4f}':>7}"
         prob_str = ", ".join((f"{p:.3f}" for p in output_stats['probs']))
         logit_str = ", ".join([f"{l:.3f}" for l in output_stats['logits']])
         logging.info(
             f"{name + ':':<10}   correct  (margin) [probs] <logits>:   "
             f"{correct_str} ({margin_str}) [{prob_str}] <{logit_str}>"
+        )
+
+
+def log_node_classification_output_stats(
+    output_stats_pert,
+    output_stats_clean,
+    random=False,
+):
+    for name, output_stats in zip(
+        ["clean", "pert_rand" if random else "pert"],
+        [output_stats_clean, output_stats_pert]
+    ):
+        acc = f"{output_stats['correct_acc']:.4f}"
+        margin_mean = f"{output_stats['margin_mean']:.4f}"
+        margin_median = f"{output_stats['margin_median']:.4f}"
+        margin_min = f"{output_stats['margin_min']:.4f}"
+        margin_max = f"{output_stats['margin_max']:.4f}"
+        logging.info(
+            f"{name + ':':<10}   acc  (margin_mean) [margin_median] <margin_min> |margin_max|:   "
+            f"{acc} ({margin_mean}) [{margin_median}] <{margin_min}> |{margin_max}|"
         )
 
 
@@ -293,15 +331,16 @@ def log_summary_stats(accumulated_stats):
     summary_stats = {}
     logging.info("Attack stats summary (averages over all attacked graphs):")
     for key, current_stat in accumulated_stats.items():
-        if key.startswith("probs") or key.startswith("logits"):
-            continue
         name = "avg_" + key
         filtered_stat = [s for s in current_stat if s is not None]
         if filtered_stat:
-            avg = sum(filtered_stat) / len(filtered_stat)
-            logging.info(f"  {name + ':':<37} {f'{avg:.2f}':>8}")
+            try:
+                avg = sum(filtered_stat) / len(filtered_stat)
+            except TypeError:
+                continue
+            logging.info(f"  {name + ':':<48} {f'{avg:.2f}':>8}")
         else:
             avg = None
-            logging.info(f"  {name + ':':<37} {'nan':>8}")
+            logging.info(f"  {name + ':':<48} {'nan':>8}")
         summary_stats[name] = avg
     return summary_stats

@@ -127,11 +127,15 @@ def graphormer_pre_processing(data, distance, is_undirected):
 
 def get_shortest_paths(edge_index, num_nodes, directed, max_distance):
     adj = to_scipy_sparse_matrix(edge_index, num_nodes=num_nodes).tocsr()
-    distances = csgraph.shortest_path(
-        adj, method="auto", directed=directed, unweighted=False,
+    distances = csgraph.dijkstra(
+        adj,
+        directed=directed,
+        return_predecessors=False,
+        unweighted=False,
+        limit=max_distance,
     )
+    distances[distances > max_distance] = max_distance
     spatial_types = torch.tensor(distances.reshape(num_nodes ** 2), dtype=torch.long, device=edge_index.device)
-    spatial_types[spatial_types > max_distance] = max_distance
     return spatial_types
 
 

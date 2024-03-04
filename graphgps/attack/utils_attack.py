@@ -1,8 +1,4 @@
 import torch
-from torch_geometric.transforms import LargestConnectedComponents
-
-
-get_largest_connected_subgraph = LargestConnectedComponents(num_components=1, connection="weak")
 
 
 # Not used anymore, may be useful for quick debugging:
