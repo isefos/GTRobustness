@@ -69,6 +69,9 @@ def dataset_cfg(cfg):
     # how many iterations of the node probability approximation computation to do
     cfg.attack.iterations_node_prob = 5
 
+    # compute the node probability approximation directly (faster) or in log space (better for numerical stability)
+    cfg.attack.node_prob_log = True
+
     # bla
     cfg.attack.skip_incorrect_graph_classification = True
 

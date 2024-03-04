@@ -32,10 +32,9 @@ from torch_geometric.graphgym.config import cfg
 
 def prbcd_attack_dataset(model, loaders):
     logging.info("Start of attack:")
-    is_undirected = cfg.attack.is_undirected
     model.eval()
-    model.forward = forward_wrapper(model.forward, is_undirected)
-    prbcd = PRBCDAttack(model, is_undirected)
+    model.forward = forward_wrapper(model.forward)
+    prbcd = PRBCDAttack(model)
     accumulated_stats, zero_budget_keymap = get_empty_accumulated_stats()
 
     if cfg.dataset.task == "node" and (cfg.attack.enable_node_injection or cfg.attack.remove_isolated_components):
@@ -121,7 +120,6 @@ def prbcd_attack_dataset(model, loaders):
 
             pert_edge_index, perts = attack_single_graph(
                 attack_graph_data=attack_graph_data,
-                is_undirected=is_undirected,
                 model=model,
                 attack=prbcd,
                 global_budget=global_budget,
@@ -165,7 +163,6 @@ def prbcd_attack_dataset(model, loaders):
                 pert_edge_index,
                 num_edges_clean=num_edges,
                 num_nodes_clean=num_nodes,
-                is_undirected=is_undirected,
             )
             log_and_accumulate_num_stats(
                 accumulated_stats,
@@ -250,7 +247,6 @@ def get_attack_graph(
 
 def attack_single_graph(
     attack_graph_data: Data,
-    is_undirected: bool,
     model,
     attack: PRBCDAttack,
     global_budget: int,
@@ -262,7 +258,7 @@ def attack_single_graph(
     """
     """
     if not _model_forward_already_wrapped:
-        model.forward = forward_wrapper(model.forward, is_undirected)
+        model.forward = forward_wrapper(model.forward)
 
     attack_fun = attack.attack_random_baseline if random_attack else attack.attack
 

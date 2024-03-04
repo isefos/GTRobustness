@@ -28,10 +28,16 @@ class WeightedAddPoolGraphHead(torch.nn.Module):
         return batch.graph_feature, batch.y
 
     def forward(self, batch):
+
         if hasattr(batch, "node_logprob") and batch.node_logprob is not None:
             graph_emb = global_add_pool(batch.x * batch.node_logprob.exp()[:, None], batch.batch)
+
+        elif hasattr(batch, "node_prob") and batch.node_prob is not None:
+            graph_emb = global_add_pool(batch.x * batch.node_prob[:, None], batch.batch)
+
         else:
             graph_emb = global_add_pool(batch.x, batch.batch)
+            
         graph_emb = self.layer_post_mp(graph_emb)
         batch.graph_feature = graph_emb
         pred, label = self._apply_index(batch)

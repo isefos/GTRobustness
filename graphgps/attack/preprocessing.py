@@ -21,7 +21,7 @@ def remove_isolated_components(data: Batch):
     return data, root_node
 
 
-def forward_wrapper(forward: Callable, is_undirected: bool) -> Callable:
+def forward_wrapper(forward: Callable) -> Callable:
 
     @functools.wraps(forward)
     def wrapped_forward(data: Batch, unmodified: bool = False):
@@ -35,15 +35,25 @@ def forward_wrapper(forward: Callable, is_undirected: bool) -> Callable:
             use_64bit = False
             num_nodes = data.x.size(0)
 
-            data.node_logprob = get_node_logprob(
-                edge_index=data.edge_index,
-                edge_weights=data.edge_attr,
-                num_nodes=num_nodes,
-                is_undirected=is_undirected,
-                root_node=root_node,
-                num_iterations=cfg.attack.iterations_node_prob,
-                use_64bit=use_64bit,
-            )
+            if cfg.attack.node_prob_log:
+                data.node_logprob = get_node_logprob(
+                    edge_index=data.edge_index,
+                    edge_weights=data.edge_attr,
+                    num_nodes=num_nodes,
+                    is_undirected=cfg.attack.is_undirected,
+                    root_node=root_node,
+                    num_iterations=cfg.attack.iterations_node_prob,
+                    use_64bit=use_64bit,
+                )
+            else:
+                data.node_prob = node_in_graph_prob(
+                    edge_index=data.edge_index,
+                    edge_weights=data.edge_attr,
+                    batch=data.batch,
+                    undirected=cfg.attack.is_undirected,
+                    root_node=root_node,
+                    num_iterations=cfg.attack.iterations_node_prob,
+                )
             data.recompute_preprocessing = True
         else:
             data.recompute_preprocessing = False
@@ -263,6 +273,84 @@ def log1mexp(x: torch.Tensor) -> torch.Tensor:
     mask = torch.logical_and(valid_mask, ~cuttoff_mask)
     result[mask] = (-x[mask].expm1()).log()
     return result
+
+
+def node_in_graph_prob_undirected(
+    edge_index: torch.Tensor,
+    edge_weights: torch.Tensor,
+    batch: torch.Tensor,
+    num_iterations: int = 5,
+    root_node: None | int = None,
+) -> torch.Tensor:
+    """
+    Sparse implementation as a form of message passing
+    """
+    assert num_iterations > 0, "Must do at least one iteration"
+    assert len(edge_weights.shape) == 1, "Only scalar edge weights are supported"
+    num_nodes = batch.size(0)
+    edge_index_nsl, edge_weights_nsl = remove_self_loops(edge_index, edge_weights)
+    prob_nodes = torch.ones(num_nodes)
+    for _ in range(num_iterations):
+        msg = 1 - edge_weights_nsl * prob_nodes[edge_index_nsl[1, :]]
+        out = scatter(msg, edge_index_nsl[0, :], dim=0, dim_size=num_nodes, reduce='mul')
+        prob_nodes_new = 1 - out
+        if root_node is not None:
+            prob_nodes_new[root_node] = 1
+        prob_nodes = prob_nodes_new
+    return prob_nodes
+
+
+def node_in_graph_prob_directed(
+    edge_index: torch.Tensor,
+    edge_weights: torch.Tensor,
+    batch: torch.Tensor,
+    num_iterations: int = 5,
+    root_node: None | int = None,
+) -> torch.Tensor:
+    """
+    Sparse implementation as a form of message passing
+    """
+    assert num_iterations > 0, "Must do at least one iteration"
+    assert len(edge_weights.shape) == 1, "Only scalar edge weights are supported"
+    num_nodes = batch.size(0)
+    edge_index_nsl, edge_weights_nsl = remove_self_loops(edge_index, edge_weights)
+    prob_nodes = torch.ones(num_nodes)
+    for _ in range(num_iterations):
+        msg_out = 1 - edge_weights_nsl * prob_nodes[edge_index_nsl[1, :]]
+        msg_in = 1 - edge_weights_nsl * prob_nodes[edge_index_nsl[0, :]]
+        out = scatter(
+            torch.cat((msg_out, msg_in), dim=0),
+            torch.cat((edge_index_nsl[0, :], edge_index_nsl[1, :]), dim=0),
+            dim=0,
+            dim_size=num_nodes,
+            reduce='mul',
+        )
+        prob_nodes_new = 1 - out
+        if root_node is not None:
+            prob_nodes_new[root_node] = 1
+        prob_nodes = prob_nodes_new
+    return prob_nodes
+
+
+def node_in_graph_prob(
+    edge_index: torch.Tensor,
+    edge_weights: torch.Tensor,
+    batch: torch.Tensor,
+    undirected: bool,
+    num_iterations: int = 5,
+    root_node: None | int = None,
+):
+    if edge_weights is None:
+        return torch.ones(batch.size(0))
+    fun = node_in_graph_prob_undirected if undirected else node_in_graph_prob_directed
+    node_prob = fun(
+        edge_index=edge_index,
+        edge_weights=edge_weights,
+        batch=batch,
+        num_iterations=num_iterations,
+        root_node=root_node,
+    )
+    return node_prob
 
 
 if __name__ == "__main__":

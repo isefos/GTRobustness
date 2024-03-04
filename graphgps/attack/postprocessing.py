@@ -238,7 +238,6 @@ def basic_edge_and_node_stats(
     edge_index_pert: torch.Tensor,
     num_edges_clean: int,
     num_nodes_clean: int,
-    is_undirected: bool,
 ) -> tuple[dict[str, dict[str, set[tuple[int, int]]]], dict[str, dict[str, int]]]:
     
     num_nodes_pert = edge_index_pert.max().item() + 1
@@ -294,11 +293,11 @@ def basic_edge_and_node_stats(
         num_stats[num_key] = {}
         for key2, value in stats[key1].items():
             v = len(value)
-            if is_undirected and key1 == "edges":
+            if cfg.attack.is_undirected and key1 == "edges":
                 v = v // 2
             num_stats[num_key][key2] = v
 
-    num_edges_clean = num_edges_clean // 2 if is_undirected else num_edges_clean
+    num_edges_clean = num_edges_clean // 2 if cfg.attack.is_undirected else num_edges_clean
 
     assert num_edges_clean == num_stats["num_edges"]["clean"]
     assert num_nodes_clean == num_stats["num_nodes"]["clean"]

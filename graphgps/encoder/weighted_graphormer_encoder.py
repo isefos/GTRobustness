@@ -224,6 +224,15 @@ class WeightedBiasEncoder(torch.nn.Module):
             assert n == bias.size(2) == bias.size(3)
             bias += data.node_logprob[None, None, None, :]
 
+        elif hasattr(data, "node_prob"):
+            n = data.node_prob.size(0)
+            assert n == bias.size(2) == bias.size(3)
+            # if p is so small that log(p) = -inf, gradient is undefined, so just set -inf for very small p
+            l = torch.zeros_like(data.node_prob) - torch.inf
+            min_prob_mask = data.node_prob > 1e-30
+            l[min_prob_mask] = data.node_prob[min_prob_mask].log()
+            bias += l[None, None, None, :]
+
         if self.use_graph_token:
             bias = F.pad(bias, INSERT_GRAPH_TOKEN)
             bias[:, :, 1:, 0] = self.graph_token

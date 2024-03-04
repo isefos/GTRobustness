@@ -93,6 +93,7 @@ graphgym:
     max_trials_sampling: 20
     with_early_stopping: true
     iterations_node_prob: 5
+    node_prob_log: true
     enable_node_injection: false
     node_injection_from_train: false
     node_injection_from_val: false

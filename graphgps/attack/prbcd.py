@@ -76,7 +76,7 @@ class PRBCDAttack(torch.nn.Module):
             assumed to be undirected. (default: :obj:`True`)
     """
 
-    def __init__(self, model: torch.nn.Module, is_undirected: bool = True):
+    def __init__(self, model: torch.nn.Module):
         super().__init__()
 
         self.model = model
@@ -104,7 +104,7 @@ class PRBCDAttack(torch.nn.Module):
         else:
             self.loss = loss
 
-        self.is_undirected = is_undirected
+        self.is_undirected = cfg.attack.is_undirected
         self.log = cfg.attack.log_progress
         self.metric = cfg.attack.metric or self.loss
 
@@ -126,7 +126,7 @@ class PRBCDAttack(torch.nn.Module):
         self.allow_existing_graph_pert = cfg.attack.allow_existing_graph_pert
 
         # will make sure that perturbations remain trees
-        assert not (cfg.attack.sample_only_trees and not is_undirected), (
+        assert not (cfg.attack.sample_only_trees and not self.is_undirected), (
             "Sampling only trees is only supported for undirected graphs"
         )
         self.sample_only_trees = cfg.attack.sample_only_trees
