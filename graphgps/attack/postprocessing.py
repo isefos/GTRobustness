@@ -5,48 +5,51 @@ from torch_geometric.utils import to_scipy_sparse_matrix, index_to_mask, subgrap
 from scipy.sparse.csgraph import breadth_first_order, connected_components
 from torch_geometric.graphgym.config import cfg
 import torch.nn.functional as F
+from itertools import compress
 
 
 def get_empty_accumulated_stats():
     keys = [
         "budget_used",
         "num_edges_added",
-        "num_edges_added_connected",
         "num_edges_removed",
         "num_nodes_added",
-        "num_nodes_added_connected",
         "num_nodes_removed",
     ]
+    if cfg.attack.remove_isolated_components:
+        keys.extend([
+            "num_edges_added_connected",
+            "num_nodes_added_connected",
+        ])
     if cfg.attack.run_random_baseline:
         keys.extend([k + "_random" for k in keys])
-    keys.extend(["num_edges_clean", "num_nodes_clean", "perturbation"])
-    zero_budget_keymap = {}
+
+    keys.extend(["num_edges_clean", "num_nodes_clean"])
 
     if cfg.dataset.task_type.startswith("classification"):
+        asr = "attack_success_rate"
+        asr_keys = [asr]
+        if cfg.attack.run_random_baseline:
+            asr_keys.append(asr + "_random")
+        keys.extend(asr_keys)
 
         key_prefixes = ["probs", "logits", "correct", "margin"]
+
         if cfg.dataset.task == "node":
             key_prefixes.extend(["correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max"])
-            zero_budget_prefixes = ["correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max"]
-        elif cfg.dataset.task == "graph":
-            zero_budget_prefixes = ["correct", "margin"]
-        else:
-            raise NotImplementedError
         
         keys.extend([k + "_clean" for k in key_prefixes])
         keys.extend([k + "_pert" for k in key_prefixes])
         if cfg.attack.run_random_baseline:
             keys.extend([k + "_pert_random" for k in key_prefixes])
 
-        for p in zero_budget_prefixes:
-            zero_budget_keys = [k + "_with_zero_budget" for k in keys if k.startswith(p)]
-            zero_budget_keymap.update({k: p for k in zero_budget_keys})
-            keys.extend(zero_budget_keys)
-
     else:
         raise NotImplementedError
     
-    return {k: [] for k in sorted(keys)}, zero_budget_keymap
+    zero_budget_keys = keys.copy()
+    keys.append("perturbation")
+    
+    return {k: [] for k in sorted(keys)}, {k: [] for k in sorted(zero_budget_keys)}
 
 
 def get_output_stats(y_gt, model_output):
@@ -77,10 +80,10 @@ def get_node_output_stats(y_gt, logits):
         num_classes = probs.size(1)
         y_correct_mask = F.one_hot(y_gt, num_classes).to(dtype=torch.bool)
         margin = probs[y_correct_mask] - probs[~y_correct_mask].reshape(-1, num_classes-1).max(dim=1)[0]
-        mean_margin = margin.mean().item()
-        median_margin = margin.median().item()
-        min_margin = margin.min().item()
-        max_margin = margin.max().item()
+        margin_mean = margin.mean().item()
+        margin_median = margin.median().item()
+        margin_min = margin.min().item()
+        margin_max = margin.max().item()
         correct = class_idx_pred == y_gt
         acc = correct.float().mean().item()
         output_stats = {
@@ -89,10 +92,10 @@ def get_node_output_stats(y_gt, logits):
             "correct": correct.tolist(),
             "correct_acc": acc,
             "margin": margin.tolist(),
-            "margin_mean": mean_margin,
-            "margin_median": median_margin,
-            "margin_min": min_margin,
-            "margin_max": max_margin,
+            "margin_mean": margin_mean,
+            "margin_median": margin_median,
+            "margin_min": margin_min,
+            "margin_max": margin_max,
         }
         return output_stats
 
@@ -104,7 +107,8 @@ def get_graph_output_stats(y_gt, model_output):
 
     if cfg.dataset.task_type.startswith("classification"):
         logits = model_output[0, :]
-        class_index_gt = int(y_gt[0].item())
+        y_gt = y_gt[0]
+        class_index_gt = int(y_gt.item())
         class_index_pred: int
         probs: torch.Tensor
 
@@ -133,31 +137,31 @@ def get_graph_output_stats(y_gt, model_output):
         raise NotImplementedError
 
 
-def log_and_accumulate_pert_output_stats(
-    y_gt,
-    output_pert,
+def log_pert_output_stats(
+    output_stats_pert,
     output_stats_clean,
     accumulated_stats,
-    zero_budget_keymap,
     random=False,
 ):
-    output_stats_pert = get_output_stats(y_gt, output_pert)  
-    accumulate_output_stats(
-        accumulated_stats,
-        output_stats_pert,
-        mode="pert",
-        random=random,
-        zero_budget_keymap=zero_budget_keymap,
-    )
-
     if cfg.dataset.task == "graph":
         if cfg.dataset.task_type.startswith("classification"):
+            # accumulate attack success rate
+            asr = None
+            if output_stats_clean["correct"]:
+                asr = 0 if output_stats_pert["correct"] else 1
+            accumulated_stats["attack_success_rate"].append(asr)
+            # log
             log_graph_classification_output_stats(output_stats_pert, output_stats_clean, random)
         else:
             raise NotImplementedError
 
     elif cfg.dataset.task == "node":
         if cfg.dataset.task_type.startswith("classification"):
+            # accumulate attack success rate
+            pert_c = list(compress(output_stats_pert["correct"], output_stats_clean["correct"]))
+            asr = sum(pert_c) / len(pert_c)
+            accumulated_stats["attack_success_rate"].append(asr)
+            # log
             log_node_classification_output_stats(output_stats_pert, output_stats_clean, random)
         else:
             raise NotImplementedError
@@ -171,16 +175,12 @@ def accumulate_output_stats(
     output_stats,
     mode: str,
     random: bool,
-    zero_budget_keymap,
 ):
     for key, stat in output_stats.items():
         k = key + "_" + mode
         if random:
             k = k + "_random"
         accumulated_stats[k].append(stat)
-        k_zero_budget = k + "_with_zero_budget"
-        if k_zero_budget in zero_budget_keymap:
-            accumulated_stats[k_zero_budget].append(stat)
 
 
 def log_graph_classification_output_stats(
@@ -233,21 +233,15 @@ def _get_edges_nodes_from_index(edge_index):
     return edges, nodes
 
 
-def basic_edge_and_node_stats(
-    edge_index: torch.Tensor,
-    edge_index_pert: torch.Tensor,
-    num_edges_clean: int,
-    num_nodes_clean: int,
-) -> tuple[dict[str, dict[str, set[tuple[int, int]]]], dict[str, dict[str, int]]]:
-    
-    num_nodes_pert = edge_index_pert.max().item() + 1
+def _get_edge_index_connected(edge_index):
+    num_nodes = edge_index.max().item() + 1
     root_node = cfg.attack.root_node_idx
-    adj = to_scipy_sparse_matrix(edge_index_pert, num_nodes=num_nodes_pert)
+    adj = to_scipy_sparse_matrix(edge_index, num_nodes=num_nodes)
     if root_node is not None:
         bfs_order = breadth_first_order(adj, root_node, return_predecessors=False)
         subset_mask = index_to_mask(
             torch.tensor(bfs_order, dtype=torch.long, device=edge_index.device),
-            size=num_nodes_pert,
+            size=num_nodes,
         )
     else:
         _, component = connected_components(adj, connection="weak")
@@ -255,38 +249,40 @@ def basic_edge_and_node_stats(
         subset_np = np.in1d(component, count.argsort()[-1:])
         subset_mask = torch.from_numpy(subset_np)
         subset_mask = subset_mask.to(edge_index.device, torch.bool)
-    edge_index_pert_connected = subgraph(subset_mask, edge_index_pert)[0]
-    
-    edges, nodes = _get_edges_nodes_from_index(edge_index)
-    edges_pert, nodes_pert = _get_edges_nodes_from_index(edge_index_pert)
-    edges_pert_connected, nodes_pert_connected = _get_edges_nodes_from_index(edge_index_pert_connected)
+    edge_index_connected = subgraph(subset_mask, edge_index)[0]
+    return edge_index_connected
 
-    edges_added = edges_pert - edges
-    edges_added_connected = edges_pert_connected - edges
-    edges_removed = edges - edges_pert
 
-    nodes_added = nodes_pert - nodes
-    nodes_added_connected = nodes_pert_connected - nodes
-    nodes_removed = nodes - nodes_pert
-
+def _get_stats_and_num_stats(
+    edges, edges_pert, edges_pert_connected, edges_added, edges_added_connected, edges_removed,
+    nodes, nodes_pert, nodes_pert_connected, nodes_added, nodes_added_connected, nodes_removed,
+):
     stats = {
         "edges": {
             "clean": edges,
             "pert": edges_pert,
-            "pert_connected": edges_pert_connected,
             "added": edges_added,
-            "added_connected": edges_added_connected,
-            "removed": edges_removed
+            "removed": edges_removed,
         },
         "nodes": {
             "clean": nodes,
             "pert": nodes_pert,
-            "pert_connected": nodes_pert_connected,
             "added": nodes_added,
-            "added_connected": nodes_added_connected,
-            "removed": nodes_removed
+            "removed": nodes_removed,
         },
     }
+    if cfg.attack.remove_isolated_components:
+        # add the connected stats (should be set to None in the other case anyway)
+        connected_entries = [
+            ("edges", "pert_connected", edges_pert_connected),
+            ("edges", "added_connected", edges_added_connected),
+            ("nodes", "pert_connected", nodes_pert_connected),
+            ("nodes", "added_connected", nodes_added_connected),
+        ]
+        for (key1, key2, value) in connected_entries:
+            if value is not None:
+                stats[key1][key2] = value
+    
     num_stats = {}
     for key1 in stats:
         num_key = "num_" + key1
@@ -296,6 +292,65 @@ def basic_edge_and_node_stats(
             if cfg.attack.is_undirected and key1 == "edges":
                 v = v // 2
             num_stats[num_key][key2] = v
+    return stats, num_stats
+
+
+def zero_budget_edge_and_node_stats(
+    edge_index: torch.Tensor,
+    num_edges: int,
+    num_nodes: int,
+) -> tuple[dict[str, dict[str, set[tuple[int, int]]]], dict[str, dict[str, int]]]:    
+    edges, nodes = _get_edges_nodes_from_index(edge_index)
+    if cfg.attack.remove_isolated_components:
+        edge_index_pert_connected = _get_edge_index_connected(edge_index)
+        edges_pert_connected, nodes_pert_connected = _get_edges_nodes_from_index(edge_index_pert_connected)
+        edges_added_connected = set()
+        nodes_added_connected = set()
+    else:
+        edges_pert_connected = None
+        nodes_pert_connected = None
+        edges_added_connected = None
+        nodes_added_connected = None
+    stats, num_stats = _get_stats_and_num_stats(
+        edges, edges, edges_pert_connected, set(), edges_added_connected, set(),
+        nodes, nodes, nodes_pert_connected, set(), nodes_added_connected, set(),
+    )
+    num_edges = num_edges // 2 if cfg.attack.is_undirected else num_edges
+    assert num_edges == num_stats["num_edges"]["clean"]
+    assert num_nodes == num_stats["num_nodes"]["clean"]
+    return stats, num_stats
+
+
+def basic_edge_and_node_stats(
+    edge_index: torch.Tensor,
+    edge_index_pert: torch.Tensor,
+    num_edges_clean: int,
+    num_nodes_clean: int,
+) -> tuple[dict[str, dict[str, set[tuple[int, int]]]], dict[str, dict[str, int]]]:
+    edges, nodes = _get_edges_nodes_from_index(edge_index)
+    edges_pert, nodes_pert = _get_edges_nodes_from_index(edge_index_pert)
+
+    edges_added = edges_pert - edges
+    edges_removed = edges - edges_pert
+
+    nodes_added = nodes_pert - nodes
+    nodes_removed = nodes - nodes_pert
+
+    if cfg.attack.remove_isolated_components:
+        edge_index_pert_connected = _get_edge_index_connected(edge_index_pert)
+        edges_pert_connected, nodes_pert_connected = _get_edges_nodes_from_index(edge_index_pert_connected)
+        edges_added_connected = edges_pert_connected - edges
+        nodes_added_connected = nodes_pert_connected - nodes
+    else:
+        edges_pert_connected = None
+        nodes_pert_connected = None
+        edges_added_connected = None
+        nodes_added_connected = None
+
+    stats, num_stats = _get_stats_and_num_stats(
+        edges, edges_pert, edges_pert_connected, edges_added, edges_added_connected, edges_removed,
+        nodes, nodes_pert, nodes_pert_connected, nodes_added, nodes_added_connected, nodes_removed,
+    )
 
     num_edges_clean = num_edges_clean // 2 if cfg.attack.is_undirected else num_edges_clean
 
@@ -305,19 +360,23 @@ def basic_edge_and_node_stats(
     return stats, num_stats
 
 
-def log_and_accumulate_num_stats(accumulated_stats, num_stats, random=False):
+def log_and_accumulate_num_stats(accumulated_stats, num_stats, random=False, zero_budget=False):
     stat_keys = [
-        ("num_edges", "clean"), ("num_edges", "added"), ("num_edges", "added_connected"), ("num_edges", "removed"),
-        ("num_nodes", "clean"), ("num_nodes", "added"), ("num_nodes", "added_connected"), ("num_nodes", "removed"),
+        ("num_edges", "clean"), ("num_edges", "added"), ("num_edges", "removed"),
+        ("num_nodes", "clean"), ("num_nodes", "added"), ("num_nodes", "removed"),
     ]
     info_texts = [
-        "Original number of edges", "Added edges", "Added edges (connected)", "Removed edges",
-        "Original number of nodes", "Added nodes", "Added nodes (connected)", "Removed nodes"
+        "Original number of edges", "Added edges", "Removed edges",
+        "Original number of nodes", "Added nodes", "Removed nodes"
     ]
+    if cfg.attack.remove_isolated_components:
+        stat_keys.extend([("num_edges", "added_connected"), ("num_nodes", "added_connected")])
+        info_texts.extend(["Added edges (connected)", "Added nodes (connected)"])
 
     for stat_key, info_text in zip(stat_keys, info_texts):
         current_stat = num_stats[stat_key[0]][stat_key[1]]
-        logging.info(f"{info_text + ':':<26} {current_stat:>7}")
+        if not zero_budget:
+            logging.info(f"{info_text + ':':<26} {current_stat:>7}")
         acc_key = stat_key[0] + "_" + stat_key[1]
         if random:
             if stat_key[1] == "clean":

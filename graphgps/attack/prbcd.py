@@ -385,7 +385,7 @@ class PRBCDAttack(torch.nn.Module):
         topk_indices = torch.topk(self.block_edge_weight, budget).indices
         topk_block_edge_weight[topk_indices] = self.block_edge_weight[topk_indices]
         
-        edge_index, edge_weight, _ = self._get_discrete_sampled_graph(topk_block_edge_weight)
+        edge_index, edge_weight, _, _ = self._get_discrete_sampled_graph(topk_block_edge_weight)
         
         prediction = self._forward(x, edge_index, edge_weight, **kwargs)
         metric = self.metric(prediction, labels, idx_attack)
@@ -539,13 +539,11 @@ class PRBCDAttack(torch.nn.Module):
                 if edge not in edges_in_tree:
                     sampled_block_edge_weight[i] = 0
                     num_removed_edges += 1
-            if num_removed_edges > 0:
-                logging.info(f"Removed {num_removed_edges} edges to ensure tree structure.")
         else:
             # discretize the edge weights
             edge_weight[:] = 1
         discrete_block_edge_weight = (sampled_block_edge_weight > 0).float()
-        return edge_index, edge_weight, discrete_block_edge_weight
+        return edge_index, edge_weight, discrete_block_edge_weight, num_removed_edges
 
     def _filter_self_loops_in_block(self, with_weight: bool):
         is_not_sl = self.block_edge_index[0] != self.block_edge_index[1]
@@ -619,6 +617,7 @@ class PRBCDAttack(torch.nn.Module):
         **kwargs,
     ) -> Tuple[Tensor, Tensor]:
         best_metric = float('-Inf')
+        best_num_removed_edges = 0
         block_edge_weight = self.block_edge_weight
         block_edge_weight[block_edge_weight <= self.coeffs['eps']] = 0
 
@@ -632,7 +631,12 @@ class PRBCDAttack(torch.nn.Module):
                 sampled_edges_mask = torch.bernoulli(block_edge_weight).to(bool)
                 sampled_edges[sampled_edges_mask] = block_edge_weight[sampled_edges_mask]
             
-            edge_index, edge_weight, discrete_block_edge_weight = self._get_discrete_sampled_graph(sampled_edges)
+            (
+                edge_index,
+                edge_weight,
+                discrete_block_edge_weight,
+                num_removed_edges,
+            ) = self._get_discrete_sampled_graph(sampled_edges)
 
             if discrete_block_edge_weight.sum() > budget:
                 # Allowed budget is exceeded
@@ -645,6 +649,7 @@ class PRBCDAttack(torch.nn.Module):
             if metric > best_metric:
                 best_metric = metric
                 self.block_edge_weight = discrete_block_edge_weight.clone().cpu()
+                best_num_removed_edges = num_removed_edges
 
         # Recover best sample
         self.block_edge_weight = self.block_edge_weight.to(self.device)
@@ -655,6 +660,9 @@ class PRBCDAttack(torch.nn.Module):
         )
         edge_mask = edge_weight == 1
         edge_index = edge_index[:, edge_mask]
+
+        if best_num_removed_edges > 0:
+            logging.info(f"Removed {num_removed_edges} edges to ensure tree structure.")
 
         return edge_index, flipped_edges
 

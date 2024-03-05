@@ -12,8 +12,9 @@ from graphgps.attack.postprocessing import (
     get_empty_accumulated_stats,
     accumulate_output_stats,
     get_output_stats,
-    log_and_accumulate_pert_output_stats,
+    log_pert_output_stats,
     basic_edge_and_node_stats,
+    zero_budget_edge_and_node_stats,
     log_and_accumulate_num_stats,
     log_summary_stats,
 )
@@ -35,11 +36,12 @@ def prbcd_attack_dataset(model, loaders):
     model.eval()
     model.forward = forward_wrapper(model.forward)
     prbcd = PRBCDAttack(model)
-    accumulated_stats, zero_budget_keymap = get_empty_accumulated_stats()
+    accumulated_stats, accumulated_stats_zb = get_empty_accumulated_stats()
 
     if cfg.dataset.task == "node" and (cfg.attack.enable_node_injection or cfg.attack.remove_isolated_components):
         raise NotImplementedError(
-            "Need to handle the node mask with node injection and or pruning away isolated components."
+            "Need to handle the node mask (also to calculate attack success rate) "
+            "with node injection or pruning away isolated components."
         )
 
     dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
@@ -62,7 +64,8 @@ def prbcd_attack_dataset(model, loaders):
         num_nodes = clean_data.x.size(0)
         num_edges = clean_data.edge_index.size(1)
         # currently only does global attack (entire split),
-        # but could technically select any subset of (single / local) nodes to attack
+        # but could technically select any subset of (single / local)
+        # nodes to attack by passing a node mask as an argument
         node_mask = None if f'{cfg.attack.split}_mask' not in clean_data else clean_data[f'{cfg.attack.split}_mask']
         if node_mask is not None:
             assert not cfg.dataset.task == "graph"
@@ -70,31 +73,82 @@ def prbcd_attack_dataset(model, loaders):
             # and we can apply our own node mask
             del clean_data.split
 
-        skip, global_budget, output_clean, output_stats_clean, y_gt = check_budget_and_clean_data(
-            model, clean_data, node_mask,
-        )
+        # check the prediction of the clean graph
+        clean_data.to(device=cfg.accelerator)
+        with torch.no_grad():
+            output_clean = model(clean_data.clone(), unmodified=True)
+        output_clean = apply_node_mask(output_clean, node_mask)
+        y_gt = apply_node_mask(clean_data.y, node_mask)
+        output_stats_clean = get_output_stats(y_gt, output_clean)
 
-        if skip["skip"]:
-            logging.info(f"Skipping graph {i + 1}, {skip['msg']}")
-            # still need to log if graph prediction is correct 
-            # (since we don't attack it remains unchanged from clean)
-            for key, s in accumulated_stats.items():
-                if skip["type"] == "budget" and key.endswith("_with_zero_budget"):
-                    s.append(output_stats_clean[zero_budget_keymap[key]])
+        if (
+            cfg.dataset.task == "graph"
+            and cfg.attack.skip_incorrect_graph_classification
+            and "correct" in output_stats_clean
+            and not output_stats_clean["correct"]
+        ):
+            # graph prediction is incorrect, no need to attack
+            logging.info("Skipping graph attack because it is already incorrectly classified by model.")
+            # In this case:
+            # - set correct.* to False (for the accuracy calculations, guaranteed to be graph task)
+            # - all the rest to None
+            for k in accumulated_stats:
+                if k.startswith("correct"):
+                    accumulated_stats[k].append(False)
                 else:
-                    s.append(None)
+                    accumulated_stats[k].append(None)
+            for k in accumulated_stats_zb:
+                if k.startswith("correct"):
+                    accumulated_stats_zb[k].append(False)
+                else:
+                    accumulated_stats_zb[k].append(None)
+            continue
+
+        # TODO: allow for other ways to define the budget
+        budget_edges = num_edges / 2 if cfg.attack.is_undirected else num_edges
+        global_budget = int(cfg.attack.e_budget * budget_edges)
+
+        if cfg.attack.minimum_budget > global_budget:
+            global_budget = cfg.attack.minimum_budget
+            logging.info(
+                f"Budget smaller than minimum, thus set to minimum: relative budget "
+                f"effectively increased from {cfg.attack.e_budget} to "
+                f"{cfg.attack.minimum_budget / budget_edges} for this graph."
+            )
+
+        if global_budget == 0:
+            # there is no budget for the attack, can't attack
+            logging.info(
+                f"Skipping graph attack because maximum budget is less than 1 "
+                f"({cfg.attack.e_budget} of {budget_edges}), so cannot make perturbations."
+            )
+            # In this case we only accumulate the stats for the clean graph in the zero budget dict
+            for k in ["budget_used", "budget_used_random"]:
+                accumulated_stats_zb[k].append(0)
+            for (mode, random) in [("clean", False), ("pert", False), ("pert", True)]:
+                accumulate_output_stats(
+                    accumulated_stats_zb,
+                    output_stats_clean,
+                    mode=mode,
+                    random=random,
+                )
+            _, num_stats = zero_budget_edge_and_node_stats(
+                clean_data.edge_index,
+                num_edges=num_edges,
+                num_nodes=num_nodes
+            )
+            for random in [False, True]:
+                log_and_accumulate_num_stats(accumulated_stats_zb, num_stats, random, zero_budget=True)
             continue
 
         logging.info(f"Attacking graph {i + 1}")
+
         accumulate_output_stats(
             accumulated_stats,
             output_stats_clean,
             mode="clean",
             random=False,
-            zero_budget_keymap=zero_budget_keymap,
         )
-        if skip["msg"]:
-            logging.info(skip["msg"])
 
         # get the graph to attack (potentially augmented)
         attack_graph_data = get_attack_graph(
@@ -149,77 +203,53 @@ def prbcd_attack_dataset(model, loaders):
                 data = Batch.from_data_list([pert_data.clone()])
                 output_pert = model(data)
             output_pert = apply_node_mask(output_pert, node_mask)
-            
-            log_and_accumulate_pert_output_stats(
-                y_gt=y_gt,
-                output_pert=output_pert,
+
+            output_stats_pert = get_output_stats(y_gt, output_pert)
+            log_pert_output_stats(
+                output_stats_pert=output_stats_pert,
                 output_stats_clean=output_stats_clean,
                 accumulated_stats=accumulated_stats,
-                zero_budget_keymap=zero_budget_keymap,
                 random=random_attack,
             )
+
             stats, num_stats = basic_edge_and_node_stats(
                 clean_data.edge_index,
                 pert_edge_index,
                 num_edges_clean=num_edges,
                 num_nodes_clean=num_nodes,
             )
-            log_and_accumulate_num_stats(
-                accumulated_stats,
-                num_stats,
-                random=random_attack,
-            )
+
+            for (d, zb) in [(accumulated_stats, False), (accumulated_stats_zb, True)]:
+                accumulate_output_stats(
+                    d,
+                    output_stats_pert,
+                    mode="pert",
+                    random=random_attack,
+                )
+                log_and_accumulate_num_stats(
+                    d,
+                    num_stats,
+                    random=random_attack,
+                    zero_budget=zb,
+                )
         
     summary_stats = log_summary_stats(accumulated_stats)
+    summary_stats_zb = log_summary_stats(accumulated_stats_zb)
     model.forward = model.forward.__wrapped__
     logging.info("End of attack.")
-    return {"avg": summary_stats, "all": dict(accumulated_stats)}
+    results = {
+        "avg": summary_stats,
+        "avg_including_zero_budget": summary_stats_zb,
+        "all": accumulated_stats,
+        "all_including_zero_budget": accumulated_stats_zb,
+    }
+    return results
 
 
 def apply_node_mask(tensor_to_mask, mask):
     if mask is not None:
         return tensor_to_mask[mask]
     return tensor_to_mask
-
-
-def check_budget_and_clean_data(model, clean_data, node_mask):
-    skip = {"skip": False, "type": "", "msg": ""}
-
-    # TODO: allow for other ways to define the budget
-    num_edges = clean_data.edge_index.size(1)
-    budget_edges = num_edges / 2 if cfg.attack.is_undirected else num_edges
-    global_budget = int(cfg.attack.e_budget * budget_edges)
-
-    if cfg.attack.minimum_budget > global_budget:
-        global_budget = cfg.attack.minimum_budget
-        skip["msg"] = (
-            f"Budget would be smaller than set minimum. Budget set to minimum, this means the relative budget "
-            f"was effectively increased from {cfg.attack.e_budget} to {cfg.attack.minimum_budget / budget_edges} "
-            f"for this graph."
-        )
-    if not global_budget:
-        skip["msg"] = "because budget is 0."
-        skip["skip"] = True
-        skip["type"] = "budget"
-    
-    clean_data.to(device=cfg.accelerator)
-    with torch.no_grad():
-        output_clean = model(clean_data.clone(), unmodified=True)
-    output_clean = apply_node_mask(output_clean, node_mask)
-    y_gt = apply_node_mask(clean_data.y, node_mask)
-    output_stats_clean = get_output_stats(y_gt, output_clean)
-
-    if (
-        cfg.dataset.task == "graph"
-        and cfg.attack.skip_incorrect_graph_classification
-        and "correct" in output_stats_clean
-        and not output_stats_clean["correct"]
-    ):
-        skip["msg"] = "because it is already incorrectly classified by model."
-        skip["skip"] = True
-        skip["type"] = "incorrect"
-
-    return skip, global_budget, output_clean, output_stats_clean, y_gt
 
 
 def get_attack_graph(
