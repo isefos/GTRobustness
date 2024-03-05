@@ -35,25 +35,26 @@ def forward_wrapper(forward: Callable) -> Callable:
             use_64bit = False
             num_nodes = data.x.size(0)
 
-            if cfg.attack.node_prob_log:
-                data.node_logprob = get_node_logprob(
-                    edge_index=data.edge_index,
-                    edge_weights=data.edge_attr,
-                    num_nodes=num_nodes,
-                    is_undirected=cfg.attack.is_undirected,
-                    root_node=root_node,
-                    num_iterations=cfg.attack.iterations_node_prob,
-                    use_64bit=use_64bit,
-                )
-            else:
-                data.node_prob = node_in_graph_prob(
-                    edge_index=data.edge_index,
-                    edge_weights=data.edge_attr,
-                    batch=data.batch,
-                    undirected=cfg.attack.is_undirected,
-                    root_node=root_node,
-                    num_iterations=cfg.attack.iterations_node_prob,
-                )
+            if cfg.attack.node_prob_enable:
+                if cfg.attack.node_prob_log:
+                    data.node_logprob = get_node_logprob(
+                        edge_index=data.edge_index,
+                        edge_weights=data.edge_attr,
+                        num_nodes=num_nodes,
+                        is_undirected=cfg.attack.is_undirected,
+                        root_node=root_node,
+                        num_iterations=cfg.attack.node_prob_iterations,
+                        use_64bit=use_64bit,
+                    )
+                else:
+                    data.node_prob = node_in_graph_prob(
+                        edge_index=data.edge_index,
+                        edge_weights=data.edge_attr,
+                        batch=data.batch,
+                        undirected=cfg.attack.is_undirected,
+                        root_node=root_node,
+                        num_iterations=cfg.attack.node_prob_iterations,
+                    )
             data.recompute_preprocessing = True
         else:
             data.recompute_preprocessing = False

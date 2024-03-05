@@ -66,8 +66,11 @@ def dataset_cfg(cfg):
     # None (set to same as loss), 'train', 'masked', 'margin', 'prob_margin', or 'tanh_margin' (or callable)
     cfg.attack.metric = None
 
+    # do we want to compute the node probability approximation or not (probably more important for node injection attacks)
+    cfg.attack.node_prob_enable = True
+
     # how many iterations of the node probability approximation computation to do
-    cfg.attack.iterations_node_prob = 5
+    cfg.attack.node_prob_iterations = 5
 
     # compute the node probability approximation directly (faster) or in log space (better for numerical stability)
     cfg.attack.node_prob_log = True
