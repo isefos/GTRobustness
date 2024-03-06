@@ -290,7 +290,7 @@ def node_in_graph_prob_undirected(
     assert len(edge_weights.shape) == 1, "Only scalar edge weights are supported"
     num_nodes = batch.size(0)
     edge_index_nsl, edge_weights_nsl = remove_self_loops(edge_index, edge_weights)
-    prob_nodes = torch.ones(num_nodes)
+    prob_nodes = torch.ones(num_nodes, device=edge_index.device)
     for _ in range(num_iterations):
         msg = 1 - edge_weights_nsl * prob_nodes[edge_index_nsl[1, :]]
         out = scatter(msg, edge_index_nsl[0, :], dim=0, dim_size=num_nodes, reduce='mul')
@@ -315,7 +315,7 @@ def node_in_graph_prob_directed(
     assert len(edge_weights.shape) == 1, "Only scalar edge weights are supported"
     num_nodes = batch.size(0)
     edge_index_nsl, edge_weights_nsl = remove_self_loops(edge_index, edge_weights)
-    prob_nodes = torch.ones(num_nodes)
+    prob_nodes = torch.ones(num_nodes, device=edge_index.device)
     for _ in range(num_iterations):
         msg_out = 1 - edge_weights_nsl * prob_nodes[edge_index_nsl[1, :]]
         msg_in = 1 - edge_weights_nsl * prob_nodes[edge_index_nsl[0, :]]
