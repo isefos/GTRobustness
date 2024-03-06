@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 3
+  experiments_per_job: 2
   sbatch_options:
     # partition: gpu_limited
     gres: gpu:1       # num GPUs
@@ -101,14 +101,14 @@ fixed:
       minimum_budget: 0
       eps: 1e-7
       is_undirected: true
-      #loss: train
+      loss: raw_prediction
       metric: null
       max_final_samples: 20
       max_trials_sampling: 20
       with_early_stopping: true
       node_prob_enable: true
       node_prob_iterations: 5
-      node_prob_log: true
+      node_prob_log: false
       enable_node_injection: true
       node_injection_from_train: true
       node_injection_from_val: true
@@ -129,10 +129,3 @@ grid:
       - 1
       - 2
       - 3
-
-  graphgym.attack.loss:
-    type: choice
-    options:
-      - train
-      - raw_prediction
-      - reflected_cross_entropy

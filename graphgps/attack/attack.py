@@ -123,12 +123,19 @@ def prbcd_attack_dataset(model, loaders):
             # In this case we only accumulate the stats for the clean graph in the zero budget dict
             for k in ["budget_used", "budget_used_random"]:
                 accumulated_stats_zb[k].append(0)
-            for (mode, random) in [("clean", False), ("pert", False), ("pert", True)]:
-                accumulate_output_stats(
+            accumulate_output_stats(
                     accumulated_stats_zb,
                     output_stats_clean,
-                    mode=mode,
-                    random=random,
+                    mode="clean",
+                    random=False,
+                )
+            for random in [False, True]:
+                accumulate_output_stats_pert(
+                    accumulated_stats_zb,
+                    output_stats_clean,
+                    output_stats_clean,
+                    random,
+                    True,
                 )
             _, num_stats = zero_budget_edge_and_node_stats(
                 clean_data.edge_index,
