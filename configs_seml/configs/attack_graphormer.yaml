@@ -101,7 +101,7 @@ fixed:
       minimum_budget: 0
       eps: 1e-7
       is_undirected: true
-      loss: train
+      #loss: train
       metric: null
       max_final_samples: 20
       max_trials_sampling: 20
@@ -121,14 +121,18 @@ fixed:
       sample_only_trees: true
       allow_existing_graph_pert: false
 
-# experiment random configs
-
-random:
-  samples: 3
-  seed: 187
+grid:
 
   graphgym.seed:
-    seed: 786
-    type: randint
-    min: 0
-    max: 10000
+    type: choice
+    options:
+      - 1
+      - 2
+      - 3
+
+  graphgym.attack.loss:
+    type: choice
+    options:
+      - train
+      - raw_prediction
+      - reflected_cross_entropy

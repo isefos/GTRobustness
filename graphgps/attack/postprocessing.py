@@ -35,7 +35,7 @@ def get_empty_accumulated_stats():
 
         key_prefixes = ["probs", "logits", "correct", "margin"]
 
-        if cfg.dataset.task == "node":
+        if cfg.attack.prediction_level == "node":
             key_prefixes.extend(["correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max"])
         
         keys.extend([k + "_clean" for k in key_prefixes])
@@ -53,10 +53,10 @@ def get_empty_accumulated_stats():
 
 
 def get_output_stats(y_gt, model_output):
-    if cfg.dataset.task == "node":
+    if cfg.attack.prediction_level == "node":
         return get_node_output_stats(y_gt, model_output)
     
-    elif cfg.dataset.task == "graph":
+    elif cfg.attack.prediction_level == "graph":
         return get_graph_output_stats(y_gt, model_output)
     
     else:
@@ -140,34 +140,52 @@ def get_graph_output_stats(y_gt, model_output):
 def log_pert_output_stats(
     output_stats_pert,
     output_stats_clean,
-    accumulated_stats,
     random=False,
 ):
-    if cfg.dataset.task == "graph":
+    if cfg.attack.prediction_level == "graph":
         if cfg.dataset.task_type.startswith("classification"):
-            # accumulate attack success rate
-            asr = None
-            if output_stats_clean["correct"]:
-                asr = 0 if output_stats_pert["correct"] else 1
-            accumulated_stats["attack_success_rate"].append(asr)
-            # log
             log_graph_classification_output_stats(output_stats_pert, output_stats_clean, random)
         else:
             raise NotImplementedError
 
-    elif cfg.dataset.task == "node":
+    elif cfg.attack.prediction_level == "node":
         if cfg.dataset.task_type.startswith("classification"):
-            # accumulate attack success rate
-            pert_c = list(compress(output_stats_pert["correct"], output_stats_clean["correct"]))
-            asr = sum(pert_c) / len(pert_c)
-            accumulated_stats["attack_success_rate"].append(asr)
-            # log
             log_node_classification_output_stats(output_stats_pert, output_stats_clean, random)
         else:
             raise NotImplementedError
     
     else:
         raise NotImplementedError
+
+
+def accumulate_output_stats_pert(
+    accumulated_stats,
+    output_stats_pert,
+    output_stats_clean,
+    random=False,
+    no_asr_log=False,
+):
+    accumulate_output_stats(
+        accumulated_stats,
+        output_stats=output_stats_pert,
+        mode="pert",
+        random=random,
+    )
+    if cfg.dataset.task_type.startswith("classification"):
+        asr_key = "attack_success_rate"
+        if random:
+            asr_key += "_random"
+        if cfg.attack.prediction_level == "graph":
+            asr = None
+            if output_stats_clean["correct"]:
+                asr = 0 if output_stats_pert["correct"] else 1
+            accumulated_stats[asr_key].append(asr)
+        if cfg.attack.prediction_level == "node":
+            pert_c = list(compress(output_stats_pert["correct"], output_stats_clean["correct"]))
+            asr = 1 - (sum(pert_c) / len(pert_c))
+            accumulated_stats[asr_key].append(asr)
+        if not no_asr_log:
+            logging.info(f"Attack success rate: {asr:.3f}")
     
 
 def accumulate_output_stats(
@@ -385,9 +403,11 @@ def log_and_accumulate_num_stats(accumulated_stats, num_stats, random=False, zer
         accumulated_stats[acc_key].append(current_stat)
 
 
-def log_summary_stats(accumulated_stats):
+def log_summary_stats(accumulated_stats, zb=False):
     summary_stats = {}
-    logging.info("Attack stats summary (averages over all attacked graphs):")
+    logging.info(
+        f"Attack stats summary (averages over attacked graphs{'' if not zb else 'including zero budget'}):"
+    )
     for key, current_stat in accumulated_stats.items():
         name = "avg_" + key
         filtered_stat = [s for s in current_stat if s is not None]

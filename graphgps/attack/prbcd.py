@@ -519,6 +519,7 @@ class PRBCDAttack(torch.nn.Module):
             sampled_block_edge_weight,
         )
         assert torch.all(edge_weight > 0)
+        num_removed_edges = 0
         if self.sample_only_trees:
             # ensure that we are sampling a tree
             g = to_scipy_sparse_matrix(edge_index, edge_attr=(1 / edge_weight.detach()))
@@ -533,7 +534,6 @@ class PRBCDAttack(torch.nn.Module):
             # find out which edges were removed -> remove from sampled_edge_weight
             # for edge in block_edge_index[sampled_edge_weight > 0] check if edge in edge_index
             # if not, it was removed to form the tree -> set the value in sampled_edge_weight to 0
-            num_removed_edges = 0 
             for i in sampled_block_edge_weight.nonzero().flatten().tolist():
                 edge = frozenset(self.block_edge_index[:, i].flatten().tolist())
                 if edge not in edges_in_tree:

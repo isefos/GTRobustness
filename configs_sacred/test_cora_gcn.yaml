@@ -1,0 +1,74 @@
+graphgym:
+  accelerator: auto
+  out_dir: configs_seml/results
+  metric_best: accuracy
+  metric_agg: argmax
+  dataset:
+    format: PyG
+    name: Cora
+    task: node
+    task_type: classification
+    transductive: True
+  train:
+    batch_size: 32
+    eval_period: 1
+    ckpt_best: true
+    enable_ckpt: true
+  model:
+    type: gnn
+    loss_fun: cross_entropy
+    edge_decoding: dot
+    graph_pooling: add
+  gnn:
+    layers_pre_mp: 1
+    layers_mp: 2
+    layers_post_mp: 1
+    dim_inner: 256
+    layer_type: gcnconvweighted
+    stage_type: stack
+    batchnorm: True
+    act: prelu
+    dropout: 0.0
+    agg: add
+    normalize_adj: False
+  optim:
+    optimizer: adam
+    base_lr: 0.005
+    max_epoch: 50
+  attack:
+    enable: true
+    log_progress: true
+    load_best_model: true
+    split: test
+    num_attacked_graphs: 0  # 0 means attack all
+    skip_incorrect_graph_classification: true
+    run_random_baseline: true
+    epochs: 75
+    epochs_resampling: 50
+    lr: 4_000
+    block_size: 2_000
+    e_budget: 0.1
+    minimum_budget: 0
+    eps: 1e-7
+    is_undirected: false
+    prediction_level: node
+    loss: reflected_cross_entropy
+    metric: null
+    max_final_samples: 20
+    max_trials_sampling: 20
+    with_early_stopping: true
+    node_prob_enable: true
+    node_prob_iterations: 5
+    node_prob_log: true
+    enable_node_injection: false
+    node_injection_from_train: false
+    node_injection_from_val: false
+    node_injection_from_test: false
+    remove_isolated_components: false
+    root_node_idx: null
+    include_root_nodes_for_injection: true
+    existing_node_prob_multiplier: 1  # 1_000
+    sample_only_connected: false
+    sample_only_trees: false
+    allow_existing_graph_pert: true
+

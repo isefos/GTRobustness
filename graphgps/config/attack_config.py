@@ -60,6 +60,9 @@ def dataset_cfg(cfg):
     # bla
     cfg.attack.is_undirected = True
 
+    # what the predictions are for, node or graph
+    cfg.attack.prediction_level = "graph"
+
     # 'train', 'masked', 'margin', 'prob_margin', or 'tanh_margin' (or callable)
     cfg.attack.loss = "train"
 

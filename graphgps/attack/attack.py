@@ -11,6 +11,7 @@ from graphgps.attack.preprocessing import forward_wrapper
 from graphgps.attack.postprocessing import (
     get_empty_accumulated_stats,
     accumulate_output_stats,
+    accumulate_output_stats_pert,
     get_output_stats,
     log_pert_output_stats,
     basic_edge_and_node_stats,
@@ -66,12 +67,9 @@ def prbcd_attack_dataset(model, loaders):
         # currently only does global attack (entire split),
         # but could technically select any subset of (single / local)
         # nodes to attack by passing a node mask as an argument
-        node_mask = None if f'{cfg.attack.split}_mask' not in clean_data else clean_data[f'{cfg.attack.split}_mask']
+        node_mask = clean_data.get(f'{cfg.attack.split}_mask')
         if node_mask is not None:
-            assert not cfg.dataset.task == "graph"
-            # we need to remove the split attribute, such that no nodes are already masked out
-            # and we can apply our own node mask
-            del clean_data.split
+            assert not cfg.attack.prediction_level == "graph"
 
         # check the prediction of the clean graph
         clean_data.to(device=cfg.accelerator)
@@ -82,7 +80,7 @@ def prbcd_attack_dataset(model, loaders):
         output_stats_clean = get_output_stats(y_gt, output_clean)
 
         if (
-            cfg.dataset.task == "graph"
+            cfg.attack.prediction_level == "graph"
             and cfg.attack.skip_incorrect_graph_classification
             and "correct" in output_stats_clean
             and not output_stats_clean["correct"]
@@ -90,7 +88,7 @@ def prbcd_attack_dataset(model, loaders):
             # graph prediction is incorrect, no need to attack
             logging.info("Skipping graph attack because it is already incorrectly classified by model.")
             # In this case:
-            # - set correct.* to False (for the accuracy calculations, guaranteed to be graph task)
+            # - set correct.* to False (for the accuracy calculations)
             # - all the rest to None
             for k in accumulated_stats:
                 if k.startswith("correct"):
@@ -143,12 +141,13 @@ def prbcd_attack_dataset(model, loaders):
 
         logging.info(f"Attacking graph {i + 1}")
 
-        accumulate_output_stats(
-            accumulated_stats,
-            output_stats_clean,
-            mode="clean",
-            random=False,
-        )
+        for d in [accumulated_stats, accumulated_stats_zb]:
+            accumulate_output_stats(
+                d,
+                output_stats_clean,
+                mode="clean",
+                random=False,
+            )
 
         # get the graph to attack (potentially augmented)
         attack_graph_data = get_attack_graph(
@@ -190,6 +189,7 @@ def prbcd_attack_dataset(model, loaders):
             relative_budget_used = num_modified_edges / global_budget
             key = "budget_used_random" if random_attack else "budget_used"
             accumulated_stats[key].append(relative_budget_used)
+            accumulated_stats_zb[key].append(relative_budget_used)
             m = "Random perturbation" if random_attack else "Perturbation"
             logging.info(
                 f"{m} uses {100 * relative_budget_used:.1f}% "
@@ -208,7 +208,6 @@ def prbcd_attack_dataset(model, loaders):
             log_pert_output_stats(
                 output_stats_pert=output_stats_pert,
                 output_stats_clean=output_stats_clean,
-                accumulated_stats=accumulated_stats,
                 random=random_attack,
             )
 
@@ -220,11 +219,12 @@ def prbcd_attack_dataset(model, loaders):
             )
 
             for (d, zb) in [(accumulated_stats, False), (accumulated_stats_zb, True)]:
-                accumulate_output_stats(
+                accumulate_output_stats_pert(
                     d,
                     output_stats_pert,
-                    mode="pert",
-                    random=random_attack,
+                    output_stats_clean,
+                    random_attack,
+                    zb,
                 )
                 log_and_accumulate_num_stats(
                     d,
@@ -234,7 +234,7 @@ def prbcd_attack_dataset(model, loaders):
                 )
         
     summary_stats = log_summary_stats(accumulated_stats)
-    summary_stats_zb = log_summary_stats(accumulated_stats_zb)
+    summary_stats_zb = log_summary_stats(accumulated_stats_zb, zb=True)
     model.forward = model.forward.__wrapped__
     logging.info("End of attack.")
     results = {
