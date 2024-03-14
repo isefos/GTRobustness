@@ -13,7 +13,7 @@ conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvi
 
 conda install -c pyg pyg pytorch-scatter
 
-conda install -c conda-forge yacs tensorboardx lightning torchmetrics performer-pytorch ogb wandb
+conda install -c conda-forge yacs tensorboardx lightning torchmetrics performer-pytorch ogb wandb opt_einsum
 
 pip install seml
 

@@ -104,6 +104,7 @@ def main(cfg):
     attack_results = None
     if cfg.attack.enable:
         if cfg.attack.load_best_model:
+            logging.info(f"Loading best val. model before attack (from epoch {training_results['best_val_epoch']})")
             model = load_best_val_model(model, training_results)
         attack_results = prbcd_attack_dataset(model, loaders)
 
@@ -115,6 +116,7 @@ def main(cfg):
 ex = Experiment()
 
 
+# TODO: there is already a function in graphgps.utils that does this
 def convert_cfg_to_dict(cfg_node):
     cfg_dict = {}
     for k, v in cfg_node.items():

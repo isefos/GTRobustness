@@ -1,8 +1,8 @@
 import logging
 import os.path as osp
 import time
+import warnings
 from functools import partial
-
 import numpy as np
 import torch
 import torch_geometric.transforms as T
@@ -26,13 +26,18 @@ from graphgps.loader.dataset.aqsol_molecules import AQSOL
 from graphgps.loader.dataset.coco_superpixels import COCOSuperpixels
 from graphgps.loader.dataset.voc_superpixels import VOCSuperpixels
 from graphgps.loader.dataset.upfd import UPFD
-from graphgps.loader.split_generator import (prepare_splits,
-                                             set_dataset_splits)
-from graphgps.transform.posenc_stats import compute_posenc_stats
+from graphgps.loader.split_generator import (
+    prepare_splits,
+    set_dataset_splits,
+)
+from graphgps.transform.posenc_stats import compute_posenc_stats, ComputePosencStat
 from graphgps.transform.task_preprocessing import task_specific_preprocessing
-from graphgps.transform.transforms import (pre_transform_in_memory,
-                                           typecast_x, concat_x_and_pos,
-                                           clip_graphs_to_size)
+from graphgps.transform.transforms import (
+    pre_transform_in_memory,
+    typecast_x,
+    concat_x_and_pos,
+    clip_graphs_to_size,
+)
 
 
 def log_loaded_dataset(dataset, format, name):
@@ -205,26 +210,40 @@ def load_dataset_master(format, name, dataset_dir):
                 # Generate kernel times if functional snippet is set.
                 if pecfg.kernel.times_func:
                     pecfg.kernel.times = list(eval(pecfg.kernel.times_func))
-                logging.info(f"Parsed {pe_name} PE kernel times / steps: "
-                             f"{pecfg.kernel.times}")
+                logging.info(f"Parsed {pe_name} PE kernel times / steps: {pecfg.kernel.times}")
     if pe_enabled_list:
         start = time.perf_counter()
-        logging.info(f"Precomputing Positional Encoding statistics: "
-                     f"{pe_enabled_list} for all graphs...")
+        logging.info(f"Precomputing Positional Encoding statistics: {pe_enabled_list} for all graphs...")
         # Estimate directedness based on 10 graphs to save time.
         is_undirected = all(d.is_undirected() for d in dataset[:10])
         logging.info(f"  ...estimated to be undirected: {is_undirected}")
-        pre_transform_in_memory(dataset,
-                                partial(compute_posenc_stats,
-                                        pe_types=pe_enabled_list,
-                                        is_undirected=is_undirected,
-                                        cfg=cfg),
-                                show_progress=True
-                                )
-        elapsed = time.perf_counter() - start
-        timestr = time.strftime('%H:%M:%S', time.gmtime(elapsed)) \
-                  + f'{elapsed:.2f}'[-3:]
-        logging.info(f"Done! Took {timestr}")
+        if not cfg.dataset.pe_transform_on_the_fly:
+            pre_transform_in_memory(
+                dataset,
+                partial(
+                    compute_posenc_stats,
+                    pe_types=pe_enabled_list,
+                    is_undirected=is_undirected,
+                    cfg=cfg,
+                ),
+                show_progress=True,
+            )
+            elapsed = time.perf_counter() - start
+            timestr = time.strftime('%H:%M:%S', time.gmtime(elapsed)) + f'{elapsed:.2f}'[-3:]
+            logging.info(f"Done! Took {timestr}")
+        else:
+            warnings.warn(
+                'PE transform on the fly to save memory consumption; experimental, please only use for RWSE/RWPSE'
+            )
+            pe_transform = ComputePosencStat(
+                pe_types=pe_enabled_list,
+                is_undirected=is_undirected,
+                cfg=cfg,
+            )
+            if dataset.transform is None:
+                dataset.transform = pe_transform
+            else:
+                dataset.transform = T.compose([pe_transform, dataset.transform])
 
     # Set standard dataset train/val/test splits
     if hasattr(dataset, 'split_idxs'):

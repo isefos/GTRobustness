@@ -33,4 +33,6 @@ def extended_cfg(cfg):
     # In training, if True (and also cfg.train.enable_ckpt is True) then
     # always checkpoint the current best model based on validation performance,
     # instead, when False, follow cfg.train.eval_period checkpointing frequency.
-    cfg.train.ckpt_best = False
+    cfg.train.ckpt_best = True
+
+    cfg.best_by_loss = False  # choose the best epoch by loss rather than by metrics

@@ -1,13 +1,14 @@
 graphgym:
 
-  accelerator: auto
   out_dir: configs_seml/results
-  metric_best: accuracy
+  metric_best: accuracy-SBM
   tensorboard_each_run: false
+  accelerator: auto
+  seed: 42
 
   dataset:
-    format: PyG-UPFD
-    name: politifact-spacy
+    format: PyG-GNNBenchmarkDataset
+    name: PATTERN
     task: graph
     task_type: classification_binary
     transductive: false
@@ -15,12 +16,13 @@ graphgym:
     node_encoder: true
     node_encoder_name: LinearNode+WeightedGraphormerBias
     node_encoder_bn: false
+    edge_encoder: false
 
   posenc_GraphormerBias:
     enable: true
-    num_spatial_types: 8
-    num_in_degrees: 27
-    num_out_degrees: 27
+    num_spatial_types: 32
+    num_in_degrees: 32
+    num_out_degrees: 32
     node_degrees_only: false
     directed_graphs: false
     has_edge_attr: false
@@ -29,44 +31,41 @@ graphgym:
 
   train:
     mode: custom
-    batch_size: 16
+    batch_size: 32
     eval_period: 1
-    enable_ckpt: true
-    ckpt_best: true
 
   model:
     type: Graphormer
-    loss_fun: cross_entropy
-    graph_pooling: graph_token
+    loss_fun: weighted_cross_entropy
 
   graphormer:
-    num_layers: 2
-    num_heads: 2
-    embed_dim: 32
+    num_layers: 10
+    num_heads: 8
+    embed_dim: 256
     dropout: 0.0
-    attention_dropout: 0.0  # 0.1
-    mlp_dropout: 0.0  # 0.1
+    attention_dropout: 0.3  # 0.1
+    mlp_dropout: 0.1  # 0.1
     input_dropout: 0.0  # 0.1
+    use_graph_token: false
 
   gnn:
-    head: graphormer_graph
+    head: inductive_node
     layers_pre_mp: 0
-    layers_post_mp: 1
-    dim_inner: 32  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
-  
+    layers_post_mp: 2
+    dim_inner: 256  # `gt.dim_hidden` must match `gnn.dim_inner`
+
   optim:
-    base_lr: 0.001
-    weight_decay: 0.01
     clip_grad_norm: true
-    clip_grad_norm_value: 5.0
     optimizer: adamW
-    max_epoch: 3
+    weight_decay: 0.0  # 1e-5
+    base_lr: 0.0001
+    max_epoch: 60
     scheduler: cosine_with_warmup
-    num_warmup_epochs: 30
+    num_warmup_epochs: 15
     early_stopping: true
-    early_stopping_patience: 35
+    early_stopping_patience: 20
     early_stopping_delta_e: 0.05
-    early_stopping_warmup: 30
+    early_stopping_warmup: 20
 
   attack:
     enable: true
@@ -79,12 +78,13 @@ graphgym:
     epochs: 125
     epochs_resampling: 100
     lr: 4_000
-    block_size: 2_000
+    block_size: 800
     e_budget: 0.1
     minimum_budget: 0
-    eps: 1e-7
+    eps: 1e-5
     is_undirected: true
-    loss: reflected_cross_entropy  # raw_prediction
+    prediction_level: node
+    loss: tanh_margin
     metric: null
     max_final_samples: 20
     max_trials_sampling: 20
@@ -92,14 +92,14 @@ graphgym:
     node_prob_enable: true
     node_prob_iterations: 5
     node_prob_log: true
-    enable_node_injection: true
-    node_injection_from_train: true
-    node_injection_from_val: true
-    node_injection_from_test: true
-    remove_isolated_components: true
-    root_node_idx: 0
-    include_root_nodes_for_injection: false
+    enable_node_injection: false
+    node_injection_from_train: false
+    node_injection_from_val: false
+    node_injection_from_test: false
+    remove_isolated_components: false
+    root_node_idx: null
+    include_root_nodes_for_injection: true
     existing_node_prob_multiplier: 1  # 1_000
-    sample_only_connected: true
-    sample_only_trees: true
-    allow_existing_graph_pert: false
+    sample_only_connected: false
+    sample_only_trees: false
+    allow_existing_graph_pert: true

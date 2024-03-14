@@ -36,13 +36,15 @@ def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.optim.clip_grad_norm_value)
             optimizer.step()
             optimizer.zero_grad()
-        logger.update_stats(true=_true,
-                            pred=_pred,
-                            loss=loss.detach().cpu().item(),
-                            lr=scheduler.get_last_lr()[0],
-                            time_used=time.time() - time_start,
-                            params=cfg.params,
-                            dataset_name=cfg.dataset.name)
+        logger.update_stats(
+            true=_true,
+            pred=_pred,
+            loss=loss.detach().cpu().item(),
+            lr=scheduler.get_last_lr()[0],
+            time_used=time.time() - time_start,
+            params=cfg.params,
+            dataset_name=cfg.dataset.name,
+        )
         time_start = time.time()
 
 
@@ -66,13 +68,15 @@ def eval_epoch(logger, loader, model, split='val'):
             loss, pred_score = compute_loss(pred, true)
             _true = true.detach().to('cpu', non_blocking=True)
             _pred = pred_score.detach().to('cpu', non_blocking=True)
-        logger.update_stats(true=_true,
-                            pred=_pred,
-                            loss=loss.detach().cpu().item(),
-                            lr=0, time_used=time.time() - time_start,
-                            params=cfg.params,
-                            dataset_name=cfg.dataset.name,
-                            **extra_stats)
+        logger.update_stats(
+            true=_true,
+            pred=_pred,
+            loss=loss.detach().cpu().item(),
+            lr=0, time_used=time.time() - time_start,
+            params=cfg.params,
+            dataset_name=cfg.dataset.name,
+            **extra_stats,
+        )
         time_start = time.time()
 
 

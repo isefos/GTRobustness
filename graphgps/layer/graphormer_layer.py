@@ -3,8 +3,14 @@ from torch_geometric.utils import to_dense_batch
 
 
 class GraphormerLayer(torch.nn.Module):
-    def __init__(self, embed_dim: int, num_heads: int, dropout: float,
-                 attention_dropout: float, mlp_dropout: float):
+    def __init__(
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float,
+        attention_dropout: float,
+        mlp_dropout: float,
+    ):
         """Implementation of the Graphormer layer.
         This layer is based on the implementation at:
         https://github.com/microsoft/Graphormer/tree/v1.0

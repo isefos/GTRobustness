@@ -575,17 +575,11 @@ class PRBCDAttack(torch.nn.Module):
         sorted_idx = sorted_idx[keep_above:]
 
         self.current_block = self.current_block[sorted_idx]
+        block_edge_weight_prev = self.block_edge_weight[sorted_idx]
+        n_prev = sorted_idx.size(0)
 
         # Sample until enough edges were drawn
         for i in range(self.coeffs['max_trials_sampling']):
-            if i > 0:
-                # not sure if later line is correct in the case of second sampling:
-                # block_edge_weight_prev = self.block_edge_weight[sorted_idx]
-                logging.info(
-                    "\n\nWARNING: sampling _resample_random_block is retrying, "
-                    "please check that it works correctly!\n\n"
-                )
-
             n_edges_resample = self.block_size - self.current_block.size(0)
             lin_index = self.sample_edge_indices(n_edges_resample)
             current_block = torch.cat((self.current_block, lin_index))
@@ -597,9 +591,12 @@ class PRBCDAttack(torch.nn.Module):
                 self.block_edge_index = self._linear_to_full_idx(self.num_nodes, self.current_block)
 
             # Merge existing weights with new edge weights
-            block_edge_weight_prev = self.block_edge_weight[sorted_idx]
+            if i > 0:
+                block_edge_weight_prev = self.block_edge_weight
+                n_prev = block_edge_weight_prev.size(0)
+
             self.block_edge_weight = torch.full(self.current_block.shape, self.coeffs['eps'], device=self.device)
-            self.block_edge_weight[unique_idx[:sorted_idx.size(0)]] = block_edge_weight_prev
+            self.block_edge_weight[unique_idx[:n_prev]] = block_edge_weight_prev
 
             if not self.is_undirected:
                 self._filter_self_loops_in_block(with_weight=True)
@@ -881,7 +878,13 @@ class PRBCDAttack(torch.nn.Module):
 
         :rtype: (Tensor)
         """
-        log_prob = F.log_softmax(prediction, dim=-1)
+        if cfg.dataset.task_type == "classification_binary":
+            m = prediction.exp().log1p()
+            log_prob = torch.cat([-m, prediction - m], dim=-1)
+        elif cfg.dataset.task_type == "classification":
+            log_prob = F.log_softmax(prediction, dim=-1)
+        else:
+            raise NotImplementedError
         margin_ = GRBCDAttack._margin_loss(log_prob, labels, idx_mask)
         loss = torch.tanh(margin_).mean()
         return loss
@@ -971,7 +974,7 @@ class PRBCDAttack(torch.nn.Module):
 
         if cfg.dataset.task_type == "classification_binary":
             invert_mask = labels.to(bool)
-            prediction[:, invert_mask] = -prediction[:, invert_mask]
+            prediction[invert_mask] = -prediction[invert_mask]
         elif cfg.dataset.task_type == "classification":
             num_classes = prediction.size(1)
             labels_mask = F.one_hot(labels, num_classes).to(bool)

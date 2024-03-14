@@ -29,6 +29,7 @@ def weighted_graphormer_pre_processing(
     num_in_degrees: int,
     num_out_degrees: int,
     use_weighted_path_distance: bool,
+    node_degrees_only: bool,
 ):
     """
     """
@@ -105,7 +106,7 @@ def weighted_graphormer_pre_processing(
             data.degree_indices = torch.cat((in_degrees_low[:, None], in_degrees_high[:, None]), dim=1)
             data.degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
 
-    if cfg.posenc_GraphormerBias.node_degrees_only:
+    if node_degrees_only:
         return data
     
     data.graph_index = torch.cat(
@@ -341,6 +342,7 @@ class WeightedPreprocessing(torch.nn.Module):
         num_in_degrees: int,
         num_out_degrees: int,
         use_weighted_path_distance: bool,
+        node_degrees_only: bool,
     ):
         """
         """
@@ -351,9 +353,12 @@ class WeightedPreprocessing(torch.nn.Module):
         self.num_in_degrees = num_in_degrees
         self.num_out_degrees = num_out_degrees
         self.use_weighted_path_distance = use_weighted_path_distance
+        self.node_degrees_only = node_degrees_only
 
     def forward(self, data):
-        if hasattr(data, "recompute_preprocessing") and data.recompute_preprocessing:
+        if data.get("recompute_preprocessing", False):
+            if "batch" in data:
+                assert data.batch.max() == 0, "On the fly preprocessing only works for single graphs"
             data = weighted_graphormer_pre_processing(
                 data,
                 self.distance,
@@ -362,6 +367,7 @@ class WeightedPreprocessing(torch.nn.Module):
                 self.num_in_degrees,
                 self.num_out_degrees,
                 self.use_weighted_path_distance,
+                self.node_degrees_only,
             )
         return data
 
@@ -379,6 +385,7 @@ class WeightedGraphormerEncoder(torch.nn.Sequential):
                 cfg.posenc_GraphormerBias.num_in_degrees,
                 cfg.posenc_GraphormerBias.num_out_degrees,
                 cfg.posenc_GraphormerBias.use_weighted_path_distance,
+                cfg.posenc_GraphormerBias.node_degrees_only,
             ),
             WeightedBiasEncoder(
                 cfg.graphormer.num_heads,
@@ -657,6 +664,7 @@ def reconstruct_weighted_distances_over_path(
 ):
     device = edge_index.device
     # get dense inv adj for easier indexing in path reconstruction
+    # TODO: instead, use SparseTensor and index with 2D indices
     inv_adj = scatter(
         inv_edge_attr,
         num_nodes * edge_index[0] + edge_index[1],

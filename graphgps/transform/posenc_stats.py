@@ -1,13 +1,20 @@
 from copy import deepcopy
-
 import numpy as np
 import torch
 import torch.nn.functional as F
-from numpy.linalg import eigvals
-from torch_geometric.utils import (get_laplacian, to_scipy_sparse_matrix,
-                                   to_undirected, to_dense_adj, scatter)
+from torch_geometric.utils import (
+    get_laplacian,
+    to_scipy_sparse_matrix,
+    to_undirected,
+    to_dense_adj,
+    scatter,
+)
 from torch_geometric.utils.num_nodes import maybe_num_nodes
 from graphgps.encoder.graphormer_encoder import graphormer_pre_processing
+from torch_geometric.transforms import BaseTransform
+from torch_geometric.data import Data
+from graphgps.transform.rrwp import add_full_rrwp
+from functools import partial
 
 
 def compute_posenc_stats(data, pe_types, is_undirected, cfg):
@@ -20,6 +27,7 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
     'HKdiagSE': Diagonals of heat kernel diffusion.
     'ElstaticSE': Kernel based on the electrostatic interaction between nodes.
     'Graphormer': Computes spatial types and optionally edges along shortest paths.
+    'RRWP': Relative Random Walk Probabilities PE (for GRIT)
 
     Args:
         data: PyG graph
@@ -33,8 +41,10 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
     """
     # Verify PE types.
     for t in pe_types:
-        if t not in ['LapPE', 'EquivStableLapPE', 'SignNet', 'RWSE', 'HKdiagSE',
-                     'HKfullPE', 'ElstaticSE', 'GraphormerBias']:
+        if t not in [
+            'LapPE', 'EquivStableLapPE', 'SignNet', 'RWSE', 'HKdiagSE', 'HKfullPE', 'ElstaticSE', 'GraphormerBias',
+            'RRWP',
+        ]:
             raise ValueError(f"Unexpected PE stats selection {t} in {pe_types}")
 
     # Basic preprocessing of the input graph.
@@ -55,8 +65,7 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
     if 'LapPE' in pe_types or 'EquivStableLapPE' in pe_types:
         # Eigen-decomposition with numpy, can be reused for Heat kernels.
         L = to_scipy_sparse_matrix(
-            *get_laplacian(undir_edge_index, normalization=laplacian_norm_type,
-                           num_nodes=N)
+            *get_laplacian(undir_edge_index, normalization=laplacian_norm_type, num_nodes=N)
         )
         evals, evects = np.linalg.eigh(L.toarray())
         
@@ -70,7 +79,8 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
         data.EigVals, data.EigVecs = get_lap_decomp_stats(
             evals=evals, evects=evects,
             max_freqs=max_freqs,
-            eigvec_norm=eigvec_norm)
+            eigvec_norm=eigvec_norm,
+        )
 
     if 'SignNet' in pe_types:
         # Eigen-decomposition with numpy for SignNet.
@@ -78,23 +88,26 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
         if norm_type == 'none':
             norm_type = None
         L = to_scipy_sparse_matrix(
-            *get_laplacian(undir_edge_index, normalization=norm_type,
-                           num_nodes=N)
+            *get_laplacian(undir_edge_index, normalization=norm_type, num_nodes=N)
         )
         evals_sn, evects_sn = np.linalg.eigh(L.toarray())
         data.eigvals_sn, data.eigvecs_sn = get_lap_decomp_stats(
-            evals=evals_sn, evects=evects_sn,
+            evals=evals_sn,
+            evects=evects_sn,
             max_freqs=cfg.posenc_SignNet.eigen.max_freqs,
-            eigvec_norm=cfg.posenc_SignNet.eigen.eigvec_norm)
+            eigvec_norm=cfg.posenc_SignNet.eigen.eigvec_norm,
+        )
 
     # Random Walks.
     if 'RWSE' in pe_types:
         kernel_param = cfg.posenc_RWSE.kernel
         if len(kernel_param.times) == 0:
             raise ValueError("List of kernel times required for RWSE")
-        rw_landing = get_rw_landing_probs(ksteps=kernel_param.times,
-                                          edge_index=data.edge_index,
-                                          num_nodes=N)
+        rw_landing = get_rw_landing_probs(
+            ksteps=kernel_param.times,
+            edge_index=data.edge_index,
+            num_nodes=N,
+        )
         data.pestat_RWSE = rw_landing
 
     # Heat Kernels.
@@ -126,9 +139,12 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
             kernel_param = cfg.posenc_HKdiagSE.kernel
             if len(kernel_param.times) == 0:
                 raise ValueError("Diffusion times are required for heat kernel")
-            hk_diag = get_heat_kernels_diag(evects_heat, evals_heat,
-                                            kernel_times=kernel_param.times,
-                                            space_dim=0)
+            hk_diag = get_heat_kernels_diag(
+                evects_heat,
+                evals_heat,
+                kernel_times=kernel_param.times,
+                space_dim=0,
+            )
             data.pestat_HKdiagSE = hk_diag
 
     # Electrostatic interaction inspired kernel.
@@ -136,12 +152,15 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
         elstatic = get_electrostatic_function_encoding(undir_edge_index, N)
         data.pestat_ElstaticSE = elstatic
 
+    # Graphormer PE: shortest paths and degrees
     if 'GraphormerBias' in pe_types:
-        data = graphormer_pre_processing(
-            data,
-            cfg.posenc_GraphormerBias.num_spatial_types,
-            is_undirected,
-        )
+        with torch.no_grad():
+            data = graphormer_pre_processing(data, is_undirected)
+    
+    # GRIT PE (Relative Random Walk Probabilities)
+    if 'RRWP' in pe_types:
+        with torch.no_grad():
+            data = add_full_rrwp(data, walk_length=cfg.posenc_RRWP.ksteps)
 
     return data
 
@@ -401,3 +420,19 @@ def eigvec_normalizer(EigVecs, EigVals, normalization="L2", eps=1e-12):
     EigVecs = EigVecs / denom
 
     return EigVecs
+
+
+class ComputePosencStat(BaseTransform):
+    def __init__(self, pe_types, is_undirected, cfg):
+        self.pe_types = pe_types
+        self.is_undirected = is_undirected
+        self.cfg = cfg
+
+    def __call__(self, data: Data) -> Data:
+        data = compute_posenc_stats(
+            data,
+            pe_types=self.pe_types,
+            is_undirected=self.is_undirected,
+            cfg=self.cfg,
+        )
+        return data

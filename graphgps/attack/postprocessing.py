@@ -68,9 +68,9 @@ def get_node_output_stats(y_gt, logits):
     if cfg.dataset.task_type.startswith("classification"):
 
         if cfg.dataset.task_type == "classification_binary":
-            # TODO: debug to check if logits is (N, 1) or (N, )
+            # logits (N, 1)
             prob_binary = torch.sigmoid(logits)
-            class_idx_pred = (prob_binary > cfg.model.thresh).to(dtype=torch.long)
+            class_idx_pred = (prob_binary[:, 0] > cfg.model.thresh).to(dtype=torch.long)
             probs = torch.cat([1 - prob_binary, prob_binary], dim=1)
         
         elif cfg.dataset.task_type == "classification":
@@ -79,6 +79,7 @@ def get_node_output_stats(y_gt, logits):
 
         num_classes = probs.size(1)
         y_correct_mask = F.one_hot(y_gt, num_classes).to(dtype=torch.bool)
+        assert probs.shape == y_correct_mask.shape
         margin = probs[y_correct_mask] - probs[~y_correct_mask].reshape(-1, num_classes-1).max(dim=1)[0]
         margin_mean = margin.mean().item()
         margin_median = margin.median().item()

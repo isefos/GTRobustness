@@ -14,7 +14,7 @@ BATCH_HEAD_NODE_NODE = (0, 3, 1, 2)
 INSERT_GRAPH_TOKEN = (1, 0, 1, 0)
 
 
-def graphormer_pre_processing(data, distance, is_undirected):
+def graphormer_pre_processing(data, is_undirected):
     """Implementation of Graphormer pre-processing. Computes in- and out-degrees
     for node encodings, as well as spatial types (via shortest-path lengths) and
     prepares edge encodings along shortest paths. The function adds the following
@@ -88,6 +88,7 @@ def graphormer_pre_processing(data, distance, is_undirected):
         and hasattr(data, "edge_attr") 
         and data.edge_attr is not None
     ):
+        distance = cfg.posenc_GraphormerBias.num_spatial_types
         # did not bother optimizing this part yet, since we don't attack data with edge_attr:
         graph: nx.DiGraph = to_networkx(data)
         N = len(graph.nodes)
@@ -120,7 +121,7 @@ def graphormer_pre_processing(data, distance, is_undirected):
         data.spatial_types = get_shortest_paths(
             edge_index=data.edge_index,
             num_nodes=n,directed=not is_undirected,
-            max_distance=distance-1
+            max_distance=cfg.posenc_GraphormerBias.num_spatial_types-1
         )
     return data
 

@@ -1,46 +1,55 @@
 graphgym:
 
-  accelerator: auto
   out_dir: configs_seml/results
-  metric_best: accuracy
-  metric_agg: argmax
+  metric_best: accuracy-SBM
+  tensorboard_each_run: false
+  accelerator: auto
   seed: 42
 
   dataset:
-    format: PyG
-    name: Cora
-    task: node
-    task_type: classification
-    transductive: true
+    format: PyG-GNNBenchmarkDataset
+    name: PATTERN
+    task: graph
+    task_type: classification_binary
+    transductive: false
+    split_mode: standard
+    node_encoder: true
+    node_encoder_name: LinearNode
+    node_encoder_bn: false
+    edge_encoder: false
 
   train:
+    mode: custom
     batch_size: 32
     eval_period: 1
-    ckpt_best: true
-    enable_ckpt: true
 
   model:
     type: gnn
-    loss_fun: cross_entropy
+    loss_fun: weighted_cross_entropy
 
   gnn:
-    layers_pre_mp: 1
-    layers_mp: 2
-    layers_post_mp: 1
-    dim_inner: 256
     layer_type: gcnconvweighted
     stage_type: stack
-    batchnorm: true
-    act: prelu
+    head: inductive_node
+    layers_pre_mp: 0
+    layers_mp: 3
+    layers_post_mp: 1
+    dim_inner: 128
+    batchnorm: false  # true
+    act: relu
     dropout: 0.0
     agg: add
     normalize_adj: false
 
   optim:
-    optimizer: adam
-    base_lr: 0.005
+    clip_grad_norm: true
+    optimizer: adamW
+    weight_decay: 0.0
+    base_lr: 0.01
     max_epoch: 50
-
+    scheduler: cosine_with_warmup
+    num_warmup_epochs: 5
+    
   attack:
     enable: true
     log_progress: true
@@ -49,16 +58,16 @@ graphgym:
     num_attacked_graphs: 0  # 0 means attack all
     skip_incorrect_graph_classification: true
     run_random_baseline: true
-    epochs: 75
-    epochs_resampling: 50
+    epochs: 125
+    epochs_resampling: 100
     lr: 4_000
-    block_size: 2_000
+    block_size: 800
     e_budget: 0.1
     minimum_budget: 0
-    eps: 1e-7
-    is_undirected: false
+    eps: 1e-5
+    is_undirected: true
     prediction_level: node
-    loss: reflected_cross_entropy
+    loss: tanh_margin
     metric: null
     max_final_samples: 20
     max_trials_sampling: 20

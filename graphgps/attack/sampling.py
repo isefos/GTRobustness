@@ -1,5 +1,6 @@
 import torch
 import math
+from fractions import Fraction
 
 
 class WeightedIndexSampler:
@@ -182,3 +183,53 @@ def get_connected_sampling_fun(
         return map_fun(torch.randint(n_total, (n, ), device=device))
     
     return sampling_fun
+
+
+def get_weights(p_ex: float, num_edges_to_new: int, num_edges_to_existing: int):
+    """
+    Finds the weights for weighted sampling to get the given p_ex 
+    (probability of sampling an edge between already existing nodes)
+    """
+    assert 0 < p_ex < 1
+    w = (p_ex * num_edges_to_new) / ((1 - p_ex) * num_edges_to_existing)
+    a0 = math.floor(w)
+    wf = w - a0
+    error = 0.01  # 1%
+    if wf / w <= error:
+        return 1, a0, True
+    
+    def continued_fraction_generator(w: Fraction):
+        w = 1 / w
+        while w.denominator > 1:
+            a = math.floor(w)
+            yield a
+            w = 1 / (w - a)
+
+    n_2behind = 1
+    n_1behind = 0
+    d_2behind = 0
+    d_1behind = 1
+    w_frac = Fraction(wf)
+    for a in continued_fraction_generator(w_frac):
+        n = n_1behind * a + n_2behind
+        n_2behind = n_1behind
+        n_1behind = n
+        d = d_1behind * a + d_2behind
+        d_2behind = d_1behind
+        d_1behind = d
+        w_approx = a0 + Fraction(n, d)
+        if abs(w - w_approx) / w <= error:
+            break
+    a = w_approx.numerator
+    b = w_approx.denominator
+
+    if num_edges_to_existing > num_edges_to_new:
+        default_is_new = False
+        default_weight = a
+        weight = b
+    else:
+        default_is_new = True
+        default_weight = b
+        weight = a
+
+    return default_weight, weight, default_is_new

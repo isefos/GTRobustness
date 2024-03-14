@@ -1,0 +1,106 @@
+graphgym:
+
+  accelerator: auto
+  out_dir: configs_seml/results
+  metric_best: accuracy
+  tensorboard_each_run: false
+  seed: 42
+
+  dataset:
+    format: PyG-UPFD
+    name: politifact-spacy
+    task: graph
+    task_type: classification_binary
+    transductive: false
+    split_mode: standard
+    node_encoder: true
+    node_encoder_name: LinearNode+WeightedGraphormerBias
+    node_encoder_bn: false
+
+  posenc_GraphormerBias:
+    enable: true
+    num_spatial_types: 8
+    num_in_degrees: 27
+    num_out_degrees: 27
+    node_degrees_only: false
+    directed_graphs: false
+    has_edge_attr: false
+    combinations_degree: false
+    use_weighted_path_distance: true
+
+  train:
+    mode: custom
+    batch_size: 16
+    eval_period: 1
+    enable_ckpt: true
+    ckpt_best: true
+
+  model:
+    type: Graphormer
+    loss_fun: cross_entropy
+    graph_pooling: graph_token
+
+  graphormer:
+    num_layers: 2
+    num_heads: 2
+    embed_dim: 32
+    dropout: 0.0
+    attention_dropout: 0.0  # 0.1
+    mlp_dropout: 0.0  # 0.1
+    input_dropout: 0.0  # 0.1
+
+  gnn:
+    head: graphormer_graph
+    layers_pre_mp: 0
+    layers_post_mp: 1
+    dim_inner: 32  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+  
+  optim:
+    base_lr: 0.001
+    weight_decay: 0.01
+    clip_grad_norm: true
+    clip_grad_norm_value: 5.0
+    optimizer: adamW
+    max_epoch: 3
+    scheduler: cosine_with_warmup
+    num_warmup_epochs: 30
+    early_stopping: true
+    early_stopping_patience: 35
+    early_stopping_delta_e: 0.05
+    early_stopping_warmup: 30
+
+  attack:
+    enable: true
+    log_progress: true
+    load_best_model: true
+    split: test
+    num_attacked_graphs: 0  # 0 means attack all
+    skip_incorrect_graph_classification: true
+    run_random_baseline: true
+    epochs: 125
+    epochs_resampling: 100
+    lr: 4_000
+    block_size: 2_000
+    e_budget: 0.1
+    minimum_budget: 0
+    eps: 1e-7
+    is_undirected: true
+    loss: reflected_cross_entropy  # raw_prediction
+    metric: null
+    max_final_samples: 20
+    max_trials_sampling: 20
+    with_early_stopping: true
+    node_prob_enable: true
+    node_prob_iterations: 5
+    node_prob_log: true
+    enable_node_injection: true
+    node_injection_from_train: true
+    node_injection_from_val: true
+    node_injection_from_test: true
+    remove_isolated_components: true
+    root_node_idx: 0
+    include_root_nodes_for_injection: false
+    existing_node_prob_multiplier: 1  # 1_000
+    sample_only_connected: true
+    sample_only_trees: true
+    allow_existing_graph_pert: false
