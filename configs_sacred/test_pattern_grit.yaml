@@ -21,6 +21,7 @@ graphgym:
   posenc_RRWP:
     enable: true
     ksteps: 5  # 12
+    w_add_dummy_edge: true  # false
 
   train:
     mode: custom

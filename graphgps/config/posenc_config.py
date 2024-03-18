@@ -91,3 +91,4 @@ def set_cfg_posenc(cfg):
     # RRWP (GRIT)
     cfg.posenc_RRWP.enable = False
     cfg.posenc_RRWP.ksteps = 21
+    cfg.posenc_RRWP.w_add_dummy_edge = False

@@ -1,6 +1,10 @@
 import unittest as ut
 import torch
-from graphgps.attack.sampling import get_connected_sampling_fun, WeightedIndexSampler
+from graphgps.attack.sampling import (
+    get_connected_sampling_fun,
+    WeightedIndexSampler,
+    WeightedIndexSampler2,
+)
 from graphgps.attack.prbcd import PRBCDAttack as P
 
 
@@ -39,6 +43,43 @@ class TestAttackSampling(ut.TestCase):
             else:
                 self.assertEqual(rounded, 1)
                 self.assertTrue(error < 0.25)
+
+    def test_weighted_sampling2(self):
+        n = 100000
+        max_index = 20
+        default_weight = 2
+        d_true = {
+            0: [8, 17],
+            1: [9, 14, 16],
+            2: [4, 5, 6, 7, 10, 12, 13, 15],
+            3: [0, 1, 2, 3, 18, 19, 20],
+        }
+        weighted_idx = {
+            0: torch.tensor([8, 17], dtype=torch.int64),
+            1: torch.tensor([9, 14, 16], dtype=torch.int64),
+            3: torch.tensor([0, 1, 2, 3, 17, 18, 19, 20], dtype=torch.int64),
+        }
+        sampler = WeightedIndexSampler2(
+            weighted_idx=weighted_idx,
+            default_weight=default_weight,
+            max_index=max_index,
+            output_device=torch.device("cpu"),
+        )
+        s = sampler.sample(n)
+        sample_values, sample_frequencies = torch.unique(s, sorted=True, return_counts=True)
+        d = {i: 0.0 for i in range(max_index + 1)}
+        for v, f in zip(list(sample_values), list(sample_frequencies)):
+            d[int(v.item())] = ((f / n) * sampler.n_transformed).item()
+        for v, relative_f in d.items():
+            rounded = round(relative_f)
+            error = relative_f - rounded
+            for w, w_idx in d_true.items():
+                if v in w_idx:
+                    assert (rounded == w)
+                    assert (abs(error) < 0.25)
+                    if w == 0:
+                        assert (relative_f == 0)
+                        assert (error == 0)
 
     def test_connected_sampler(self):
         n = 10000

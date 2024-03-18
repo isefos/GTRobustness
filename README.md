@@ -11,7 +11,7 @@ conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvi
 # or for cpu only:
 # conda install pytorch torchvision torchaudio cpuonly -c pytorch
 
-conda install -c pyg pyg pytorch-scatter
+conda install -c pyg pyg pytorch-sparse
 
 conda install -c conda-forge yacs tensorboardx lightning torchmetrics performer-pytorch ogb wandb opt_einsum
 

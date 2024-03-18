@@ -11,13 +11,17 @@ from torch_geometric.graphgym.config import cfg
 class WeightedRRWPLinearEncoder(torch.nn.Module):
     """
     FC_1_n(RRWP) + FC_2_n(Node-attr) for node
-    FC_1_e(RRWP) for edges
+    FC_1_e(RRWP) for edges (+ optionally dummy features for existing edges)
     note: FC_2_n is given by the Typedict encoder of node-attr in some cases
     """
     def __init__(self, emb_dim):
         super().__init__()
         self.pad_to_full_graph = cfg.gt.attn.full_attn
         self.walk_length = cfg.posenc_RRWP.ksteps
+        self.add_dummy_edge_attr = cfg.posenc_RRWP.w_add_dummy_edge
+
+        if self.add_dummy_edge_attr:
+            self.dummy_edge_encoder = torch.nn.Embedding(num_embeddings=1, embedding_dim=emb_dim)
 
         self.fc_node = nn.Linear(self.walk_length, emb_dim, bias=False)
         self.fc_edge = nn.Linear(self.walk_length, emb_dim, bias=False)
@@ -46,7 +50,13 @@ class WeightedRRWPLinearEncoder(torch.nn.Module):
         rrwp_val = self.fc_edge(batch.rrwp_val)
 
         edge_index = batch.edge_index
-        edge_attr = edge_index.new_zeros(edge_index.size(1), rrwp_val.size(1))
+        if self.add_dummy_edge_attr:
+            dummy_attr = edge_index.new_zeros(edge_index.size(1))
+            edge_attr = self.dummy_edge_encoder(dummy_attr)
+            if batch.get("recompute_preprocessing", False):  # for attack, weighted dummy features
+                edge_attr = edge_attr * batch.edge_weight[:, None]
+        else:
+            edge_attr = edge_index.new_zeros(edge_index.size(1), rrwp_val.size(1))
         edge_index, edge_attr = add_self_loops(edge_index, edge_attr, num_nodes=batch.num_nodes, fill_value=0.)
 
         out_idx, out_val = coalesce(

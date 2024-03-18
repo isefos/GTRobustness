@@ -153,9 +153,12 @@ def run(seed, graphgym, dims_per_head: int):
         if model_type == "Graphormer":
             dim_inner = dims_per_head * graphgym["graphormer"]["num_heads"]
             graphgym["graphormer"]["embed_dim"] = dim_inner
-            graphgym["gnn"]["dim_inner"] = dim_inner
+        elif model_type in ["SANTransformer", "GritTransformer"]:
+            dim_inner = dims_per_head * graphgym["gt"]["n_heads"]
+            graphgym["gt"]["dim_hidden"] = dim_inner
         else:
             raise NotImplementedError(f"Please add a case for {model_type} (very easy)!")
+        graphgym["gnn"]["dim_inner"] = dim_inner
         
     set_cfg(cfg)
 
