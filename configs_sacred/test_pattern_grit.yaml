@@ -20,7 +20,7 @@ graphgym:
 
   posenc_RRWP:
     enable: true
-    ksteps: 12
+    ksteps: 5  # 12
 
   train:
     mode: custom
@@ -32,7 +32,6 @@ graphgym:
     loss_fun: weighted_cross_entropy
 
   gt:
-    layer_type: GritTransformer
     layers: 6
     n_heads: 4
     dim_hidden: 64 # `gt.dim_hidden` must match `gnn.dim_inner`

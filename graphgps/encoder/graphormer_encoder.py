@@ -7,6 +7,7 @@ from torch_geometric.utils import to_dense_adj, to_networkx, to_scipy_sparse_mat
 import logging
 from scipy.sparse import csgraph
 
+
 # Permutes from (batch, node, node, head) to (batch, head, node, node)
 BATCH_HEAD_NODE_NODE = (0, 3, 1, 2)
 

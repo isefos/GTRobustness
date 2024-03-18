@@ -20,8 +20,7 @@ class SANTransformer(torch.nn.Module):
         dim_in = self.encoder.dim_in
 
         if cfg.gnn.layers_pre_mp > 0:
-            self.pre_mp = GNNPreMP(
-                dim_in, cfg.gnn.dim_inner, cfg.gnn.layers_pre_mp)
+            self.pre_mp = GNNPreMP(dim_in, cfg.gnn.dim_inner, cfg.gnn.layers_pre_mp)
             dim_in = cfg.gnn.dim_inner
 
         assert cfg.gt.dim_hidden == cfg.gnn.dim_inner == dim_in, \
@@ -35,16 +34,20 @@ class SANTransformer(torch.nn.Module):
         }.get(cfg.gt.layer_type)
         layers = []
         for _ in range(cfg.gt.layers):
-            layers.append(Layer(gamma=cfg.gt.gamma,
-                                in_dim=cfg.gt.dim_hidden,
-                                out_dim=cfg.gt.dim_hidden,
-                                num_heads=cfg.gt.n_heads,
-                                full_graph=cfg.gt.full_graph,
-                                fake_edge_emb=fake_edge_emb,
-                                dropout=cfg.gt.dropout,
-                                layer_norm=cfg.gt.layer_norm,
-                                batch_norm=cfg.gt.batch_norm,
-                                residual=cfg.gt.residual))
+            layers.append(
+                Layer(
+                    gamma=cfg.gt.gamma,
+                    in_dim=cfg.gt.dim_hidden,
+                    out_dim=cfg.gt.dim_hidden,
+                    num_heads=cfg.gt.n_heads,
+                    full_graph=cfg.gt.full_graph,
+                    fake_edge_emb=fake_edge_emb,
+                    dropout=cfg.gt.dropout,
+                    layer_norm=cfg.gt.layer_norm,
+                    batch_norm=cfg.gt.batch_norm,
+                    residual=cfg.gt.residual,
+                )
+            )
         self.trf_layers = torch.nn.Sequential(*layers)
 
         GNNHead = register.head_dict[cfg.gnn.head]

@@ -33,7 +33,6 @@ graphgym:
     loss_fun: cross_entropy
 
   gt:
-    layer_type: GritTransformer
     layers: 2
     n_heads: 2
     dim_hidden: 32 # `gt.dim_hidden` must match `gnn.dim_inner`

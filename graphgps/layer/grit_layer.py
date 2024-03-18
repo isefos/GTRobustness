@@ -1,10 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.utils import softmax, degree, scatter
+from torch_geometric.utils import softmax, scatter
 import torch_geometric.graphgym.register as register
 import opt_einsum as oe
-import warnings
 
 
 class MultiHeadAttentionLayerGritSparse(nn.Module):

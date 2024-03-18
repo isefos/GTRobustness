@@ -16,8 +16,7 @@ from torch_geometric.graphgym.config import cfg
 def complementary_edge_index(edge_index, batch=None):
     """
     Returns batched sparse adjacency matrices with exactly those edges that
-    are not in the input `edge_index` while ignoring self-loops.
-    Implementation inspired by `torch_geometric.utils.to_dense_adj`
+    are not in the input `edge_index`.
     Args:
         edge_index: The edge indices.
         batch: Batch vector, which assigns each node to a specific example.
