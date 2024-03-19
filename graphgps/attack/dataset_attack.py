@@ -40,6 +40,15 @@ def filter_out_root_node(graph: Data) -> Data:
     return graph
 
 
+_collate_exclude_keys = [
+        "y", 
+        # Graphormer
+        "graph_index", "in_degrees", "out_degrees", "degrees", "spatial_types",
+        # GRIT
+        "rrwp", "rrwp_index", "rrwp_val", "log_deg",
+    ]
+
+
 def get_total_dataset_graphs(
     inject_nodes_from_attack_dataset: bool,
     dataset_to_attack: Dataset,
@@ -68,9 +77,9 @@ def get_total_dataset_graphs(
             data_list=graphs_to_join,
             increment=False,
             add_batch=False,
-            exclude_keys=["y"],
+            exclude_keys=_collate_exclude_keys,
         )
-        total_attack_dataset_graph = merge_result[0].to(device=cfg.accelerator)
+        total_attack_dataset_graph = merge_result[0]
 
     if additional_injection_datasets is None:
         total_additional_datasets_graph = None
@@ -87,9 +96,9 @@ def get_total_dataset_graphs(
             data_list=graphs_to_join,
             increment=False,
             add_batch=False,
-            exclude_keys=["y"],
+            exclude_keys=_collate_exclude_keys,
         )
-        total_additional_datasets_graph = merge_result[0].to(device=cfg.accelerator)
+        total_additional_datasets_graph = merge_result[0]
     
     return total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph
 
@@ -109,7 +118,7 @@ def get_augmented_graph(
         attack_dataset_graph_to_add = None
     else:
         n = total_attack_dataset_graph.x.size(0)
-        current_mask = torch.ones(n, dtype=torch.bool, device=total_attack_dataset_graph.x.device)
+        current_mask = torch.ones(n, dtype=torch.bool, device="cpu")
         current_mask[attack_dataset_slice[0]:attack_dataset_slice[1]] = 0
         attack_dataset_graph_to_add = total_attack_dataset_graph.subgraph(current_mask)
     graphs_to_join = [g for g in (graph, attack_dataset_graph_to_add, total_additional_datasets_graph) if g is not None]
@@ -118,7 +127,7 @@ def get_augmented_graph(
         data_list=graphs_to_join,
         increment=False,
         add_batch=False,
-        exclude_keys=["y"],
+        exclude_keys=_collate_exclude_keys,
     )
     augmented_graph = merge_result[0]
     augmented_graph.y = graph.y

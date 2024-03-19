@@ -69,14 +69,14 @@ def prbcd_attack_dataset(model, loaders):
         # nodes to attack by passing a node mask as an argument
         node_mask = clean_data.get(f'{cfg.attack.split}_mask')
         if node_mask is not None:
+            node_mask = node_mask.to(device=cfg.accelerator)
             assert not cfg.attack.prediction_level == "graph"
 
         # check the prediction of the clean graph
-        clean_data.to(device=cfg.accelerator)
         with torch.no_grad():
-            output_clean = model(clean_data.clone(), unmodified=True)
+            output_clean = model(clean_data.clone().to(device=cfg.accelerator), unmodified=True)
         output_clean = apply_node_mask(output_clean, node_mask)
-        y_gt = apply_node_mask(clean_data.y, node_mask)
+        y_gt = apply_node_mask(clean_data.y.to(device=cfg.accelerator), node_mask)
         output_stats_clean = get_output_stats(y_gt, output_clean)
 
         if (
@@ -205,10 +205,10 @@ def prbcd_attack_dataset(model, loaders):
 
             pert_data = attack_graph_data.clone()
             pert_data.edge_index = pert_edge_index
-            pert_data.edge_attr = torch.ones(pert_edge_index.size(1), device=cfg.accelerator)
+            pert_data.edge_attr = torch.ones(pert_edge_index.size(1))
             with torch.no_grad():
                 data = Batch.from_data_list([pert_data.clone()])
-                output_pert = model(data)
+                output_pert = model(data.to(device=cfg.accelerator))
             output_pert = apply_node_mask(output_pert, node_mask)
 
             output_stats_pert = get_output_stats(y_gt, output_pert)
@@ -300,9 +300,9 @@ def attack_single_graph(
     attack_fun = attack.attack_random_baseline if random_attack else attack.attack
 
     pert_edge_index, perts = attack_fun(
-        attack_graph_data.x,
-        attack_graph_data.edge_index,
-        attack_graph_data.y,
+        attack_graph_data.x.to(device=cfg.accelerator),
+        attack_graph_data.edge_index.to(device=cfg.accelerator),
+        attack_graph_data.y.to(device=cfg.accelerator),
         budget=global_budget,
         idx_attack=node_mask,
     )

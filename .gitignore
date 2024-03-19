@@ -27,8 +27,7 @@ __pycache__/
 *.bak
 configs_seml/logs
 configs_seml/results
-hs_results_analysis
-hs_results_analysis_*
+hs_results
 debugplayground.py
 
 # Byte-compiled / optimized / DLL files
