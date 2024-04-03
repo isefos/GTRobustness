@@ -129,14 +129,16 @@ def get_pert_diff_eigenvects(E, U):
     return P
 
 
-def get_ev_pert(E, E_diff, U, eta):
-    edges = torch.diff(torch.cat((torch.tensor([False]), E_diff < eta, torch.tensor([False]))).to(dtype=torch.int64))
+def get_ev_pert(E: torch.Tensor, E_diff: torch.Tensor, U: torch.Tensor, eta: float):
+    pad = E_diff.new_zeros((1, ), dtype=bool)
+    edges = torch.diff(torch.cat((pad, E_diff < eta, pad)).to(dtype=torch.int64))
     slices_min = torch.nonzero(edges == 1).flatten()
     slices_max = torch.nonzero(edges == -1).flatten() + 1
 
     # space to left of smallest and to the right of larges are zero
     # (so we ensure that the total range of eigenvalues stays the same)
-    spaces = torch.cat((torch.tensor([0]), E_diff, torch.tensor([0])))
+    pad = E_diff.new_zeros((1, ))
+    spaces = torch.cat((pad, E_diff, pad))
     # where two repeated eigenvalues are next to each other, each gets half the space to split and expand
     spaces[1:-1][torch.diff(edges) == 2] /= 2
     space_left = spaces[slices_min]
@@ -144,7 +146,7 @@ def get_ev_pert(E, E_diff, U, eta):
 
     multiplicities = slices_max - slices_min
 
-    eig_pert_diag = torch.zeros(E.size(0), dtype=torch.float64)
+    eig_pert_diag = torch.zeros_like(E)
     for rep in range(slices_min.size(0)):
         m = multiplicities[rep]
         needed_space = (m - 1) * eta
@@ -156,16 +158,16 @@ def get_ev_pert(E, E_diff, U, eta):
         left_offset_needed = max(0, max_range - max_possible)
         left = max(min_range - left_offset_needed, min_possible)
         right = min(max_range + right_offset_needed, max_possible)
-        pert_entries = torch.linspace(left, right, m, dtype=torch.float64)
-        eig_pert_diag[slices_min[rep]:slices_max[rep]] = pert_entries
+        pert_entries = torch.linspace(left, right, m, dtype=torch.float64, device=E.device)
+        eig_pert_diag[slices_min[rep]:slices_max[rep]] += pert_entries
 
     U_no_grad = U.detach()
     P_ev = U_no_grad @ torch.diag(eig_pert_diag) @ U_no_grad.T
     return P_ev
 
 
-def invert_wrong_signs(U, U_noised):
+def invert_wrong_signs(U: torch.Tensor, U_noised: torch.Tensor):
     inverted_sign = (U_noised - U).abs().sum(0) > (U_noised + U).abs().sum(0)
-    flipper = torch.ones(U.size(0))
+    flipper = U.new_ones((U.size(0), ))
     flipper[inverted_sign] = -1
     return U_noised * flipper[None, :]
