@@ -153,7 +153,7 @@ def run(seed, graphgym, dims_per_head: int):
         if model_type == "Graphormer":
             dim_inner = dims_per_head * graphgym["graphormer"]["num_heads"]
             graphgym["graphormer"]["embed_dim"] = dim_inner
-        elif model_type in ["SANTransformer", "GritTransformer"]:
+        elif model_type in ["SANTransformer", "WeightedSANTransformer", "GritTransformer"]:
             dim_inner = dims_per_head * graphgym["gt"]["n_heads"]
             graphgym["gt"]["dim_hidden"] = dim_inner
         else:
