@@ -32,9 +32,10 @@ class WeightedRRWPLinearEncoder(torch.nn.Module):
         self.register_buffer("padding", padding)
 
     def forward(self, batch):
-        if batch.get("recompute_preprocessing", False):
+        attack_mode = batch.get("attack_mode", False)
+        if attack_mode or batch.get("rrwp") is None:
             # for attack
-            assert batch.num_graphs == 1
+            assert batch.num_graphs == 1, "On the fly preprocessing only works for single graphs"
             batch.edge_weight = batch.edge_attr
             add_full_rrwp(batch, walk_length=self.walk_length)
 
@@ -53,7 +54,7 @@ class WeightedRRWPLinearEncoder(torch.nn.Module):
         if self.add_dummy_edge_attr:
             dummy_attr = edge_index.new_zeros(edge_index.size(1))
             edge_attr = self.dummy_edge_encoder(dummy_attr)
-            if batch.get("recompute_preprocessing", False):  # for attack, weighted dummy features
+            if attack_mode:  # for attack, weighted dummy features
                 edge_attr = edge_attr * batch.edge_weight[:, None]
         else:
             edge_attr = edge_index.new_zeros(edge_index.size(1), rrwp_val.size(1))

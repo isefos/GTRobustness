@@ -14,60 +14,70 @@ graphgym:
     transductive: false
     split_mode: standard
     node_encoder: true
-    node_encoder_name: LinearNode+WeightedRRWPLinear
+    node_encoder_name: WLapPE
     node_encoder_bn: false
+    edge_encoder: true
+    edge_encoder_name: WeightedSANDummyEdge
+    edge_encoder_bn: false
 
-  posenc_RRWP:
+  posenc_WLapPE:
     enable: true
-    ksteps: 5
-    w_add_dummy_edge: true
+    eigen:
+      laplacian_norm: sym
+      eigvec_norm: L2
+      max_freqs: 10
+      use_gradient: true
+      correct_pert_eigvec_sign: false
+      straight_through_estimator: true
+    dim_pe: 8
+    layers: 2
+    n_heads: 4
+    raw_norm_type: none
+    post_layers: 0
+    pass_as_var: false
 
   train:
     mode: custom
-    batch_size: 8
+    batch_size: 32
     eval_period: 1
     enable_ckpt: true
     ckpt_best: true
 
   model:
-    type: GritTransformer
+    type: WeightedSANTransformer
     loss_fun: cross_entropy
 
   gt:
     layers: 1
     n_heads: 2
-    dim_hidden: 4 # `gt.dim_hidden` must match `gnn.dim_inner`
+    dim_hidden: 32  # `gt.dim_hidden` must match `gnn.dim_inner`
+    full_graph: true
+    gamma: 1e-5
+    gamma_learnable: false
     dropout: 0.0
-    attn_dropout: 0.0
     layer_norm: false
     batch_norm: true
-    bn_no_runner: false  # false (true for debugging / reproducibility)
-    update_e: true
+    residual: true
+    wsan_add_dummy_edges: true
     attn:
-      deg_scaler: true
       use_bias: false
-      clamp: 5.
-      act: relu
-      full_attn: true
-      norm_e: true
-      O_e: true
-      edge_enhance: true
+      clamp: null
 
   gnn:
     head: weighted_mean_pool_graph
     layers_pre_mp: 0
     layers_post_mp: 1
-    dim_inner: 4  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+    dim_inner: 32  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
   
   optim:
-    base_lr: 0.0001
-    weight_decay: 0.01
-    clip_grad_norm: true
-    clip_grad_norm_value: 5.0
-    optimizer: adamW
-    max_epoch: 1  # 70
-    scheduler: cosine_with_warmup
-    num_warmup_epochs: 15
+    optimizer: adam
+    weight_decay: 0.0
+    base_lr: 0.0007
+    max_epoch: 1  # 1000
+    scheduler: reduce_on_plateau
+    reduce_factor: 0.5
+    schedule_patience: 15
+    clip_grad_norm: false
     early_stopping: true
     early_stopping_patience: 35
     early_stopping_delta_e: 0.05

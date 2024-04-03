@@ -205,10 +205,10 @@ def prbcd_attack_dataset(model, loaders):
 
             pert_data = attack_graph_data.clone()
             pert_data.edge_index = pert_edge_index
-            pert_data.edge_attr = torch.ones(pert_edge_index.size(1))
+            # pert_data.edge_attr = torch.ones(pert_edge_index.size(1))
             with torch.no_grad():
                 data = Batch.from_data_list([pert_data.clone()])
-                output_pert = model(data.to(device=cfg.accelerator))
+                output_pert = model(data.to(device=cfg.accelerator), unmodified=True)
             output_pert = apply_node_mask(output_pert, node_mask)
 
             output_stats_pert = get_output_stats(y_gt, output_pert)

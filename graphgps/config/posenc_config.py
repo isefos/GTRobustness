@@ -9,6 +9,7 @@ def set_cfg_posenc(cfg):
 
     # Argument group for each Positional Encoding class.
     cfg.posenc_LapPE = CN()
+    cfg.posenc_WLapPE = CN()
     cfg.posenc_SignNet = CN()
     cfg.posenc_RWSE = CN()
     cfg.posenc_HKdiagSE = CN()
@@ -18,7 +19,7 @@ def set_cfg_posenc(cfg):
 
     # Common arguments to all PE types.
     for name in [
-        'posenc_LapPE', 'posenc_SignNet', 'posenc_RWSE', 'posenc_HKdiagSE', 'posenc_ElstaticSE',
+        'posenc_LapPE', 'posenc_WLapPE', 'posenc_SignNet', 'posenc_RWSE', 'posenc_HKdiagSE', 'posenc_ElstaticSE',
     ]:
         pecfg = getattr(cfg, name)
 
@@ -53,7 +54,7 @@ def set_cfg_posenc(cfg):
     cfg.posenc_EquivStableLapPE.raw_norm_type = 'none'
 
     # Config for Laplacian Eigen-decomposition for PEs that use it.
-    for name in ['posenc_LapPE', 'posenc_SignNet', 'posenc_EquivStableLapPE']:
+    for name in ['posenc_LapPE', 'posenc_WLapPE', 'posenc_SignNet', 'posenc_EquivStableLapPE']:
         pecfg = getattr(cfg, name)
         pecfg.eigen = CN()
 
@@ -65,6 +66,11 @@ def set_cfg_posenc(cfg):
 
         # Maximum number of top smallest frequencies & eigenvectors to use
         pecfg.eigen.max_freqs = 10
+
+    # Use gradient-based eigen-decomposition for adversarial attacks
+    cfg.posenc_WLapPE.eigen.use_gradient = False
+    cfg.posenc_WLapPE.eigen.correct_pert_eigvec_sign = False
+    cfg.posenc_WLapPE.eigen.straight_through_estimator = True
 
     # Config for SignNet-specific options.
     cfg.posenc_SignNet.phi_out_dim = 4

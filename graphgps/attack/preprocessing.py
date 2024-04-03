@@ -25,12 +25,14 @@ def forward_wrapper(forward: Callable) -> Callable:
 
     @functools.wraps(forward)
     def wrapped_forward(data: Batch, unmodified: bool = False):
+        
+        assert data.num_graphs == 1
+        if cfg.attack.remove_isolated_components:
+            data, root_node = remove_isolated_components(data)
+        else:
+            root_node = cfg.attack.root_node_idx
+
         if not unmodified:
-            assert data.num_graphs == 1
-            if cfg.attack.remove_isolated_components:
-                data, root_node = remove_isolated_components(data)
-            else:
-                root_node = cfg.attack.root_node_idx
                 
             use_64bit = False
             num_nodes = data.x.size(0)
@@ -55,9 +57,11 @@ def forward_wrapper(forward: Callable) -> Callable:
                         root_node=root_node,
                         num_iterations=cfg.attack.node_prob_iterations,
                     )
-            data.recompute_preprocessing = True
+            data.attack_mode = True
+
         else:
-            data.recompute_preprocessing = False
+            data.attack_mode = False
+
         model_prediction, _ = forward(data)  # don't need the y ground truth
         return model_prediction
 

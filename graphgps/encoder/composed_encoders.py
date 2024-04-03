@@ -10,6 +10,7 @@ from graphgps.encoder.kernel_pos_encoder import (
     ElstaticSENodeEncoder,
 )
 from graphgps.encoder.laplace_pos_encoder import LapPENodeEncoder
+from graphgps.encoder.weighted_laplace_pos_encoder import WeightedLapPENodeEncoder
 from graphgps.encoder.ppa_encoder import PPANodeEncoder
 from graphgps.encoder.signnet_pos_encoder import SignNetNodeEncoder
 from graphgps.encoder.voc_superpixels_encoder import VOCNodeEncoder
@@ -124,6 +125,7 @@ ds_encs = {
 # Positional Encoding node encoders.
 pe_encs = {
     'LapPE': LapPENodeEncoder,
+    'WLapPE': WeightedLapPENodeEncoder,
     'RWSE': RWSENodeEncoder,
     'HKdiagSE': HKdiagSENodeEncoder,
     'ElstaticSE': ElstaticSENodeEncoder,

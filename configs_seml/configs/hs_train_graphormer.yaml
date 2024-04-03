@@ -88,7 +88,7 @@ fixed:
 # experiment random configs
 
 random:
-  samples: 1000
+  samples: 300
   seed: 187
 
   graphgym.seed:

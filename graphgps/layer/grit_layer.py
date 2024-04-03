@@ -74,12 +74,19 @@ class MultiHeadAttentionLayerGritSparse(nn.Module):
 
         # final attn
         score = oe.contract("ehd, dhc->ehc", score, self.Aw, backend="torch")
-        if self.clamp is not None:
+
+        # disable clamp during attack to let gradient flow
+        if (self.clamp is not None) and (not batch.get("attack_mode", False)):
             score = torch.clamp(score, min=-self.clamp, max=self.clamp)
 
         # for attack cont. relax. add the node log probability as bias on the attention
         if batch.get("node_logprob", None) is not None:
             score = score + batch.node_logprob[batch.edge_index[0]].view(-1, 1, 1)
+        elif batch.get("node_prob", None) is not None:
+            l = torch.zeros_like(batch.node_prob) - torch.inf
+            min_prob_mask = batch.node_prob > 1e-30
+            l[min_prob_mask] = batch.node_prob[min_prob_mask].log()
+            score = score + l[batch.edge_index[0]].view(-1, 1, 1)
         
         score = softmax(score, batch.edge_index[1])  # (num relative) x num_heads x 1
         score = self.dropout(score)

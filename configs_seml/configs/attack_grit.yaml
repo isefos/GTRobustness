@@ -94,7 +94,7 @@ fixed:
 
     attack:
       enable: true
-      log_progress: true
+      log_progress: false
       load_best_model: true
       split: test
       num_attacked_graphs: 0  # 0 means attack all
@@ -102,8 +102,9 @@ fixed:
       run_random_baseline: true
       epochs: 125
       epochs_resampling: 100
+      max_edge_weight_update: 0.3
       lr: 4_000
-      # block_size: 500
+      block_size: 2000
       e_budget: 0.1
       minimum_budget: 0
       eps: 1e-5
@@ -127,12 +128,3 @@ fixed:
       sample_only_connected: true
       sample_only_trees: true
       allow_existing_graph_pert: false
-
-grid:
-  
-  graphgym.attack.block_size:
-    type: choice
-    options:
-      - 500
-      - 1_000
-      - 2_000

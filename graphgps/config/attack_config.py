@@ -45,6 +45,9 @@ def dataset_cfg(cfg):
     # bla
     cfg.attack.eps = 1e-7
 
+    # used for gradient clipping
+    cfg.attack.max_edge_weight_update = 0.3
+
     # bla
     cfg.attack.lr = 4_000
 

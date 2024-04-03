@@ -14,6 +14,7 @@ from graphgps.encoder.graphormer_encoder import graphormer_pre_processing
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import Data
 from graphgps.transform.rrwp import add_full_rrwp
+from graphgps.transform.lap_eig import get_lap_decomp_stats
 from functools import partial
 
 
@@ -43,7 +44,7 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
     for t in pe_types:
         if t not in [
             'LapPE', 'EquivStableLapPE', 'SignNet', 'RWSE', 'HKdiagSE', 'HKfullPE', 'ElstaticSE', 'GraphormerBias',
-            'RRWP',
+            'RRWP', 'WLapPE',
         ]:
             raise ValueError(f"Unexpected PE stats selection {t} in {pe_types}")
 
@@ -52,51 +53,42 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
         N = data.num_nodes  # Explicitly given number of nodes, e.g. ogbg-ppa
     else:
         N = data.x.shape[0]  # Number of nodes, including disconnected nodes.
-    laplacian_norm_type = cfg.posenc_LapPE.eigen.laplacian_norm.lower()
-    if laplacian_norm_type == 'none':
-        laplacian_norm_type = None
     if is_undirected:
         undir_edge_index = data.edge_index
     else:
         undir_edge_index = to_undirected(data.edge_index)
 
-    # Eigen values and vectors.
+    # Eigen values and vectors, Eigen-decomposition can be reused for Heat kernels.
     evals, evects = None, None
-    if 'LapPE' in pe_types or 'EquivStableLapPE' in pe_types:
-        # Eigen-decomposition with numpy, can be reused for Heat kernels.
-        L = to_scipy_sparse_matrix(
-            *get_laplacian(undir_edge_index, normalization=laplacian_norm_type, num_nodes=N)
-        )
-        evals, evects = np.linalg.eigh(L.toarray())
+    eigPEs = set(('LapPE', 'WLapPE', 'EquivStableLapPE', 'SignNet'))
+    eigPE = eigPEs.intersection(pe_types)
+    assert len(eigPE) <= 1, "Selection of only one eigen-decomposition PE type currently supported."
+    if eigPE:
+        eigPE = eigPE.pop()
+        pe_cfg = cfg.get(f"posenc_{eigPE}")
+        lap_norm_type = pe_cfg.eigen.laplacian_norm.lower()
+        if lap_norm_type == 'none':
+            lap_norm_type = None
         
-        if 'LapPE' in pe_types:
-            max_freqs=cfg.posenc_LapPE.eigen.max_freqs
-            eigvec_norm=cfg.posenc_LapPE.eigen.eigvec_norm
-        elif 'EquivStableLapPE' in pe_types:  
-            max_freqs=cfg.posenc_EquivStableLapPE.eigen.max_freqs
-            eigvec_norm=cfg.posenc_EquivStableLapPE.eigen.eigvec_norm
-        
-        data.EigVals, data.EigVecs = get_lap_decomp_stats(
-            evals=evals, evects=evects,
-            max_freqs=max_freqs,
-            eigvec_norm=eigvec_norm,
-        )
+        max_freqs = pe_cfg.eigen.max_freqs
+        eigvec_norm = pe_cfg.eigen.eigvec_norm
 
-    if 'SignNet' in pe_types:
-        # Eigen-decomposition with numpy for SignNet.
-        norm_type = cfg.posenc_SignNet.eigen.laplacian_norm.lower()
-        if norm_type == 'none':
-            norm_type = None
-        L = to_scipy_sparse_matrix(
-            *get_laplacian(undir_edge_index, normalization=norm_type, num_nodes=N)
+        assert is_undirected, (
+            "Lap. Eig. decomposition currently requires undirected graphs (transform dataset to undirected)."
         )
-        evals_sn, evects_sn = np.linalg.eigh(L.toarray())
-        data.eigvals_sn, data.eigvecs_sn = get_lap_decomp_stats(
-            evals=evals_sn,
-            evects=evects_sn,
-            max_freqs=cfg.posenc_SignNet.eigen.max_freqs,
-            eigvec_norm=cfg.posenc_SignNet.eigen.eigvec_norm,
-        )
+        
+        with torch.no_grad():
+            evals, evects = get_lap_decomp_stats(
+                data,
+                lap_norm_type,
+                max_freqs=max_freqs,
+                eigvec_norm=eigvec_norm,
+            )
+        
+        if eigPE == 'SignNet':
+            data.eigvals_sn, data.eigvecs_sn = evals, evects
+        else:
+            data.EigVals, data.EigVecs = evals, evects
 
     # Random Walks.
     if 'RWSE' in pe_types:
@@ -114,7 +106,7 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
     if 'HKdiagSE' in pe_types or 'HKfullPE' in pe_types:
         # Get the eigenvalues and eigenvectors of the regular Laplacian,
         # if they have not yet been computed for 'eigen'.
-        if laplacian_norm_type is not None or evals is None or evects is None:
+        if lap_norm_type is not None or evals is None or evects is None:
             L_heat = to_scipy_sparse_matrix(
                 *get_laplacian(undir_edge_index, normalization=None, num_nodes=N)
             )
@@ -163,42 +155,6 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
             data = add_full_rrwp(data, walk_length=cfg.posenc_RRWP.ksteps)
 
     return data
-
-
-def get_lap_decomp_stats(evals, evects, max_freqs, eigvec_norm='L2'):
-    """Compute Laplacian eigen-decomposition-based PE stats of the given graph.
-
-    Args:
-        evals, evects: Precomputed eigen-decomposition
-        max_freqs: Maximum number of top smallest frequencies / eigenvecs to use
-        eigvec_norm: Normalization for the eigen vectors of the Laplacian
-    Returns:
-        Tensor (num_nodes, max_freqs, 1) eigenvalues repeated for each node
-        Tensor (num_nodes, max_freqs) of eigenvector values per node
-    """
-    N = len(evals)  # Number of nodes, including disconnected nodes.
-
-    # Keep up to the maximum desired number of frequencies.
-    idx = evals.argsort()[:max_freqs]
-    evals, evects = evals[idx], np.real(evects[:, idx])
-    evals = torch.from_numpy(np.real(evals)).clamp_min(0)
-
-    # Normalize and pad eigen vectors.
-    evects = torch.from_numpy(evects).float()
-    evects = eigvec_normalizer(evects, evals, normalization=eigvec_norm)
-    if N < max_freqs:
-        EigVecs = F.pad(evects, (0, max_freqs - N), value=float('nan'))
-    else:
-        EigVecs = evects
-
-    # Pad and save eigenvalues.
-    if N < max_freqs:
-        EigVals = F.pad(evals, (0, max_freqs - N), value=float('nan')).unsqueeze(0)
-    else:
-        EigVals = evals.unsqueeze(0)
-    EigVals = EigVals.repeat(N, 1).unsqueeze(2)
-
-    return EigVals, EigVecs
 
 
 def get_rw_landing_probs(ksteps, edge_index, edge_weight=None,
@@ -367,59 +323,6 @@ def get_electrostatic_function_encoding(edge_index, num_nodes):
     ], dim=1)
 
     return green_encoding
-
-
-def eigvec_normalizer(EigVecs, EigVals, normalization="L2", eps=1e-12):
-    """
-    Implement different eigenvector normalizations.
-    """
-
-    EigVals = EigVals.unsqueeze(0)
-
-    if normalization == "L1":
-        # L1 normalization: eigvec / sum(abs(eigvec))
-        denom = EigVecs.norm(p=1, dim=0, keepdim=True)
-
-    elif normalization == "L2":
-        # L2 normalization: eigvec / sqrt(sum(eigvec^2))
-        denom = EigVecs.norm(p=2, dim=0, keepdim=True)
-
-    elif normalization == "abs-max":
-        # AbsMax normalization: eigvec / max|eigvec|
-        denom = torch.max(EigVecs.abs(), dim=0, keepdim=True).values
-
-    elif normalization == "wavelength":
-        # AbsMax normalization, followed by wavelength multiplication:
-        # eigvec * pi / (2 * max|eigvec| * sqrt(eigval))
-        denom = torch.max(EigVecs.abs(), dim=0, keepdim=True).values
-        eigval_denom = torch.sqrt(EigVals)
-        eigval_denom[EigVals < eps] = 1  # Problem with eigval = 0
-        denom = denom * eigval_denom * 2 / np.pi
-
-    elif normalization == "wavelength-asin":
-        # AbsMax normalization, followed by arcsin and wavelength multiplication:
-        # arcsin(eigvec / max|eigvec|)  /  sqrt(eigval)
-        denom_temp = torch.max(EigVecs.abs(), dim=0, keepdim=True).values.clamp_min(eps).expand_as(EigVecs)
-        EigVecs = torch.asin(EigVecs / denom_temp)
-        eigval_denom = torch.sqrt(EigVals)
-        eigval_denom[EigVals < eps] = 1  # Problem with eigval = 0
-        denom = eigval_denom
-
-    elif normalization == "wavelength-soft":
-        # AbsSoftmax normalization, followed by wavelength multiplication:
-        # eigvec / (softmax|eigvec| * sqrt(eigval))
-        denom = (F.softmax(EigVecs.abs(), dim=0) * EigVecs.abs()).sum(dim=0, keepdim=True)
-        eigval_denom = torch.sqrt(EigVals)
-        eigval_denom[EigVals < eps] = 1  # Problem with eigval = 0
-        denom = denom * eigval_denom
-
-    else:
-        raise ValueError(f"Unsupported normalization `{normalization}`")
-
-    denom = denom.clamp_min(eps).expand_as(EigVecs)
-    EigVecs = EigVecs / denom
-
-    return EigVecs
 
 
 class ComputePosencStat(BaseTransform):

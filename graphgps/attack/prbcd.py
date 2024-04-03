@@ -138,6 +138,9 @@ class PRBCDAttack(torch.nn.Module):
             'eps': cfg.attack.eps,
         }
 
+        # gradient clipping
+        self.max_edge_weight_update = cfg.attack.max_edge_weight_update
+
     def _setup_sampling(self):
         num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
 
@@ -321,7 +324,7 @@ class PRBCDAttack(torch.nn.Module):
                 self.block_edge_weight,
             )
 
-            prediction = self._forward(x, edge_index, edge_weight, **kwargs)
+            prediction = self._forward(x, edge_index, edge_weight, discrete=True, **kwargs)
             loss = self.loss(prediction, labels, idx_attack)
 
             if loss > highest_loss:
@@ -387,7 +390,7 @@ class PRBCDAttack(torch.nn.Module):
         
         edge_index, edge_weight, _, _ = self._get_discrete_sampled_graph(topk_block_edge_weight)
         
-        prediction = self._forward(x, edge_index, edge_weight, **kwargs)
+        prediction = self._forward(x, edge_index, edge_weight, discrete=True, **kwargs)
         metric = self.metric(prediction, labels, idx_attack)
 
         # Save best epoch for early stopping
@@ -433,11 +436,14 @@ class PRBCDAttack(torch.nn.Module):
         edge_index, flipped_edges = self._sample_final_edges(x, labels, budget, idx_attack=idx_attack, **kwargs)
         return edge_index, flipped_edges
 
-    def _forward(self, x: Tensor, edge_index: Tensor, edge_weight: Tensor, **kwargs) -> Tensor:
+    def _forward(self, x: Tensor, edge_index: Tensor, edge_weight: Tensor, discrete: bool, **kwargs) -> Tensor:
         """Forward model."""
         # create a data / batch object, clone x, since it gets modified inplace in the forward pass
-        data = Batch.from_data_list([Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight)])
-        return self.model(data, **kwargs)
+        if discrete:
+            data = Batch.from_data_list([Data(x=x.clone(), edge_index=edge_index)])
+        else:
+            data = Batch.from_data_list([Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight)])
+        return self.model(data, unmodified=discrete, **kwargs)
 
     def _forward_and_gradient(
         self,
@@ -459,7 +465,7 @@ class PRBCDAttack(torch.nn.Module):
         )
 
         # Get prediction (Algorithm 1, line 6 / Algorithm 2, line 7)
-        prediction = self._forward(x, edge_index, edge_weight, **kwargs)
+        prediction = self._forward(x, edge_index, edge_weight, discrete=False, **kwargs)
         # Calculate loss combining all each node
         # (Algorithm 1, line 7 / Algorithm 2, line 8)
         loss = self.loss(prediction, labels, idx_attack)
@@ -639,7 +645,7 @@ class PRBCDAttack(torch.nn.Module):
                 # Allowed budget is exceeded
                 continue
 
-            prediction = self._forward(x, edge_index, edge_weight, **kwargs)
+            prediction = self._forward(x, edge_index, edge_weight, discrete=True, **kwargs)
             metric = self.metric(prediction, labels, idx_attack)
 
             # Save best sample
@@ -675,6 +681,8 @@ class PRBCDAttack(torch.nn.Module):
         # adjacency matrix) and (2) to decay learning rate during fine-tuning
         # (i.e. fixed search space).
         lr = (budget / self.num_nodes * self.lr / np.sqrt(max(0, epoch - self.epochs_resampling) + 1))
+        max_gradient = self.max_edge_weight_update / lr
+        gradient = torch.clamp(gradient, -max_gradient, max_gradient) 
         return block_edge_weight + lr * gradient
 
     @staticmethod

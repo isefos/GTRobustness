@@ -356,9 +356,9 @@ class WeightedPreprocessing(torch.nn.Module):
         self.node_degrees_only = node_degrees_only
 
     def forward(self, data):
-        if data.get("recompute_preprocessing", False):
-            if "batch" in data:
-                assert data.batch.max() == 0, "On the fly preprocessing only works for single graphs"
+        attack_mode = data.get("attack_mode", False)
+        if attack_mode or data.get("spatial_types") is None:
+            assert data.num_graphs == 1, "On the fly preprocessing only works for single graphs"
             data = weighted_graphormer_pre_processing(
                 data,
                 self.distance,
