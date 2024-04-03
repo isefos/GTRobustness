@@ -186,6 +186,8 @@ random:
 
   graphgym.posenc_WLapPE.dim_pe:
     seed: 6384
-    type: randint
-    min: 6
-    max: 20
+    type: choice
+    options:
+      - 8
+      - 12
+      - 16
