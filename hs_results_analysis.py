@@ -206,8 +206,12 @@ def save_single_plots(
                 v = v[k]
             x.append(v)
         if discrete:
-            x = np.array(x)
-            values, unique_inv = np.unique(x, return_inverse=True)
+            try:
+                x = np.array(x)
+                values, unique_inv = np.unique(x, return_inverse=True)
+            except:
+                x = np.array([f"{i}" for i in x])
+                values, unique_inv = np.unique(x, return_inverse=True)
             tick_labels = None
             if values.dtype.type is np.str_:
                 tick_labels = [str(a) for a in values]
@@ -252,7 +256,7 @@ def main(
         if d_per_head > 0 and d_hidden == 0:
             if model == "Graphormer":
                 n_heads = result["config"]["graphgym"]["graphormer"]["num_heads"]
-            elif model == "GRIT":
+            elif model in ["GRIT", "WeightedSANTransformer", "SANTransformer"]:
                 n_heads = result["config"]["graphgym"]["gt"]["n_heads"]
             else:
                 raise NotImplementedError(f"model={model} is not implemented")
@@ -447,14 +451,28 @@ hyperparameters = {
         ("graphgym.gnn.head", True, False),
         ("graphgym.gnn.layers_post_mp", True, False),
     ],
+    "WeightedSANTransformer": [
+        ("graphgym.optim.base_lr", False, True),
+        ("graphgym.optim.weight_decay", False, True),
+        ("graphgym.gnn.dim_inner", False, False),
+        ("graphgym.gt.n_heads", True, False),
+        ("graphgym.gt.layers", True, False),
+        ("graphgym.gt.dropout", False, False),
+        ("graphgym.gt.wsan_add_dummy_edges", True, False),
+        ("graphgym.gt.gamma", False, True),
+        ("graphgym.gt.attn.clamp", True, False),
+        ("graphgym.posenc_WLapPE.dim_pe", True, False),
+        ("graphgym.gnn.head", True, False),
+        ("graphgym.gnn.layers_post_mp", True, False),
+    ],
 }
 
 
 if __name__ == "__main__":
 
-    collection_name = "hs_grit_upfd_bert"
+    collection_name = "hs_san_upfd_pol_bert"
     dataset = "upfd_pol_bert"  # "upfd_pol_bert", "upfd_gos_bert"
-    model = "GRIT"  # "Graphormer", "GCN", "GRIT", "SAN", "GAT"
+    model = "WeightedSANTransformer"  # "Graphormer", "GCN", "GRIT", "WeightedSANTransformer", "GAT"
     single_plots = True
     log_k_best = 5
 
