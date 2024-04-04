@@ -8,8 +8,8 @@ graphgym:
   seed: 42
 
   dataset:
-    format: PyG
-    name: Cora
+    format: PyG-CitationFull
+    name: Cora_ML
     task: node
     task_type: classification
     transductive: true
@@ -35,6 +35,7 @@ graphgym:
     eval_period: 1
     ckpt_best: true
     enable_ckpt: true
+    homophily_regularization: 1e-4
 
   model:
     type: Graphormer
@@ -63,7 +64,7 @@ graphgym:
     optimizer: adamW
     weight_decay: 0.01
     base_lr: 0.05
-    max_epoch: 3
+    max_epoch: 50
     scheduler: cosine_with_warmup
     num_warmup_epochs: 10
     early_stopping: true
@@ -72,7 +73,7 @@ graphgym:
     early_stopping_warmup: 30
 
   attack:
-    enable: true
+    enable: false
     log_progress: true
     load_best_model: true
     split: test
@@ -83,8 +84,8 @@ graphgym:
     epochs_resampling: 100
     max_edge_weight_update: 0.3
     lr: 4_000
-    block_size: 2_000
-    e_budget: 0.1
+    block_size: 5_000
+    e_budget: 0.03
     minimum_budget: 0
     eps: 1e-7
     is_undirected: false

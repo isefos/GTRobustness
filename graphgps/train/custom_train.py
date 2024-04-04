@@ -18,9 +18,12 @@ def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation)
     optimizer.zero_grad()
     time_start = time.time()
     for iter, batch in enumerate(loader):
-        batch.split = 'train'
+        #batch.split = 'train' -> commented to make homophily_regularization possible
         batch.to(torch.device(cfg.accelerator))
-        pred, true = model(batch)
+        pred_full, true_full = model(batch)
+        mask = batch[f'train_mask']
+        pred, true = pred_full[mask], true_full[mask] if true_full is not None else None
+
         if cfg.dataset.name == 'ogbg-code2':
             loss, pred_score = subtoken_cross_entropy(pred, true)
             _true = true
@@ -29,6 +32,13 @@ def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation)
             loss, pred_score = compute_loss(pred, true)
             _true = true.detach().to('cpu', non_blocking=True)
             _pred = pred_score.detach().to('cpu', non_blocking=True)
+        
+        # add homophily regularization if specified
+        if cfg.train.homophily_regularization > 0:
+            loss += cfg.train.homophily_regularization * (
+                pred_full[batch.edge_index[0, :]] - pred_full[batch.edge_index[1, :]]
+            ).abs().mean()
+        
         loss.backward()
         # Parameters update after accumulating gradients for given num. batches.
         if ((iter + 1) % batch_accumulation == 0) or (iter + 1 == len(loader)):

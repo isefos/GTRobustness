@@ -37,7 +37,7 @@ def weighted_graphormer_pre_processing(
     device = data.x.device
 
     if data.edge_attr is None:
-        data.edge_attr = data.edge_index.new_zeros((data.edge_index.size(1), ))
+        data.edge_attr = torch.ones((data.edge_index.size(1), ), device=device)
 
     if combinations_degree:
         # TODO: rewrite vectorized -> scatter:

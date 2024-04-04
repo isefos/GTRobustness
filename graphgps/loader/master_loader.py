@@ -12,6 +12,7 @@ from torch_geometric.datasets import (
     Actor,
     GNNBenchmarkDataset,
     Planetoid,
+    CitationFull,
     TUDataset,
     WebKB,
     WikipediaNetwork,
@@ -26,6 +27,7 @@ from graphgps.loader.dataset.aqsol_molecules import AQSOL
 from graphgps.loader.dataset.coco_superpixels import COCOSuperpixels
 from graphgps.loader.dataset.voc_superpixels import VOCSuperpixels
 from graphgps.loader.dataset.upfd import UPFD
+from graphgps.loader.dataset.robust_unittest import RobustnessUnitTest
 from graphgps.loader.split_generator import (
     prepare_splits,
     set_dataset_splits,
@@ -127,6 +129,12 @@ def load_dataset_master(format, name, dataset_dir):
 
         elif pyg_dataset_id == 'Planetoid':
             dataset = Planetoid(dataset_dir, name)
+
+        elif pyg_dataset_id == 'CitationFull':
+            dataset = CitationFull(dataset_dir, name)
+
+        elif pyg_dataset_id == 'RobustnessUnitTest':
+            dataset = preformat_RobustnessUnitTest(dataset_dir, name)
 
         elif pyg_dataset_id == 'TUDataset':
             dataset = preformat_TUDataset(dataset_dir, name)
@@ -611,6 +619,20 @@ def preformat_UPFD(dataset_dir, name: str):
          for split in ['train', 'val', 'test']]
     )
     pre_transform_in_memory(dataset, T.ToUndirected())
+    return dataset
+
+
+def preformat_RobustnessUnitTest(dataset_dir, name):
+    """Load and preformat RobustnessUnitTest dataset.
+
+    Args:
+        dataset_dir: path where to store the cached dataset
+        name: name of the specific dataset in the RobustnessUnitTest class
+
+    Returns:
+        PyG dataset object
+    """
+    dataset = RobustnessUnitTest(root=dataset_dir, name=name)
     return dataset
 
 
