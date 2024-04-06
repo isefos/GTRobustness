@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 1
+  experiments_per_job: 2
   sbatch_options:
     partition: gpu_large
     gres: gpu:1       # num GPUs
@@ -43,8 +43,8 @@ fixed:
       eigen:
         laplacian_norm: sym
         eigvec_norm: L2
-        max_freqs: 10
-      dim_pe: 16
+        #max_freqs: 10
+      #dim_pe: 16
       layers: 2
       n_heads: 4
       raw_norm_type: none
@@ -99,41 +99,7 @@ fixed:
       early_stopping_warmup: 30
 
     attack:
-      enable: true
-      log_progress: false
-      load_best_model: true
-      split: test
-      num_attacked_graphs: 0  # 0 means attack all
-      skip_incorrect_graph_classification: true
-      run_random_baseline: true
-      epochs: 125
-      epochs_resampling: 100
-      max_edge_weight_update: 0.0  # 0.0 means no gradient clipping
-      lr: 4_000
-      block_size: 2_000
-      e_budget: 0.1
-      minimum_budget: 0
-      eps: 1e-6
-      is_undirected: true
-      loss: raw_prediction
-      metric: null
-      max_final_samples: 20
-      max_trials_sampling: 20
-      with_early_stopping: true
-      node_prob_enable: true
-      node_prob_iterations: 3
-      node_prob_log: true
-      enable_node_injection: true
-      node_injection_from_train: true
-      node_injection_from_val: true
-      node_injection_from_test: true
-      remove_isolated_components: true
-      root_node_idx: 0
-      include_root_nodes_for_injection: false
-      existing_node_prob_multiplier: 1  # 1_000
-      sample_only_connected: true
-      sample_only_trees: true
-      allow_existing_graph_pert: false
+      enable: false
 
 grid:
 
@@ -144,35 +110,16 @@ grid:
       - 2
       - 3
 
-  #graphgym.gt.wsan_add_dummy_edges:
-  #  type: choice
-  #  options:
-  #    - true
-  #    - false
-
-  graphgym.posenc_WLapPE.eigen.use_gradient:
+  graphgym.posenc_WLapPE.max_freqs:
     type: choice
     options:
-      - false
-      - true
-      - true
-      - true
-    zip_id: eig_grad
+      - 10
+      - 30
+      - 100
+      - 300
 
-  graphgym.posenc_WLapPE.eigen.straight_through_estimator:
+  graphgym.posenc_WLapPE.dim_pe:
     type: choice
     options:
-      - false
-      - false
-      - true
-      - true
-    zip_id: eig_grad
-
-  graphgym.posenc_WLapPE.eigen.correct_pert_eigvec_sign:
-    type: choice
-    options:
-      - false
-      - false
-      - false
-      - true
-    zip_id: eig_grad
+      - 16
+      - 32

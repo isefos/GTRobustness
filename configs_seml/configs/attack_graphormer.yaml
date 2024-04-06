@@ -95,7 +95,7 @@ fixed:
       run_random_baseline: true
       epochs: 125
       epochs_resampling: 100
-      max_edge_weight_update: 0.3
+      max_edge_weight_update: 0.0  # 0.0 means no gradient clipping
       lr: 4_000
       block_size: 2_000
       e_budget: 0.1

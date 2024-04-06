@@ -681,8 +681,9 @@ class PRBCDAttack(torch.nn.Module):
         # adjacency matrix) and (2) to decay learning rate during fine-tuning
         # (i.e. fixed search space).
         lr = (budget / self.num_nodes * self.lr / np.sqrt(max(0, epoch - self.epochs_resampling) + 1))
-        max_gradient = self.max_edge_weight_update / lr
-        gradient = torch.clamp(gradient, -max_gradient, max_gradient) 
+        if self.max_edge_weight_update > 0:
+            max_gradient = self.max_edge_weight_update / lr
+            gradient = torch.clamp(gradient, -max_gradient, max_gradient)
         return block_edge_weight + lr * gradient
 
     @staticmethod

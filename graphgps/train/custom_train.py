@@ -20,9 +20,14 @@ def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation)
     for iter, batch in enumerate(loader):
         #batch.split = 'train' -> commented to make homophily_regularization possible
         batch.to(torch.device(cfg.accelerator))
-        pred_full, true_full = model(batch)
-        mask = batch[f'train_mask']
-        pred, true = pred_full[mask], true_full[mask] if true_full is not None else None
+        pred, true = model(batch)
+
+        if cfg.gnn.head == "node" and batch.get("train_mask") is not None:
+            pred_full, true_full = pred, true
+            mask = batch.train_mask
+            pred, true = pred_full[mask], true_full[mask] if true_full is not None else None
+        else:
+            pred_full, true_full = None, None
 
         if cfg.dataset.name == 'ogbg-code2':
             loss, pred_score = subtoken_cross_entropy(pred, true)
@@ -34,7 +39,8 @@ def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation)
             _pred = pred_score.detach().to('cpu', non_blocking=True)
         
         # add homophily regularization if specified
-        if cfg.train.homophily_regularization > 0:
+        if pred_full is not None and cfg.train.homophily_regularization > 0:
+            # TODO: make it be cross entropy to the label of the neighbor...
             loss += cfg.train.homophily_regularization * (
                 pred_full[batch.edge_index[0, :]] - pred_full[batch.edge_index[1, :]]
             ).abs().mean()

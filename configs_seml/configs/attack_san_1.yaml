@@ -5,68 +5,96 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 6
+  experiments_per_job: 1
   sbatch_options:
-    # partition: gpu_limited
+    partition: gpu_large
     gres: gpu:1       # num GPUs
     mem: 16G          # memory
     cpus-per-task: 4  # num cores
-    time: 0-12:00     # max time, D-HH:MM
+    time: 1-00:00     # max time, D-HH:MM
+
+# experiment fixed configs
 
 fixed:
 
   graphgym:
 
-    accelerator: auto
+    accelerator: cuda
     out_dir: configs_seml/results
     metric_best: accuracy
     tensorboard_each_run: false
 
     dataset:
       format: PyG-UPFD
-      name: politifact-spacy
+      name: politifact-bert
       task: graph
       task_type: classification_binary
       transductive: false
       split_mode: standard
       node_encoder: true
-      node_encoder_name: LinearNode
+      node_encoder_name: WLapPE
       node_encoder_bn: false
+      edge_encoder: true
+      edge_encoder_name: WeightedSANDummyEdge
+      edge_encoder_bn: false
+
+    posenc_WLapPE:
+      enable: true
+      eigen:
+        laplacian_norm: sym
+        eigvec_norm: L2
+        max_freqs: 10
+      dim_pe: 16
+      layers: 2
+      n_heads: 4
+      raw_norm_type: none
+      post_layers: 0
+      pass_as_var: false
 
     train:
       mode: custom
-      batch_size: 16
+      batch_size: 32
       eval_period: 1
       enable_ckpt: true
       ckpt_best: true
 
     model:
-      type: gnn
+      type: WeightedSANTransformer
       loss_fun: cross_entropy
 
-    gnn:
-      layer_type: gcnconvweighted
-      stage_type: stack
-      batchnorm: true
-      act: relu
+    gt:
+      layers: 4
+      n_heads: 8
+      dim_hidden: 64  # `gt.dim_hidden` must match `gnn.dim_inner`
+      full_graph: true
+      gamma: 5e-2
+      gamma_learnable: false
       dropout: 0.0
+      layer_norm: false
+      batch_norm: true
+      residual: true
+      wsan_add_dummy_edges: true
+      attn:
+        use_bias: false
+        clamp: null
+
+    gnn:
+      head: weighted_mean_pool_graph
       layers_pre_mp: 0
-      layers_mp: 1
-      layers_post_mp: 1
+      layers_post_mp: 2
       dim_inner: 64  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
-      head: weighted_add_pool_graph
     
     optim:
-      base_lr: 0.0003
-      weight_decay: 0.0001
-      clip_grad_norm: true
-      clip_grad_norm_value: 5.0
-      optimizer: adamW
-      max_epoch: 150
-      scheduler: cosine_with_warmup
-      num_warmup_epochs: 20
+      optimizer: adam
+      weight_decay: 0.0
+      base_lr: 4e-5
+      max_epoch: 200
+      scheduler: reduce_on_plateau
+      reduce_factor: 0.5
+      schedule_patience: 15
+      clip_grad_norm: false
       early_stopping: true
-      early_stopping_patience: 30
+      early_stopping_patience: 35
       early_stopping_delta_e: 0.05
       early_stopping_warmup: 30
 
@@ -80,20 +108,20 @@ fixed:
       run_random_baseline: true
       epochs: 125
       epochs_resampling: 100
-      max_edge_weight_update: 0.0  # 0.0 means no gradient clipping
+      max_edge_weight_update: 0.0
       lr: 4_000
       block_size: 2_000
       e_budget: 0.1
       minimum_budget: 0
-      eps: 1e-7
+      eps: 1e-4
       is_undirected: true
-      #loss: train
+      loss: raw_prediction
       metric: null
       max_final_samples: 20
       max_trials_sampling: 20
       with_early_stopping: true
       node_prob_enable: true
-      node_prob_iterations: 5
+      node_prob_iterations: 3
       node_prob_log: true
       enable_node_injection: true
       node_injection_from_train: true
@@ -116,16 +144,35 @@ grid:
       - 2
       - 3
 
-  graphgym.attack.loss:
+  #graphgym.gt.wsan_add_dummy_edges:
+  #  type: choice
+  #  options:
+  #    - true
+  #    - false
+
+  graphgym.posenc_WLapPE.eigen.use_gradient:
     type: choice
     options:
-      - train
-      - raw_prediction
-      - reflected_cross_entropy
+      - false
+      - true
+      - true
+      - true
+    zip_id: eig_grad
 
-  # graphgym.gnn.head:  # TODO: for other test
-  #   type: choice
-  #   options:
-  #     - weighted_add_pool_graph
-  #     - weighted_mean_pool_graph
-  
+  graphgym.posenc_WLapPE.eigen.straight_through_estimator:
+    type: choice
+    options:
+      - false
+      - false
+      - true
+      - true
+    zip_id: eig_grad
+
+  graphgym.posenc_WLapPE.eigen.correct_pert_eigvec_sign:
+    type: choice
+    options:
+      - false
+      - false
+      - false
+      - true
+    zip_id: eig_grad
