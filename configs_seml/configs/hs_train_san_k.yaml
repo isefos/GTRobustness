@@ -110,7 +110,7 @@ grid:
       - 2
       - 3
 
-  graphgym.posenc_WLapPE.max_freqs:
+  graphgym.posenc_WLapPE.eigen.max_freqs:
     type: choice
     options:
       - 10
