@@ -28,6 +28,8 @@ from graphgps.finetuning import (
 )
 from graphgps.logger import create_logger
 from graphgps.attack.attack import prbcd_attack_dataset
+from graphgps.attack.transfer_unit_test import transfer_unit_test
+from graphgps.loader.dataset.robust_unittest import RobustnessUnitTest
 
 
 torch.backends.cuda.matmul.allow_tf32 = True  # Default False in PyTorch 1.12+
@@ -100,6 +102,19 @@ def main(cfg):
     assert cfg.train.mode != 'standard', "Default train.mode not supported, use `custom` (or other specific mode)"
     training_results = train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
 
+    # Robustness unit test
+    rut_results = None
+    if cfg.robustness_unit_test.enable:
+        assert isinstance(loaders[0].dataset, RobustnessUnitTest), (
+            "To run the robustness unit test, the model should be trained on a "
+            "corresponding RobustnessUnitTest dataset,"
+        )
+        if cfg.robustness_unit_test.load_best_model:
+            logging.info(f"Loading best val. model (from epoch {training_results['best_val_epoch']})")
+            model = load_best_val_model(model, training_results)
+        logging.info("Running robustness unit test")
+        rut_results = transfer_unit_test(model, loaders[2])
+
     # Attack
     attack_results = None
     if cfg.attack.enable:
@@ -109,7 +124,7 @@ def main(cfg):
         attack_results = prbcd_attack_dataset(model, loaders)
 
     logging.info(f"[*] Finished now: {datetime.datetime.now()}")
-    results = {"training": training_results, "attack": attack_results}
+    results = {"training": training_results, "attack": attack_results, "robustness_unit_test": rut_results}
     return results
 
 

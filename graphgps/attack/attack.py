@@ -57,7 +57,16 @@ def prbcd_attack_dataset(model, loaders):
             include_root_nodes=cfg.attack.include_root_nodes_for_injection,
         )
 
-    clean_loader = DataLoader(dataset_to_attack, batch_size=1, shuffle=False)
+    pw = cfg.num_workers > 0
+    clean_loader = DataLoader(
+        dataset_to_attack,
+        batch_size=1,
+        shuffle=False,
+        num_workers=cfg.num_workers,
+        pin_memory=True,
+        persistent_workers=pw
+    )
+    
     for i, clean_data in enumerate(clean_loader):
         if cfg.attack.num_attacked_graphs and i >= cfg.attack.num_attacked_graphs:
             break

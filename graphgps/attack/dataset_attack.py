@@ -46,6 +46,8 @@ _collate_exclude_keys = [
         "graph_index", "in_degrees", "out_degrees", "degrees", "spatial_types",
         # GRIT
         "rrwp", "rrwp_index", "rrwp_val", "log_deg",
+        # SAN
+        "EigVecs", "EigVals",
     ]
 
 

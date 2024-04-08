@@ -1,23 +1,19 @@
-import os
 import os.path as osp
 from typing import Callable, List, Optional
-
 import numpy as np
-import scipy.sparse as sp
 import torch
-import pickle
-
 from torch_geometric.data import (
     Data,
     InMemoryDataset,
     download_url,
-    extract_zip,
 )
-from torch_geometric.io import read_txt_array
-from torch_geometric.utils import coalesce, cumsum
+from torch_geometric.utils import to_undirected, coalesce
 
 
-# Copied from UPFD, not implemented yet, WIP 
+names = ["cora_ml", "citeseer"]
+models = ["gcn", "jaccard_gcn", "svd_gcn", "rgcn", "pro_gnn", "gnn_guard", "grand", "soft_median_gdc"]
+splits = [0, 1, 2, 3, 4]
+scenarios = ["evasion", "poisoning"]
 
 
 class RobustnessUnitTest(InMemoryDataset):
@@ -47,105 +43,187 @@ class RobustnessUnitTest(InMemoryDataset):
             value, indicating whether the data object should be included in the
             final dataset. (default: :obj:`None`)
     """
-    url = 'https://github.com/LoadingByte/are-gnn-defenses-robust/raw/master/unit_test/unit_test.npz'
+    url = "https://github.com/LoadingByte/are-gnn-defenses-robust/raw/master/unit_test/unit_test.npz"
 
     def __init__(
         self,
         root: str,
         name: str,
-        split: int = 0,
         transform: Optional[Callable] = None,
         pre_transform: Optional[Callable] = None,
         pre_filter: Optional[Callable] = None,
     ):
-        raise NotImplementedError
-        assert name in ['cora_ml', 'citeseer']
-
-        self.root = root
-        self.name = name
+        self.name = name.lower()
+        assert self.name in names
         super().__init__(root, transform, pre_transform, pre_filter)
+        self.load_data()
 
-        self.split = int(split)
-        assert self.split in [0, 1, 2, 3, 4]
-        path = self.processed_paths[['train', 'val', 'test'].index(split)]
-        self.data, self.slices = torch.load(path)
+    def load_data(self):
+        self.data, self.slices, self.budgets = torch.load(self.processed_paths[0])
 
     @property
     def raw_dir(self) -> str:
-        return osp.join(self.root, self.name, 'raw')
+        return osp.join(self.root, "raw")
 
     @property
     def processed_dir(self) -> str:
-        return osp.join(self.root, self.name, 'processed', self.feature)
+        return osp.join(self.root, self.name, "processed", "clean")
 
     @property
     def raw_file_names(self) -> List[str]:
-        return [
-            'node_graph_id.npy', 'graph_labels.npy', 'A.txt', 'train_idx.npy',
-            'val_idx.npy', 'test_idx.npy', f'new_{self.feature}_feature.npz',
-            'id_twitter_mapping.pkl',
-        ]
+        return "unit_test.npz"
 
     @property
     def processed_file_names(self):
-        return ['train.pt', 'val.pt', 'test.pt']
+        return "data.pt"
+    
+    def _get_budget_prefix(self, split: int, model: str, scenario: str) -> str:
+        return f"{self.name}/perturbations/{scenario}/{model}/split_{split}/budget_"
 
     def download(self):
-        path = download_url(self.url.format(self.name), self.raw_dir)
-        extract_zip(path, self.raw_dir)
-        os.remove(path)
-        download_url(self.id_twitter_mapping_urls[self.name], self.raw_dir, filename='id_twitter_mapping.pkl')
+        download_url(self.url, self.raw_dir)
 
     def process(self):
-        x = sp.load_npz(
-            osp.join(self.raw_dir, f'new_{self.feature}_feature.npz'))
-        x = torch.from_numpy(x.todense()).to(torch.float)
+        with np.load(self.raw_paths[0]) as f:
+            budgets = self._read_budgets(f)
+            data = self._read_data_clean(f)
+        data = data if self.pre_transform is None else self.pre_transform(data)
+        data, slices = self.collate([data])
+        torch.save((data, slices, budgets), self.processed_paths[0])
 
-        edge_index = read_txt_array(osp.join(self.raw_dir, 'A.txt'), sep=',',
-                                    dtype=torch.long).t()
-        edge_index = coalesce(edge_index, num_nodes=x.size(0))
+    def _read_budgets(self, loader):
+        budgets = []
+        for split in splits:
+            budgets.append({})
+            for model in models:
+                budgets[split][model] = {}
+                for scenario in scenarios:
+                    prefix = self._get_budget_prefix(split, model, scenario)
+                    bs = []
+                    for k in loader.keys():
+                        if k.startswith(prefix):
+                            bs.append(k[len(prefix):])
+                    budgets[split][model][scenario] = sorted([int(b) for b in bs])
+        return budgets
 
-        y = np.load(osp.join(self.raw_dir, 'graph_labels.npy'))
-        y = torch.from_numpy(y).to(torch.long)
-        _, y = y.unique(sorted=True, return_inverse=True)
-
-        with open(osp.join(self.raw_dir, 'id_twitter_mapping.pkl'), "rb") as f:
-            twitter_id_mapping: dict[int, str] = pickle.load(f)
-            node_idx = list(twitter_id_mapping.keys())
-            assert node_idx == list(range(len(node_idx)))
-        twitter_ids = np.zeros(len(twitter_id_mapping), dtype=np.int64)
-        for i, twitter_id in enumerate(twitter_id_mapping.values()):
-            if not twitter_id[0].isdigit():
-                # is_root, make it negative to identify later
-                twitter_id = '-' + ''.join(c for c in twitter_id if c.isdigit())
-            twitter_ids[i] = int(twitter_id)
-        twitter_ids = torch.from_numpy(twitter_ids)
-
-        batch = np.load(osp.join(self.raw_dir, 'node_graph_id.npy'))
-        batch = torch.from_numpy(batch).to(torch.long)
-
-        node_slice = cumsum(batch.bincount())
-        edge_slice = cumsum(batch[edge_index[0]].bincount())
-        graph_slice = torch.arange(y.size(0) + 1)
-        self.slices = {
-            'x': node_slice,
-            'edge_index': edge_slice,
-            'y': graph_slice,
-            'twitter_ids': node_slice, 
-        }
-
-        edge_index -= node_slice[batch[edge_index[0]]].view(1, -1)
-        self.data = Data(x=x, edge_index=edge_index, y=y, twitter_ids=twitter_ids)
-
-        for path, split in zip(self.processed_paths, ['train', 'val', 'test']):
-            idx = np.load(osp.join(self.raw_dir, f'{split}_idx.npy')).tolist()
-            data_list = [self.get(i) for i in idx]
-            if self.pre_filter is not None:
-                data_list = [d for d in data_list if self.pre_filter(d)]
-            if self.pre_transform is not None:
-                data_list = [self.pre_transform(d) for d in data_list]
-            torch.save(self.collate(data_list), path)
+    def _read_data_clean(self, loader):
+        prefix = f"{self.name}/dataset/"
+        x_index = torch.from_numpy(loader[prefix + "features"]).to(torch.long)
+        y = torch.from_numpy(loader[prefix + "labels"]).to(torch.long)
+        N = y.size(0)
+        D = int(x_index[:, 1].max()) + 1
+        x = torch.zeros((N, D))
+        x[x_index[:, 0], x_index[:, 1]] = 1
+        edge_index = torch.from_numpy(loader[prefix + "adjacency"]).to(torch.long).T
+        edge_index = to_undirected(edge_index, num_nodes=x.size(0))
+        data = Data(x=x, edge_index=edge_index, y=y)
+        train_mask = torch.zeros((N, 5), dtype=torch.bool)
+        val_mask = torch.zeros((N, 5), dtype=torch.bool)
+        test_mask = torch.zeros((N, 5), dtype=torch.bool)
+        prefix = f"{self.name}/splits/"
+        for s in splits:
+            train_nodes = torch.from_numpy(loader[f"{prefix}{s}/train"]).to(torch.long)
+            train_mask[train_nodes, s] = True
+            val_nodes = torch.from_numpy(loader[f"{prefix}{s}/val"]).to(torch.long)
+            val_mask[val_nodes, s] = True
+            test_nodes = torch.from_numpy(loader[f"{prefix}{s}/test"]).to(torch.long)
+            test_mask[test_nodes, s] = True
+        data.train_mask = train_mask
+        data.val_mask = val_mask
+        data.test_mask = test_mask
+        return data
 
     def __repr__(self) -> str:
-        return (f'{self.__class__.__name__}({len(self)}, name={self.name}, '
-                f'feature={self.feature})')
+        return (f"{self.name.capitalize()}()")
+
+
+class RUTAttack(RobustnessUnitTest):
+    r"""The same dataset but with the adversarial perturbations loaded.
+    """
+    models = models
+
+    def __init__(
+        self,
+        root: str,
+        name: str,
+        split: int,
+        scenario: str,
+        model: str,
+        budget: int,
+        transform: Optional[Callable] = None,
+        pre_transform: Optional[Callable] = None,
+        pre_filter: Optional[Callable] = None,
+    ):
+        self.name = name.lower()
+        self.scenario = scenario
+        self.split = split
+        self.model = model
+        assert self.name in names
+        assert self.split in splits
+        assert self.scenario in scenarios
+        assert self.model in models
+        self.budget = budget
+        super().__init__(
+            root=root,
+            name=name,
+            transform=transform,
+            pre_transform=pre_transform,
+            pre_filter=pre_filter,
+        )
+    
+    def load_data(self):
+        self.data, self.slices = torch.load(self.processed_paths[0])
+
+    @property
+    def processed_dir(self) -> str:
+        return osp.join(self.root, self.name, "processed", "pert", self.model)
+
+    @property
+    def processed_file_names(self):
+        return f"data_b{self.budget}.pt"
+    
+    @property
+    def budget_prefix(self) -> str:
+        prefix = self._get_budget_prefix(self.split, self.model, self.scenario)
+        return f"{prefix}{self.budget:05}"
+
+    def process(self):
+        super().process()
+
+    def process(self):
+        with np.load(self.raw_paths[0]) as f:
+            data = self._read_data_pert(f)
+        data = data if self.pre_transform is None else self.pre_transform(data)
+        data, slices = self.collate([data])
+        torch.save((data, slices), self.processed_paths[0])
+
+    def _read_data_pert(self, loader):
+        data = self._read_data_clean(loader)
+        N = data.x.size(0)
+        E_clean = data.edge_index.size(1)
+        try:
+            pert_edges = loader[self.budget_prefix]
+        except KeyError:
+            raise ValueError(f"budget={self.budget} is not one of the precomputed budgets!")
+        pert_edge_index = torch.from_numpy(pert_edges).to(torch.long).T
+        pert_edge_index = to_undirected(pert_edge_index, num_nodes=N)
+        E_pert = pert_edge_index.size(1)
+        assert E_pert == 2 * self.budget
+        modified_edge_index = torch.cat((data.edge_index, pert_edge_index), dim=-1)
+        modified_edge_weight = torch.ones(E_clean + E_pert)
+        modified_edge_index, modified_edge_weight = coalesce(
+            modified_edge_index,
+            modified_edge_weight,
+            num_nodes=N,
+            reduce='sum',
+        )
+        removed_edges_mask = ~(modified_edge_weight == 2)
+        modified_edge_index = modified_edge_index[:, removed_edges_mask]
+        data.edge_index = modified_edge_index
+        return data
+
+    def __repr__(self) -> str:
+        return (
+            f"Attacked{self.name.capitalize()}("
+            f"split={self.split}, scenario={self.scenario}, model={self.model}, budget={self.budget})"
+        )

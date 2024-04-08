@@ -7,8 +7,8 @@ graphgym:
   seed: 42
 
   dataset:
-    format: PyG-Planetoid
-    name: Cora
+    format: PyG-RobustnessUnitTest
+    name: cora_ml
     task: node
     task_type: classification
     transductive: true
@@ -39,7 +39,7 @@ graphgym:
   optim:
     optimizer: adam
     base_lr: 0.005
-    max_epoch: 50
+    max_epoch: 15
 
   attack:
     enable: true
@@ -49,12 +49,12 @@ graphgym:
     num_attacked_graphs: 0  # 0 means attack all
     skip_incorrect_graph_classification: true
     run_random_baseline: true
-    epochs: 75
-    epochs_resampling: 50
+    epochs: 125
+    epochs_resampling: 100
     max_edge_weight_update: 0.0  # 0.0 means no gradient clipping
     lr: 4_000
-    block_size: 2_000
-    e_budget: 0.1
+    block_size: 10_000
+    e_budget: 0.15
     minimum_budget: 0
     eps: 1e-7
     is_undirected: false
@@ -64,7 +64,7 @@ graphgym:
     max_final_samples: 20
     max_trials_sampling: 20
     with_early_stopping: true
-    node_prob_enable: true
+    node_prob_enable: false
     node_prob_iterations: 5
     node_prob_log: true
     enable_node_injection: false

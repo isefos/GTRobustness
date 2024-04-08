@@ -462,6 +462,7 @@ hyperparameters = {
         ("graphgym.gt.gamma", False, True),
         ("graphgym.gt.attn.clamp", True, False),
         ("graphgym.posenc_WLapPE.dim_pe", True, False),
+        ("graphgym.posenc_WLapPE.eigen.max_freqs", True, False),
         ("graphgym.gnn.head", True, False),
         ("graphgym.gnn.layers_post_mp", True, False),
     ],
@@ -470,7 +471,7 @@ hyperparameters = {
 
 if __name__ == "__main__":
 
-    collection_name = "hs_san_upfd_pol_bert"
+    collection_name = "hs_san_k_upfd_pol_bert"
     dataset = "upfd_pol_bert"  # "upfd_pol_bert", "upfd_gos_bert"
     model = "WeightedSANTransformer"  # "Graphormer", "GCN", "GRIT", "WeightedSANTransformer", "GAT"
     single_plots = True

@@ -134,7 +134,7 @@ def load_dataset_master(format, name, dataset_dir):
             dataset = CitationFull(dataset_dir, name)
 
         elif pyg_dataset_id == 'RobustnessUnitTest':
-            dataset = preformat_RobustnessUnitTest(dataset_dir, name)
+            dataset = RobustnessUnitTest(root=dataset_dir, name=name)
 
         elif pyg_dataset_id == 'TUDataset':
             dataset = preformat_TUDataset(dataset_dir, name)
@@ -209,6 +209,27 @@ def load_dataset_master(format, name, dataset_dir):
     log_loaded_dataset(dataset, format, name)
 
     # Precompute necessary statistics for positional encodings.
+    compute_PE_stats_(dataset)
+
+    # Set standard dataset train/val/test splits
+    if hasattr(dataset, 'split_idxs'):
+        set_dataset_splits(dataset, dataset.split_idxs)
+        delattr(dataset, 'split_idxs')
+
+    # Verify or generate dataset train/val/test splits
+    prepare_splits(dataset)
+
+    # Precompute in-degree histogram if needed for PNAConv.
+    if cfg.gt.layer_type.startswith('PNA') and len(cfg.gt.pna_degrees) == 0:
+        cfg.gt.pna_degrees = compute_indegree_histogram(
+            dataset[dataset.data['train_graph_index']])
+        # print(f"Indegrees: {cfg.gt.pna_degrees}")
+        # print(f"Avg:{np.mean(cfg.gt.pna_degrees)}")
+
+    return dataset
+
+
+def compute_PE_stats_(dataset):
     pe_enabled_list = []
     for key, pecfg in cfg.items():
         if key.startswith('posenc_') and pecfg.enable:
@@ -252,23 +273,6 @@ def load_dataset_master(format, name, dataset_dir):
                 dataset.transform = pe_transform
             else:
                 dataset.transform = T.compose([pe_transform, dataset.transform])
-
-    # Set standard dataset train/val/test splits
-    if hasattr(dataset, 'split_idxs'):
-        set_dataset_splits(dataset, dataset.split_idxs)
-        delattr(dataset, 'split_idxs')
-
-    # Verify or generate dataset train/val/test splits
-    prepare_splits(dataset)
-
-    # Precompute in-degree histogram if needed for PNAConv.
-    if cfg.gt.layer_type.startswith('PNA') and len(cfg.gt.pna_degrees) == 0:
-        cfg.gt.pna_degrees = compute_indegree_histogram(
-            dataset[dataset.data['train_graph_index']])
-        # print(f"Indegrees: {cfg.gt.pna_degrees}")
-        # print(f"Avg:{np.mean(cfg.gt.pna_degrees)}")
-
-    return dataset
 
 
 def compute_indegree_histogram(dataset):
@@ -619,20 +623,6 @@ def preformat_UPFD(dataset_dir, name: str):
          for split in ['train', 'val', 'test']]
     )
     pre_transform_in_memory(dataset, T.ToUndirected())
-    return dataset
-
-
-def preformat_RobustnessUnitTest(dataset_dir, name):
-    """Load and preformat RobustnessUnitTest dataset.
-
-    Args:
-        dataset_dir: path where to store the cached dataset
-        name: name of the specific dataset in the RobustnessUnitTest class
-
-    Returns:
-        PyG dataset object
-    """
-    dataset = RobustnessUnitTest(root=dataset_dir, name=name)
     return dataset
 
 

@@ -8,12 +8,13 @@ graphgym:
   seed: 42
 
   dataset:
-    format: PyG-CitationFull
-    name: Cora_ML
+    format: PyG-Planetoid
+    name: Cora
     task: node
     task_type: classification
     transductive: true
     split_mode: standard
+    split_index: 0
     node_encoder: true
     node_encoder_name: LinearNode+WeightedGraphormerBias
     node_encoder_bn: false
@@ -82,7 +83,7 @@ graphgym:
     run_random_baseline: true
     epochs: 125
     epochs_resampling: 100
-    max_edge_weight_update: 0.3
+    max_edge_weight_update: 0.0  # 0.0 means no gradient clipping
     lr: 4_000
     block_size: 5_000
     e_budget: 0.03

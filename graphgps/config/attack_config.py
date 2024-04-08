@@ -6,7 +6,12 @@ from yacs.config import CfgNode as CN
 def dataset_cfg(cfg):
     """Attack config options.
     """
-    # example argument group
+    # for transfer attacks from the robustness unit test
+    cfg.robustness_unit_test = CN()
+    cfg.robustness_unit_test.enable = False
+    cfg.robustness_unit_test.load_best_model = True
+
+    # for adaptive attack
     cfg.attack = CN()
 
     # whether to attack or not
