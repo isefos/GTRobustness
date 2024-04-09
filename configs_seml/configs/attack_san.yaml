@@ -23,6 +23,7 @@ fixed:
     out_dir: configs_seml/results
     metric_best: accuracy
     tensorboard_each_run: false
+    seed: 42
 
     dataset:
       format: PyG-UPFD
@@ -137,24 +138,10 @@ fixed:
 
 grid:
 
-  graphgym.seed:
-    type: choice
-    options:
-      - 1
-      - 2
-      - 3
-
-  graphgym.attack.eps_init_noised:
-    type: choice
-    options:
-      - true
-      - false
-
   graphgym.attack.resample_period:
     type: choice
     options:
       - 1
-      - 2
       - 3
       - 5
 
@@ -164,12 +151,12 @@ grid:
       - false
       - true
       - true
-      - true
     zip_id: eig_grad
 
   graphgym.posenc_WLapPE.eigen.straight_through_estimator:
     type: choice
     options:
+      - false
       - false
       - false
       - true
@@ -181,6 +168,17 @@ grid:
     options:
       - false
       - false
+      - false
+      - true
+      - true
+    zip_id: eig_grad
+
+  graphgym.attack.eps_init_noised:
+    type: choice
+    options:
+      - false
+      - false
+      - true
       - false
       - true
     zip_id: eig_grad
