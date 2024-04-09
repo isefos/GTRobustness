@@ -38,3 +38,4 @@ def extended_cfg(cfg):
     cfg.best_by_loss = False  # choose the best epoch by loss rather than by metrics
 
     cfg.train.homophily_regularization = 0.0
+    cfg.train.homophily_regularization_gt_weight = 1.0

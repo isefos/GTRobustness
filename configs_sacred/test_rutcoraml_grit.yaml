@@ -8,53 +8,58 @@ graphgym:
   seed: 42
 
   dataset:
-    format: PyG-Planetoid
-    name: Cora
+    format: PyG-RobustnessUnitTest
+    name: cora_ml
     task: node
     task_type: classification
     transductive: true
     split_mode: standard
     split_index: 0
     node_encoder: true
-    node_encoder_name: LinearNode+WeightedGraphormerBias
+    node_encoder_name: LinearNode+WeightedRRWPLinear
     node_encoder_bn: false
 
-  posenc_GraphormerBias:
-    enable: true
-    node_degrees_only: false
-    num_spatial_types: 4
-    num_in_degrees: 10
-    num_out_degrees: 10
-    directed_graphs: true
-    has_edge_attr: false
-    combinations_degree: false
-    use_weighted_path_distance: true
+  posenc_RRWP:
+      enable: true
+      ksteps: 5
+      w_add_dummy_edge: false
 
   train:
     mode: custom
-    batch_size: 16
+    batch_size: 1
     eval_period: 1
     ckpt_best: true
     enable_ckpt: true
-    homophily_regularization: 1e-4
+    homophily_regularization: 1.0
+    homophily_regularization_gt_weight: 2.0
 
   model:
-    type: Graphormer
+    type: GritTransformer
     loss_fun: cross_entropy
-    graph_pooling: graph_token
 
-  graphormer:
-    use_graph_token: false
-    num_layers: 2
-    num_heads: 2
-    embed_dim: 32
-    dropout: 0.0
-    attention_dropout: 0.0  # 0.1
-    mlp_dropout: 0.0  # 0.1
-    input_dropout: 0.0  # 0.1
+  gt:
+    layers: 1
+    n_heads: 1
+    dim_hidden: 8 # `gt.dim_hidden` must match `gnn.dim_inner`
+    dropout: 0.1
+    attn_dropout: 0.5
+    layer_norm: false
+    batch_norm: true
+    bn_no_runner: false
+    bn_momentum: 0.1
+    update_e: true
+    attn:
+      deg_scaler: true
+      use_bias: false
+      clamp: 5.
+      act: relu
+      full_attn: true
+      norm_e: true
+      O_e: true
+      edge_enhance: true
 
   gnn:
-    dim_inner: 32
+    dim_inner: 8
     head: node
     layers_pre_mp: 0
     layers_post_mp: 1
@@ -85,8 +90,8 @@ graphgym:
     epochs_resampling: 100
     max_edge_weight_update: 0.0  # 0.0 means no gradient clipping
     lr: 4_000
-    block_size: 5_000
-    e_budget: 0.03
+    block_size: 10_000
+    e_budget: 0.15
     minimum_budget: 0
     eps: 1e-7
     is_undirected: false

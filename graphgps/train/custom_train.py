@@ -3,11 +3,13 @@ import time
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch_geometric.graphgym.checkpoint import load_ckpt, save_ckpt, clean_ckpt
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.loss import compute_loss
 from torch_geometric.graphgym.register import register_train
 from torch_geometric.graphgym.utils.epoch import is_eval_epoch, is_ckpt_epoch
+from torch_geometric.utils import degree
 
 from graphgps.loss.subtoken_prediction_loss import subtoken_cross_entropy
 from graphgps.utils import cfg_to_dict, flatten_dict, make_wandb_name
@@ -20,6 +22,7 @@ def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation)
     for iter, batch in enumerate(loader):
         #batch.split = 'train' -> commented to make homophily_regularization possible
         batch.to(torch.device(cfg.accelerator))
+        original_edge_index = batch.edge_index.clone()
         pred, true = model(batch)
 
         if cfg.gnn.head == "node" and batch.get("train_mask") is not None:
@@ -40,10 +43,10 @@ def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation)
         
         # add homophily regularization if specified
         if pred_full is not None and cfg.train.homophily_regularization > 0:
-            # TODO: make it be cross entropy to the label of the neighbor...
-            loss += cfg.train.homophily_regularization * (
-                pred_full[batch.edge_index[0, :]] - pred_full[batch.edge_index[1, :]]
-            ).abs().mean()
+            reg = homophily_regularization(
+                pred_full, true_full, original_edge_index, batch.train_mask, batch.x.size(0),
+            )
+            loss += cfg.train.homophily_regularization * reg
         
         loss.backward()
         # Parameters update after accumulating gradients for given num. batches.
@@ -62,6 +65,39 @@ def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation)
             dataset_name=cfg.dataset.name,
         )
         time_start = time.time()
+
+
+def homophily_regularization(pred_full, true_full, edge_index, train_mask, N):
+    pred_full = pred_full.squeeze(-1) if pred_full.ndim > 1 else pred_full
+    true_full = true_full.squeeze(-1) if true_full.ndim > 1 else true_full
+    multiclass = pred_full.ndim > 1 and true_full.ndim == 1
+    # pseudo labels from the predictions of neighbors
+    if multiclass:
+        true_hom = pred_full.detach().max(dim=1)[1]
+    else:
+        true_hom = (torch.sigmoid(pred_full.detach()) > cfg.model.thresh).long()
+    true_hom = true_hom[edge_index[0, :]]
+    # set the actual training labels that we know
+    label_mask = train_mask[edge_index[0, :]]
+    label_hom = true_full[edge_index[0, :]]
+    true_hom[label_mask] = label_hom[label_mask]
+
+    if multiclass:
+        reg = F.nll_loss(F.log_softmax(pred_full[edge_index[1, :]], dim=-1), true_hom, reduction="none")
+    else:
+        reg = F.binary_cross_entropy_with_logits(pred_full[edge_index[1, :]], true_hom.float(), reduction="none")
+
+    # weight by inverse degree, such that all nodes get equal regularization
+    deg = degree(edge_index[1, :], N)
+    reg /= deg[edge_index[1, :]]
+    # weight those higher where the label is a known label
+    w = torch.ones_like(label_mask).float()
+    w[label_mask] = cfg.train.homophily_regularization_gt_weight
+    reg = reg * w
+    # remove the training nodes from the regularization loss
+    not_train_mask = (~train_mask)[edge_index[1, :]]
+    reg = reg[not_train_mask]
+    return reg.mean()
 
 
 @torch.no_grad()
