@@ -37,6 +37,7 @@ def prbcd_attack_dataset(model, loaders):
     model.eval()
     model.forward = forward_wrapper(model.forward)
     prbcd = PRBCDAttack(model)
+    attack_stats = []
     accumulated_stats, accumulated_stats_zb = get_empty_accumulated_stats()
 
     if cfg.dataset.task == "node" and (cfg.attack.enable_node_injection or cfg.attack.remove_isolated_components):
@@ -96,6 +97,7 @@ def prbcd_attack_dataset(model, loaders):
         ):
             # graph prediction is incorrect, no need to attack
             logging.info("Skipping graph attack because it is already incorrectly classified by model.")
+            attack_stats.append(None)
             # In this case:
             # - set correct.* to False (for the accuracy calculations)
             # - all the rest to None
@@ -129,6 +131,7 @@ def prbcd_attack_dataset(model, loaders):
                 f"Skipping graph attack because maximum budget is less than 1 "
                 f"({cfg.attack.e_budget} of {budget_edges}), so cannot make perturbations."
             )
+            attack_stats.append(None)
             # In this case we only accumulate the stats for the clean graph in the zero budget dict
             for k in ["budget_used", "budget_used_random"]:
                 accumulated_stats_zb[k].append(0)
@@ -199,6 +202,7 @@ def prbcd_attack_dataset(model, loaders):
             )
 
             if not random_attack:
+                attack_stats.append(prbcd.attack_statistics)
                 accumulated_stats["perturbation"].append(perts.tolist())
 
             num_modified_edges = perts.size(1)
@@ -258,6 +262,7 @@ def prbcd_attack_dataset(model, loaders):
         "avg_including_zero_budget": summary_stats_zb,
         "all": accumulated_stats,
         "all_including_zero_budget": accumulated_stats_zb,
+        "attack_stats": attack_stats,
     }
     return results
 

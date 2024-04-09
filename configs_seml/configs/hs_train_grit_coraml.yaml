@@ -39,6 +39,7 @@ fixed:
 
     posenc_RRWP:
         enable: true
+        w_add_dummy_edge: true
 
     train:
       mode: custom
@@ -72,13 +73,16 @@ fixed:
       dim_inner: 0
       head: node
       layers_pre_mp: 0
+      layers_post_mp: 1
 
     optim:
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       optimizer: adamW
+      weight_decay: 0.0001
       max_epoch: 200
       scheduler: cosine_with_warmup
+      num_warmup_epochs: 10
       early_stopping: true
       early_stopping_patience: 30
       early_stopping_delta_e: 0.05
@@ -87,98 +91,65 @@ fixed:
 # experiment random configs
 
 random:
-  samples: 1000
-  seed: 187
+  samples: 300
+  seed: 246
 
   graphgym.seed:
-    seed: 786
+    seed: 643
     type: randint
     min: 0
     max: 10000
 
   graphgym.optim.base_lr:
-    seed: 2264
+    seed: 2457
     type: loguniform
-    min: 3e-5
+    min: 8e-4
     max: 1e-2
 
-  graphgym.optim.weight_decay:
-    seed: 89
-    type: loguniform
-    min: 1e-6
-    max: 5e-2
-
-  graphgym.gt.n_heads:
-    seed: 13094
+  graphgym.gt.layers:
+    seed: 2564
     type: randint
     min: 2
-    max: 10
+    max: 5
+
+  graphgym.gt.n_heads:
+    seed: 620
+    type: randint
+    min: 2
+    max: 8
 
   dims_per_head:
-    seed: 164
+    seed: 3237
     type: randint
-    min: 4
-    max: 25
-
-  graphgym.gt.layers:
-    seed: 357
-    type: randint
-    min: 1
-    max: 10
+    min: 2
+    max: 8
 
   graphgym.gt.dropout:
-    seed: 751
+    seed: 87259
     type: uniform
     min: 0.0
     max: 0.2
 
   graphgym.gt.attn_dropout:
-    seed: 10075
+    seed: 863
     type: uniform
     min: 0.1
     max: 0.6
 
   graphgym.posenc_RRWP.ksteps:
-    seed: 392
+    seed: 1143
     type: randint
     min: 10
     max: 25
 
-  graphgym.posenc_RRWP.w_add_dummy_edge:
-    seed: 699
-    type: choice
-    options:
-      - true
-      - false
-
-  graphgym.gnn.layers_post_mp:
-    seed: 96624
-    type: choice
-    options:
-      - 1
-      - 2
-      - 3
-
-  graphgym.optim.num_warmup_epochs:
-    seed: 3976
-    type: randint
-    min: 3
-    max: 15
-
   graphgym.train.homophily_regularization: 
-    seed: 9734
-    type: choice
-    options:
-      - 0.0
-      - 0.5
-      - 1.0
-      - 1.0
-      - 2.0
+    seed: 883
+    type: uniform
+    min: 0.0
+    max: 5.0
 
   graphgym.train.homophily_regularization_gt_weight:
-    seed: 9734
-    type: choice
-    options:
-      - 1.0
-      - 2.0
-      - 3.0
+    seed: 8462
+    type: uniform
+    min: 1.0
+    max: 10.0

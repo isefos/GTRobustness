@@ -38,6 +38,8 @@ def dataset_cfg(cfg):
     # bla
     cfg.attack.epochs_resampling = 100
 
+    cfg.attack.resample_period = 1
+
     # bla
     cfg.attack.max_final_samples = 20
 
@@ -49,6 +51,8 @@ def dataset_cfg(cfg):
 
     # bla
     cfg.attack.eps = 1e-7
+
+    cfg.attack.eps_init_noised = False
 
     # used for gradient clipping, to disable gradient clipping set to 0.0
     cfg.attack.max_edge_weight_update = 0.0

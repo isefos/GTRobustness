@@ -104,15 +104,16 @@ fixed:
       load_best_model: true
       split: test
       num_attacked_graphs: 0  # 0 means attack all
-      skip_incorrect_graph_classification: true
+      skip_incorrect_graph_classification: true  # set to true to get transfer attacks for all graphs
       run_random_baseline: true
-      epochs: 125
-      epochs_resampling: 100
-      max_edge_weight_update: 0.0  # 0.0 means no gradient clipping
+      epochs: 350
+      epochs_resampling: 300
+      resample_period: 3
+      max_edge_weight_update: 0.5  # 0.0 means no gradient clipping
       lr: 4_000
       block_size: 2_000
       e_budget: 0.1
-      minimum_budget: 0
+      minimum_budget: 1
       eps: 1e-6
       is_undirected: true
       loss: raw_prediction
@@ -144,11 +145,19 @@ grid:
       - 2
       - 3
 
-  #graphgym.gt.wsan_add_dummy_edges:
-  #  type: choice
-  #  options:
-  #    - true
-  #    - false
+  graphgym.attack.eps_init_noised:
+    type: choice
+    options:
+      - true
+      - false
+
+  graphgym.attack.resample_period:
+    type: choice
+    options:
+      - 1
+      - 2
+      - 3
+      - 5
 
   graphgym.posenc_WLapPE.eigen.use_gradient:
     type: choice

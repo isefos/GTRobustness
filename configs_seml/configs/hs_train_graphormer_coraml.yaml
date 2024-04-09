@@ -17,6 +17,8 @@ slurm:
 
 fixed:
 
+  dims_per_head: 10
+
   graphgym:
 
     accelerator: auto
@@ -40,6 +42,7 @@ fixed:
     posenc_GraphormerBias:
       enable: true
       node_degrees_only: false
+      num_spatial_types: 14  # cora_ml: max cont. = 19, max total = 19
       num_out_degrees: ${config.graphgym.posenc_GraphormerBias.num_in_degrees}
       directed_graphs: false
       has_edge_attr: false
@@ -60,18 +63,26 @@ fixed:
     graphormer:
       use_graph_token: false
       embed_dim: 0
+      num_heads: 4
+      num_layers: 8
+      dropout: 0.03
+      input_dropout: 0.15
+      mlp_dropout: 0.1
 
     gnn:
       dim_inner: 0
       head: node
       layers_pre_mp: 0
+      layers_post_mp: 1
 
     optim:
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       optimizer: adamW
+      weight_decay: 0.00008
       max_epoch: 200
       scheduler: cosine_with_warmup
+      num_warmup_epochs: 8
       early_stopping: true
       early_stopping_patience: 30
       early_stopping_delta_e: 0.05
@@ -81,10 +92,10 @@ fixed:
 
 random:
   samples: 300
-  seed: 187
+  seed: 19725
 
   graphgym.seed:
-    seed: 786
+    seed: 7
     type: randint
     min: 0
     max: 10000
@@ -92,99 +103,30 @@ random:
   graphgym.optim.base_lr:
     seed: 2264
     type: loguniform
-    min: 3e-5
+    min: 9e-3
     max: 5e-2
-
-  graphgym.optim.weight_decay:
-    seed: 89
-    type: loguniform
-    min: 1e-6
-    max: 5e-2
-
-  graphgym.graphormer.num_heads:
-    seed: 13094
-    type: randint
-    min: 2
-    max: 10
-
-  dims_per_head:
-    seed: 194
-    type: randint
-    min: 4
-    max: 25
-
-  graphgym.graphormer.num_layers:
-    seed: 357
-    type: randint
-    min: 1
-    max: 10
-
-  # cora_ml: max cont. = 19, max total = 19
-  graphgym.posenc_GraphormerBias.num_spatial_types:
-    seed: 2846
-    type: randint
-    min: 8
-    max: 20
 
   # cora_ml: max cont. = 19, max total = 168
   graphgym.posenc_GraphormerBias.num_in_degrees:
-    seed: 647
+    seed: 64735
     type: randint
     min: 8
     max: 30
   
-  graphgym.gnn.layers_post_mp:
-    seed: 96624
-    type: choice
-    options:
-      - 1
-      - 2
-      - 3
-
-  graphgym.optim.num_warmup_epochs:
-    seed: 3976
-    type: randint
-    min: 5
-    max: 25
+  graphgym.graphormer.attention_dropout:
+    seed: 43
+    type: uniform
+    min: 0.2
+    max: 0.5
 
   graphgym.train.homophily_regularization: 
-    seed: 9734
-    type: choice
-    options:
-      - 0.0
-      - 0.5
-      - 1.0
-      - 1.0
-      - 2.0
+    seed: 883
+    type: uniform
+    min: 0.0
+    max: 5.0
 
   graphgym.train.homophily_regularization_gt_weight:
-    seed: 9734
-    type: choice
-    options:
-      - 1.0
-      - 2.0
-      - 3.0
-
-  graphgym.graphormer.dropout:
-    seed: 67843
+    seed: 8462
     type: uniform
-    min: 0.0
-    max: 0.2
-  
-  graphgym.graphormer.attention_dropout:
-    seed: 434
-    type: uniform
-    min: 0.1
-    max: 0.6
-  
-  graphgym.graphormer.mlp_dropout:
-    seed: 10
-    type: uniform
-    min: 0.0
-    max: 0.2
-  
-  graphgym.graphormer.input_dropout:
-    seed: 5629
-    type: uniform
-    min: 0.0
-    max: 0.2
+    min: 1.0
+    max: 10.0

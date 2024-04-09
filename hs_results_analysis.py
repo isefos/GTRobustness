@@ -420,10 +420,16 @@ hyperparameters = {
         ("graphgym.graphormer.num_heads", True, False),
         ("graphgym.graphormer.num_layers", True, False),
         ("graphgym.gnn.layers_post_mp", True, False),
-        ("graphgym.optim.num_warmup_epochs", True, False),
+        ("graphgym.optim.num_warmup_epochs", False, False),
         ("graphgym.posenc_GraphormerBias.num_spatial_types", True, False),
         ("graphgym.posenc_GraphormerBias.num_in_degrees", False, False),
         ("graphgym.gnn.head", True, False),
+        ("graphgym.train.homophily_regularization", True, False),
+        ("graphgym.train.homophily_regularization_gt_weight", True, False),
+        ("graphgym.graphormer.dropout", False, False),
+        ("graphgym.graphormer.attention_dropout", False, False),
+        ("graphgym.graphormer.mlp_dropout", False, False),
+        ("graphgym.graphormer.input_dropout", False, False)
     ],
     "GCN": [
         ("graphgym.optim.base_lr", False, True),
@@ -450,6 +456,8 @@ hyperparameters = {
         ("graphgym.posenc_RRWP.w_add_dummy_edge", True, False),
         ("graphgym.gnn.head", True, False),
         ("graphgym.gnn.layers_post_mp", True, False),
+        ("graphgym.train.homophily_regularization", True, False),
+        ("graphgym.train.homophily_regularization_gt_weight", True, False),
     ],
     "WeightedSANTransformer": [
         ("graphgym.optim.base_lr", False, True),
@@ -471,9 +479,9 @@ hyperparameters = {
 
 if __name__ == "__main__":
 
-    collection_name = "hs_san_k_upfd_pol_bert"
-    dataset = "upfd_pol_bert"  # "upfd_pol_bert", "upfd_gos_bert"
-    model = "WeightedSANTransformer"  # "Graphormer", "GCN", "GRIT", "WeightedSANTransformer", "GAT"
+    collection_name = "hs_grt_coraml"
+    dataset = "cora_ml"  # "upfd_pol_bert", "upfd_gos_bert", "cora_ml"
+    model = "GRIT"  # "Graphormer", "GCN", "GRIT", "WeightedSANTransformer", "GAT"
     single_plots = True
     log_k_best = 5
 

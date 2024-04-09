@@ -401,8 +401,8 @@ class PRBCDAttack(torch.nn.Module):
             self.best_edge_index = self.block_edge_index.cpu().clone()
             self.best_pert_edge_weight = self.block_edge_weight.cpu().clone()
 
-        # Resampling of search space (Algorithm 1, line 9-14)
-        if epoch < self.epochs_resampling - 1:
+        # Resampling of search space
+        if epoch < self.epochs_resampling - 1 and (epoch + 1) % cfg.attack.resample_period == 0:
             self._resample_random_block(budget)
         elif epoch == self.epochs_resampling - 1:
             # Retrieve best epoch if early stopping is active
@@ -568,6 +568,14 @@ class PRBCDAttack(torch.nn.Module):
                 self.block_edge_index = self._linear_to_full_idx(self.num_nodes, self.current_block)
                 self._filter_self_loops_in_block(with_weight=False)
             self.block_edge_weight = torch.full(self.current_block.shape, self.coeffs['eps'], device=self.device)
+
+            # add noise onto eps if specified
+            if cfg.attack.eps_init_noised:
+                # remove upto half of eps
+                self.block_edge_weight -= (
+                    0.5 * self.coeffs['eps'] * torch.rand((self.current_block.shape, ), device=self.device)
+                )
+
             if self.current_block.size(0) >= budget:
                 return
         raise RuntimeError('Sampling random block was not successful. Please decrease `budget`.')
@@ -602,6 +610,14 @@ class PRBCDAttack(torch.nn.Module):
                 n_prev = block_edge_weight_prev.size(0)
 
             self.block_edge_weight = torch.full(self.current_block.shape, self.coeffs['eps'], device=self.device)
+
+            # if specified add noise to eps
+            if cfg.attack.eps_init_noised:
+                # remove upto half of eps
+                self.block_edge_weight -= (
+                    0.5 * self.coeffs['eps'] * torch.rand((self.current_block.shape, ), device=self.device)
+                )
+
             self.block_edge_weight[unique_idx[:n_prev]] = block_edge_weight_prev
 
             if not self.is_undirected:
