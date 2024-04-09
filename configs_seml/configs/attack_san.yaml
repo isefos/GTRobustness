@@ -151,6 +151,8 @@ grid:
       - false
       - true
       - true
+      - true
+      - true
     zip_id: eig_grad
 
   graphgym.posenc_WLapPE.eigen.straight_through_estimator:
