@@ -146,7 +146,6 @@ random:
 
   graphgym.gt.n_heads:
     seed: 13094
-    type: choice
     type: randint
     min: 2
     max: 8
