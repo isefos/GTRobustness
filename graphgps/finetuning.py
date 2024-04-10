@@ -59,8 +59,11 @@ def load_pretrained_model_cfg(cfg):
     set_new_cfg_allowed(pretrained_cfg, True)
     pretrained_cfg.merge_from_file(pretrained_cfg_fname)
 
-    assert cfg.model.type in ["GPSModel", "Graphormer"], \
+    assert cfg.model.type in [
+        "GPSModel", "Graphormer", "GritTransformer", "WeightedSANTransformer", "gnn",
+    ], (
         "Fine-tuning regime is untested for other model types."
+    )
     compare_cfg(cfg, pretrained_cfg, 'model.type', strict=True)
     compare_cfg(cfg, pretrained_cfg, 'model.graph_pooling')
     compare_cfg(cfg, pretrained_cfg, 'model.edge_decoding')
@@ -78,6 +81,7 @@ def load_pretrained_model_cfg(cfg):
 
     # Copy over GT config
     cfg.gt = pretrained_cfg.gt
+    cfg.graphormer = pretrained_cfg.graphormer
 
     # Copy over GNN cfg but not those for the prediction head
     compare_cfg(cfg, pretrained_cfg, 'gnn.head')

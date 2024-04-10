@@ -56,18 +56,22 @@ def new_scheduler_config(cfg):
     )
 
 
-def load_best_val_model(model, training_results):
-    assert cfg.train.enable_ckpt and cfg.train.ckpt_best, (
-        "To load best model, enable checkpointing and set ckpt_best"
-    )
-    # load best model checkpoint before attack
-    ckpt_file = os.path.join(cfg.run_dir, "ckpt", f"{training_results['best_val_epoch']}.ckpt")
+def load_model(model, ckpt_file):
     ckpt = torch.load(ckpt_file, map_location=torch.device('cpu'))
     best_model_dict = ckpt[MODEL_STATE]
     model_dict = model.state_dict()
     model_dict.update(best_model_dict)
     model.load_state_dict(model_dict)
     return model
+
+
+def load_best_val_model(model, training_results):
+    assert cfg.train.enable_ckpt and cfg.train.ckpt_best, (
+        "To load best model, enable checkpointing and set ckpt_best"
+    )
+    # load best model checkpoint before attack
+    ckpt_file = os.path.join(cfg.run_dir, "ckpt", f"{training_results['best_val_epoch']}.ckpt")
+    return load_model(model, ckpt_file)    
 
     
 def main(cfg):
@@ -85,9 +89,14 @@ def main(cfg):
     loggers = create_logger()
     model = create_model()
     if cfg.pretrained.dir:
-        model = init_model_from_pretrained(
-            model, cfg.pretrained.dir, cfg.pretrained.freeze_main, cfg.pretrained.reset_prediction_head, seed=cfg.seed,
-        )
+        if cfg.pretrained.finetune:
+            model = init_model_from_pretrained(
+                model, cfg.pretrained.dir, cfg.pretrained.freeze_main, cfg.pretrained.reset_prediction_head, seed=cfg.seed,
+            )
+        else:
+            ckpt_file = os.path.join(cfg.pretrained.dir, "best.ckpt")
+            logging.info(f"Loading saved model (from {ckpt_file})")
+            model = load_model(model, ckpt_file)
     optimizer = create_optimizer(model.parameters(), new_optimizer_config(cfg))
     scheduler = create_scheduler(optimizer, new_scheduler_config(cfg))
 
@@ -99,8 +108,11 @@ def main(cfg):
     logging.info(f"[*] Starting now: {datetime.datetime.now()}, with seed={cfg.seed}, running on {cfg.accelerator}")
 
     # Train
-    assert cfg.train.mode != 'standard', "Default train.mode not supported, use `custom` (or other specific mode)"
-    training_results = train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
+    if cfg.pretrained.dir and not cfg.pretrained.finetune:
+        training_results = None
+    else:
+        assert cfg.train.mode != 'standard', "Default train.mode not supported, use `custom` (or other specific mode)"
+        training_results = train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
 
     # Robustness unit test
     rut_results = None

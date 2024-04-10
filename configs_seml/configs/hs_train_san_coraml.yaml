@@ -111,7 +111,7 @@ random:
     seed: 99235
     type: randint
     min: 8
-    max: 300
+    max: 140
 
   graphgym.posenc_WLapPE.layers:
     seed: 82
@@ -124,19 +124,19 @@ random:
     seed: 235
     type: randint
     min: 2
-    max: 8
+    max: 7
 
   dims_per_head_PE:
     seed: 6384
     type: randint
     min: 2
-    max: 8
+    max: 6
 
   graphgym.optim.base_lr:
     seed: 2264
     type: loguniform
-    min: 3e-5
-    max: 3e-3
+    min: 4e-4
+    max: 3e-1
 
   graphgym.optim.weight_decay:
     seed: 89
@@ -147,8 +147,8 @@ random:
   graphgym.gt.n_heads:
     seed: 13094
     type: randint
-    min: 2
-    max: 8
+    min: 4
+    max: 10
 
   dims_per_head:
     seed: 164

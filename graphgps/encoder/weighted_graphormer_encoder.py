@@ -21,18 +21,17 @@ BATCH_HEAD_NODE_NODE = (0, 3, 1, 2)
 INSERT_GRAPH_TOKEN = (1, 0, 1, 0)
 
 
-def weighted_graphormer_pre_processing(
-    data,
-    distance: int,
-    directed_graphs: bool,
-    combinations_degree: bool,
-    num_in_degrees: int,
-    num_out_degrees: int,
-    use_weighted_path_distance: bool,
-    node_degrees_only: bool,
-):
+def weighted_graphormer_pre_processing(data):
     """
     """
+    distance: int = cfg.posenc_GraphormerBias.num_spatial_types
+    directed_graphs: bool = cfg.posenc_GraphormerBias.directed_graphs
+    combinations_degree: bool = cfg.posenc_GraphormerBias.combinations_degree
+    num_in_degrees: int = cfg.posenc_GraphormerBias.num_in_degrees
+    num_out_degrees: int = cfg.posenc_GraphormerBias.num_out_degrees
+    use_weighted_path_distance: bool = cfg.posenc_GraphormerBias.use_weighted_path_distance
+    node_degrees_only: bool = cfg.posenc_GraphormerBias.node_degrees_only            
+
     n = data.x.size(0)
     device = data.x.device
 
@@ -172,34 +171,21 @@ def weighted_graphormer_pre_processing(
 
 
 class WeightedBiasEncoder(torch.nn.Module):
-    def __init__(
-        self,
-        num_heads: int,
-        num_spatial_types: int,
-        use_graph_token: bool,
-        use_weighted_path_distance: bool,
-    ):
-        """Implementation of the bias encoder of Graphormer modified for attackable model
-
-        Args:
-            num_heads: The number of heads of the Graphormer model
-            num_spatial_types: The total number of different spatial types
-            num_edge_types: The total number of different edge types
-            use_graph_token: If True, pads the attn_bias to account for the
-            additional graph token that can be added by the ``NodeEncoder``.
-        """
+    def __init__(self):
+        """Implementation of the bias encoder of Graphormer modified for attackable model"""
         super().__init__()
-        self.num_heads = num_heads
+
+        num_heads = cfg.graphormer.num_heads
+        num_spatial_types = cfg.posenc_GraphormerBias.num_spatial_types
+
         self.spatial_encoder = torch.nn.Embedding(num_spatial_types, num_heads)
-        self.use_graph_token = use_graph_token
-        if self.use_graph_token:
+        if cfg.graphormer.use_graph_token:
             self.graph_token = torch.nn.Parameter(torch.zeros(1, num_heads, 1))
-        self.use_weighted_path_distance = use_weighted_path_distance
         self.reset_parameters()
 
     def reset_parameters(self):
         self.spatial_encoder.weight.data.normal_(std=0.02)
-        if self.use_graph_token:
+        if cfg.graphormer.use_graph_token:
             self.graph_token.data.normal_(std=0.02)
 
     def forward(self, data):
@@ -212,7 +198,7 @@ class WeightedBiasEncoder(torch.nn.Module):
         # To convert 2D matrices to dense-batch mode, one needs to decompose
         # them into index and value. One example is the adjacency matrix
         # but this generalizes actually to any 2D matrix
-        if self.use_weighted_path_distance and hasattr(data, "spatial_types_weights"):
+        if cfg.posenc_GraphormerBias.use_weighted_path_distance and hasattr(data, "spatial_types_weights"):
             spatial_types: torch.Tensor = (
                 data.spatial_types_weights[:, :, None] * self.spatial_encoder(data.spatial_types)
             ).sum(1)
@@ -237,7 +223,7 @@ class WeightedBiasEncoder(torch.nn.Module):
             l[min_prob_mask] = data.node_prob[min_prob_mask].log()
             bias += l[None, None, None, :]
 
-        if self.use_graph_token:
+        if cfg.graphormer.use_graph_token:
             bias = F.pad(bias, INSERT_GRAPH_TOKEN)
             bias[:, :, 1:, 0] = self.graph_token
             bias[:, :, 0, :] = self.graph_token
@@ -249,49 +235,31 @@ class WeightedBiasEncoder(torch.nn.Module):
 
 
 class WeightedNodeEncoder(torch.nn.Module):
-    def __init__(
-        self,
-        embed_dim,
-        num_in_degree,
-        num_out_degree,
-        directed_graphs: bool,
-        combinations_degree: bool,
-        input_dropout=0.0,
-        use_graph_token: bool = True,
-    ):
-        """Implementation of the node encoder of Graphormer modified for attackable model
-
-        Args:
-            embed_dim: The number of hidden dimensions of the model
-            num_in_degree: Maximum size of in-degree to encode
-            num_out_degree: Maximum size of out-degree to encode
-            input_dropout: Dropout applied to the input features
-            use_graph_token: If True, adds the graph token to the incoming batch.
-        """
+    def __init__(self, embed_dim):
+        """Implementation of the node encoder of Graphormer modified for attackable model"""
         super().__init__()
-        self.directed_graphs = directed_graphs
-        self.combinations_degree = combinations_degree
-        if self.directed_graphs:
+        num_in_degree = cfg.posenc_GraphormerBias.num_in_degrees
+        num_out_degree = cfg.posenc_GraphormerBias.num_out_degrees
+        if cfg.posenc_GraphormerBias.directed_graphs:
             self.in_degree_encoder = torch.nn.Embedding(num_in_degree, embed_dim)
             self.out_degree_encoder = torch.nn.Embedding(num_out_degree, embed_dim)
         else:
             max_degree = max(num_in_degree, num_out_degree)
             self.degree_encoder = torch.nn.Embedding(max_degree, embed_dim)
-        self.use_graph_token = use_graph_token
-        if self.use_graph_token:
+        if cfg.graphormer.use_graph_token:
             self.graph_token = torch.nn.Parameter(torch.zeros(1, embed_dim))
-        self.input_dropout = torch.nn.Dropout(input_dropout)
+        self.input_dropout = torch.nn.Dropout(cfg.graphormer.input_dropout)
         self.reset_parameters()
 
     def forward(self, data):
-        if self.directed_graphs:
+        if cfg.posenc_GraphormerBias.directed_graphs:
             if hasattr(data, "in_degrees"):
                 # precomputed
                 in_degree_encoding = self.in_degree_encoder(data.in_degrees)
                 out_degree_encoding = self.out_degree_encoder(data.out_degrees)
             else:
                 # continuous relaxation during attack
-                if self.combinations_degree:
+                if cfg.posenc_GraphormerBias.combinations_degree:
                     # TODO: this doesn't quite seem right...
                     in_degree_encoding = data.degree_weights @ self.in_degree_encoder(data.degree_indices)
                     out_degree_encoding = data.degree_weights @ self.out_degree_encoder(data.degree_indices)
@@ -309,7 +277,7 @@ class WeightedNodeEncoder(torch.nn.Module):
                 degree_encoding = self.degree_encoder(data.degrees)
             else:
                 # continuous relaxation during attack
-                if self.combinations_degree:
+                if cfg.posenc_GraphormerBias.combinations_degree:
                     degree_encoding = data.degree_weights @ self.degree_encoder(data.degree_indices)
                 else:
                     degree_encoding = (
@@ -321,57 +289,27 @@ class WeightedNodeEncoder(torch.nn.Module):
         else:
             data.x = degree_encoding
 
-        if self.use_graph_token:
+        if cfg.graphormer.use_graph_token:
             data = add_graph_token(data, self.graph_token)
         data.x = self.input_dropout(data.x)
         return data
 
     def reset_parameters(self):
-        if self.directed_graphs:
+        if cfg.posenc_GraphormerBias.directed_graphs:
             self.in_degree_encoder.weight.data.normal_(std=0.02)
             self.out_degree_encoder.weight.data.normal_(std=0.02)
         else:
             self.degree_encoder.weight.data.normal_(std=0.02)
-        if self.use_graph_token:
+        if cfg.graphormer.use_graph_token:
             self.graph_token.data.normal_(std=0.02)
 
 
 class WeightedPreprocessing(torch.nn.Module):
-    def __init__(
-        self,
-        distance: int,
-        directed_graphs: bool,
-        combinations_degree: bool,
-        num_in_degrees: int,
-        num_out_degrees: int,
-        use_weighted_path_distance: bool,
-        node_degrees_only: bool,
-    ):
-        """
-        """
-        super().__init__()
-        self.distance = distance
-        self.directed_graphs = directed_graphs
-        self.combinations_degree = combinations_degree
-        self.num_in_degrees = num_in_degrees
-        self.num_out_degrees = num_out_degrees
-        self.use_weighted_path_distance = use_weighted_path_distance
-        self.node_degrees_only = node_degrees_only
-
     def forward(self, data):
         attack_mode = data.get("attack_mode", False)
         if attack_mode or data.get("spatial_types") is None:
             assert data.num_graphs == 1, "On the fly preprocessing only works for single graphs"
-            data = weighted_graphormer_pre_processing(
-                data,
-                self.distance,
-                self.directed_graphs,
-                self.combinations_degree,
-                self.num_in_degrees,
-                self.num_out_degrees,
-                self.use_weighted_path_distance,
-                self.node_degrees_only,
-            )
+            data = weighted_graphormer_pre_processing(data)
         return data
 
 
@@ -381,30 +319,9 @@ class WeightedGraphormerEncoder(torch.nn.Sequential):
     def __init__(self, dim_emb, *args, **kwargs):
         assert not cfg.posenc_GraphormerBias.has_edge_attr, "Weighted graphormer cannot currently use edge attributes"
         encoders = [
-            WeightedPreprocessing(
-                cfg.posenc_GraphormerBias.num_spatial_types,
-                cfg.posenc_GraphormerBias.directed_graphs,
-                cfg.posenc_GraphormerBias.combinations_degree,
-                cfg.posenc_GraphormerBias.num_in_degrees,
-                cfg.posenc_GraphormerBias.num_out_degrees,
-                cfg.posenc_GraphormerBias.use_weighted_path_distance,
-                cfg.posenc_GraphormerBias.node_degrees_only,
-            ),
-            WeightedBiasEncoder(
-                cfg.graphormer.num_heads,
-                cfg.posenc_GraphormerBias.num_spatial_types,
-                cfg.graphormer.use_graph_token,
-                cfg.posenc_GraphormerBias.use_weighted_path_distance,
-            ),
-            WeightedNodeEncoder(
-                dim_emb,
-                cfg.posenc_GraphormerBias.num_in_degrees,
-                cfg.posenc_GraphormerBias.num_out_degrees,
-                cfg.posenc_GraphormerBias.directed_graphs,
-                cfg.posenc_GraphormerBias.combinations_degree,
-                cfg.graphormer.input_dropout,
-                cfg.graphormer.use_graph_token
-            ),
+            WeightedPreprocessing(),
+            WeightedBiasEncoder(),
+            WeightedNodeEncoder(dim_emb),
         ]
         if cfg.posenc_GraphormerBias.node_degrees_only:  # No attn. bias encoder
             encoders = encoders[1:]

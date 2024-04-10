@@ -9,15 +9,15 @@ import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 import pandas as pd
 import plotly.express as px
+import argparse
+import shutil
 
 
 def clean_path(results_path: str):
     results_path = Path(results_path)
     if results_path.exists():
-        for file in results_path.glob('*.jpg'):
-            file.unlink()
-    else:
-        results_path.mkdir(parents=True)
+        shutil.rmtree(results_path)
+    results_path.mkdir(parents=True)
     result_log_file = results_path / "hs_result_analysis.txt"
     return results_path, result_log_file
 
@@ -184,7 +184,11 @@ def save_single_plots(
     val_loss,
     test_loss,
     configs_all_info,
+    run_ids,
 ):
+    single_plots_dir = results_path / "single-plots"
+    train_plot_dir = single_plots_dir / "training"
+    train_plot_dir.mkdir(parents=True)
     fig, ((ax_acc), (ax_loss)) = plt.subplots(nrows=2, ncols=1, figsize=(12, 8))
     for i in best_experiments:
         ax_acc.set_title("Accuracy")
@@ -198,11 +202,13 @@ def save_single_plots(
         ax_loss.plot(x, val_loss['all_values'][i], "-b", label='val')
         ax_loss.plot(x, test_loss['all_values'][i], "-r", label='test')
         ax_loss.legend()
-        fig.savefig(results_path / f"{i}.png")
+        fig.savefig(train_plot_dir / f"{run_ids[i]}.png")
         plt.close(fig)
         ax_acc.clear()
         ax_loss.clear()
 
+    cfg_plot_dir = single_plots_dir / "configs"
+    cfg_plot_dir.mkdir(parents=True)
     # filter results for lr < 1.3e-3
     # mask = [result["config"]["graphgym"]["optim"]["base_lr"] < 1.3e-3 for result in results]
     # results = [result for result, m in zip(results, mask) if m]
@@ -252,7 +258,7 @@ def save_single_plots(
             if log:
                 ax_val.set_xscale('log')
                 ax_test.set_xscale('log')
-        fig.savefig(results_path / f"conf_{conf}.png")
+        fig.savefig(cfg_plot_dir / f"{conf}.png")
         plt.close(fig)
 
 
@@ -298,6 +304,10 @@ def get_collection_results(collection, model, filter_dict):
                 raise NotImplementedError(f"model={model} is not implemented")
             d_hidden = d_per_head * n_heads
             result["config"]["graphgym"]["gnn"]["dim_inner"] = d_hidden
+        dims_per_head_PE = result["config"].get("dims_per_head_PE", 0)
+        if dims_per_head_PE > 0 and result["config"]["graphgym"]["posenc_WLapPE"]["dim_pe"] == 0:
+            dim_pe = dims_per_head_PE * result["config"]["graphgym"]["posenc_WLapPE"]["n_heads"]
+            result["config"]["graphgym"]["posenc_WLapPE"]["dim_pe"] = dim_pe
     return results, run_ids, extras, seeds_graphgym, seeds_seml, run_dirs, num_params
 
 
@@ -368,6 +378,7 @@ def main(
             val_loss,
             test_loss,
             configs_all_info,
+            run_ids,
         )
         return None
     else:
@@ -504,6 +515,8 @@ hyperparameters = {
         ("graphgym.gnn.layers_mp", True, False),
         ("graphgym.gnn.head", True, False),
         ("graphgym.gnn.layers_post_mp", True, False),
+        ("graphgym.train.homophily_regularization", False, False),
+        ("graphgym.train.homophily_regularization_gt_weight", False, False),
     ],
     "GRIT": [
         ("graphgym.optim.base_lr", False, True),
@@ -533,32 +546,38 @@ hyperparameters = {
         ("graphgym.gt.wsan_add_dummy_edges", True, False),
         ("graphgym.gt.gamma", False, True),
         ("graphgym.gt.attn.clamp", True, False),
-        ("graphgym.posenc_WLapPE.dim_pe", True, False),
-        ("graphgym.posenc_WLapPE.eigen.max_freqs", True, False),
+        ("graphgym.posenc_WLapPE.n_heads", True, False),
+        ("graphgym.posenc_WLapPE.layers", True, False),
+        ("graphgym.posenc_WLapPE.dim_pe", False, False),
+        ("graphgym.posenc_WLapPE.eigen.max_freqs", False, False),
         ("graphgym.gnn.head", True, False),
         ("graphgym.gnn.layers_post_mp", True, False),
+        ("graphgym.train.homophily_regularization", False, False),
+        ("graphgym.train.homophily_regularization_gt_weight", False, False),
     ],
 }
 
 
+parser = argparse.ArgumentParser(description='Processes the results of hyperparameter search.')
+parser.add_argument("-c", "--collection")
+parser.add_argument("-d", "--dataset")
+parser.add_argument("-m", "--model")
+parser.add_argument("-k", "--k-best")
+parser.add_argument("-s", "--single-plots", action="store_true")
+
+
 if __name__ == "__main__":
-
-    collection_name = "hs_gph_coraml"
-    dataset = "cora_ml"  # "upfd_pol_bert", "upfd_gos_bert", "cora_ml"
-    model = "Graphormer"  # "Graphormer", "GCN", "GRIT", "WeightedSANTransformer", "GAT"
-    single_plots = True
-    log_k_best = 5
-
-    results_path = f"hs_results/{dataset}/{model}"
-    filter_dict = None
+    args = parser.parse_args()
+    results_path = f"hs_results/{args.dataset}/{args.model}/{args.collection}"
+    filter_dict = None  # not implemented for argparse... but can manually change here
     app = main(
-        collection=collection_name,
-        configs_all_info=hyperparameters[model],
-        k=log_k_best,
+        collection=args.collection,
+        configs_all_info=hyperparameters[args.model],
+        k=int(args.k_best),
         results_path=results_path,
         filter_dict=filter_dict,
-        model=model,
-        old_plotting=single_plots,
+        model=args.model,
+        old_plotting=args.single_plots,
     )
     if app is not None:
         app.run(debug=True)
