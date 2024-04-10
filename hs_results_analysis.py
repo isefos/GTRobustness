@@ -120,17 +120,34 @@ def write_results_into_file(
     train_loss,
     val_loss,
     test_loss,
+    run_ids,
+    extras,
+    seeds_graphgym,
+    seeds_seml,
+    run_dirs,
+    num_params,
 ):
     with open(result_log_file, "w") as f:
         f.write("\nHighest val accurracies:")
         for (v_a, t_a, i) in best_val_with_test_acc:
-            f.write(f"\n\tval acc: {v_a}, with {t_a} test acc, by experiment: {i}")
+            f.write(f"\n\tval acc: {v_a}, with {t_a} test acc, by experiment: {run_ids[i]}")
         f.write("\nHighest test accurracies:")
         for i in best_test_acc_ind:
-            f.write(f"\n\ttest acc: {test_acc['max_values'][i]}, by experiment: {i}")
+            f.write(f"\n\ttest acc: {test_acc['max_values'][i]}, by experiment: {run_ids[i]}")
         f.write("\nBest experiments with best epochs:")
         for i, epochs in zip(best_experiments, best_epochs):
-            f.write(f"\nexperiment: {i}")
+            f.write(f"\nexperiment: {run_ids[i]}")
+            f.write("\n\tinfos:")
+            p = num_params[i]
+            if p is not None:
+                f.write(f"\n\t\tnum_params: {p}")
+            for k, v in extras.items():
+                f.write(f"\n\t\t{k}: {v[i]}")
+            f.write(f"\n\t\tgraphgym.seed: {seeds_graphgym[i]}")
+            f.write(f"\n\t\tseed(seml): {seeds_seml[i]}")
+            run_dir = run_dirs[i]
+            if run_dir is not None:
+                f.write(f"\n\t\trun_dir: {run_dir}")
             f.write(f"\n\tbest val acc: {val_acc['max_values'][i]}, at epochs: {val_acc['epochs_of_max_values'][i]}")
             f.write(f"\n\tbest test acc: {test_acc['max_values'][i]}, at epochs: {test_acc['epochs_of_max_values'][i]}")
             f.write(f"\n\tbest val loss: {val_loss['min_values'][i]}, at epochs: {val_loss['epochs_of_min_values'][i]}")
@@ -239,17 +256,36 @@ def save_single_plots(
         plt.close(fig)
 
 
-def main(
-    collection: str,
-    configs_all_info: list[tuple[str, bool, bool]],
-    k: int,
-    results_path: str,
-    filter_dict,
-    model: str,
-    old_plotting: bool = False,
-):
-    configs = [c[0] for c in configs_all_info]
-    results = seml.get_results(collection, filter_dict=filter_dict)
+def get_collection_results(collection, model, filter_dict):
+    extra_fields = [
+        'slurm.array_id', 'slurm.experiments_per_job', 'slurm.task_id', 'stats.real_time',
+        'stats.pytorch.gpu_max_memory_bytes', 'stats.self.max_memory_bytes',
+    ]
+    results = seml.get_results(
+        collection,
+        ['config', 'result'] + extra_fields,
+        filter_dict=filter_dict
+    )
+    run_ids = [result["_id"] for result in results]
+    extras = dict()
+    for key in extra_fields:
+        values = []
+        keys_list = key.split(".")
+        for r in results:
+            for key_l in keys_list[:-1]:
+                r = r[key_l]
+            key_last = keys_list[-1]
+            v = r[key_last]
+            if key_last.endswith("bytes"):
+                v = f"{v * 1e-9:.1f} GB"
+            if key_last.endswith("time"):
+                v = f"{v / 3600:.2f} hours"
+            values.append(v)
+        extras[key] = values
+    seeds_graphgym = [result["config"]["graphgym"]["seed"] for result in results]
+    seeds_seml = [result["config"]["seed"] for result in results]
+    run_dirs = [result["result"].get("run_dir") for result in results]
+    num_params = [result["result"].get("num_params") for result in results]
     for result in results:
         d_per_head = result["config"]["dims_per_head"]
         d_hidden = result["config"]["graphgym"]["gnn"]["dim_inner"]
@@ -262,6 +298,28 @@ def main(
                 raise NotImplementedError(f"model={model} is not implemented")
             d_hidden = d_per_head * n_heads
             result["config"]["graphgym"]["gnn"]["dim_inner"] = d_hidden
+    return results, run_ids, extras, seeds_graphgym, seeds_seml, run_dirs, num_params
+
+
+def main(
+    collection: str,
+    configs_all_info: list[tuple[str, bool, bool]],
+    k: int,
+    results_path: str,
+    filter_dict,
+    model: str,
+    old_plotting: bool = False,
+):
+    (
+        results,
+        run_ids,
+        extras,
+        seeds_graphgym,
+        seeds_seml,
+        run_dirs,
+        num_params,
+    ) = get_collection_results(collection, model, filter_dict)
+    configs = [c[0] for c in configs_all_info]
     (  # process results
         best_experiments,
         best_epochs,
@@ -290,6 +348,12 @@ def main(
         train_loss,
         val_loss,
         test_loss,
+        run_ids,
+        extras,
+        seeds_graphgym,
+        seeds_seml,
+        run_dirs,
+        num_params,
     )
     # plots
     if old_plotting:
@@ -424,8 +488,8 @@ hyperparameters = {
         ("graphgym.posenc_GraphormerBias.num_spatial_types", True, False),
         ("graphgym.posenc_GraphormerBias.num_in_degrees", False, False),
         ("graphgym.gnn.head", True, False),
-        ("graphgym.train.homophily_regularization", True, False),
-        ("graphgym.train.homophily_regularization_gt_weight", True, False),
+        ("graphgym.train.homophily_regularization", False, False),
+        ("graphgym.train.homophily_regularization_gt_weight", False, False),
         ("graphgym.graphormer.dropout", False, False),
         ("graphgym.graphormer.attention_dropout", False, False),
         ("graphgym.graphormer.mlp_dropout", False, False),
@@ -456,8 +520,8 @@ hyperparameters = {
         ("graphgym.posenc_RRWP.w_add_dummy_edge", True, False),
         ("graphgym.gnn.head", True, False),
         ("graphgym.gnn.layers_post_mp", True, False),
-        ("graphgym.train.homophily_regularization", True, False),
-        ("graphgym.train.homophily_regularization_gt_weight", True, False),
+        ("graphgym.train.homophily_regularization", False, False),
+        ("graphgym.train.homophily_regularization_gt_weight", False, False),
     ],
     "WeightedSANTransformer": [
         ("graphgym.optim.base_lr", False, True),
@@ -479,9 +543,9 @@ hyperparameters = {
 
 if __name__ == "__main__":
 
-    collection_name = "hs_grt_coraml"
+    collection_name = "hs_gph_coraml"
     dataset = "cora_ml"  # "upfd_pol_bert", "upfd_gos_bert", "cora_ml"
-    model = "GRIT"  # "Graphormer", "GCN", "GRIT", "WeightedSANTransformer", "GAT"
+    model = "Graphormer"  # "Graphormer", "GCN", "GRIT", "WeightedSANTransformer", "GAT"
     single_plots = True
     log_k_best = 5
 

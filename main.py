@@ -154,14 +154,14 @@ def convert_readonly_to_dict(readonly_dict):
 
 set_cfg(cfg)
 cfg_dict = convert_cfg_to_dict(cfg)
-ex.add_config({"graphgym": cfg_dict, "dims_per_head": 0})
+ex.add_config({"graphgym": cfg_dict, "dims_per_head": 0, "dims_per_head_PE": 0})
 
 
 os.makedirs("configs_seml/logs", exist_ok=True)
 
 
 @ex.automain
-def run(seed, graphgym, dims_per_head: int):
+def run(seed, graphgym, dims_per_head: int, dims_per_head_PE: int):
     graphgym = convert_readonly_to_dict(graphgym)
     model_type = graphgym["model"]["type"]
     if dims_per_head > 0 and graphgym["gnn"]["dim_inner"] == 0:
@@ -174,6 +174,10 @@ def run(seed, graphgym, dims_per_head: int):
         else:
             raise NotImplementedError(f"Please add a case for {model_type} (very easy)!")
         graphgym["gnn"]["dim_inner"] = dim_inner
+
+    if dims_per_head_PE > 0 and graphgym["posenc_WLapPE"]["dim_pe"] == 0:
+        dim_pe = dims_per_head_PE * graphgym["posenc_WLapPE"]["n_heads"]
+        graphgym["posenc_WLapPE"]["dim_pe"] = dim_pe
         
     set_cfg(cfg)
 
@@ -202,5 +206,7 @@ def run(seed, graphgym, dims_per_head: int):
     cfg.cfg_dest = f"{run_identifier}/config.yaml"
 
     dump_cfg(cfg)
-
-    return main(cfg)
+    results = main(cfg)
+    results["run_dir"] = str(cfg.run_dir)
+    results["num_params"] = cfg.params
+    return results
