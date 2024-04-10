@@ -48,6 +48,7 @@ def transfer_unit_test(model, clean_test_loader):
     results = {}
     assert len(clean_test_loader) == 1
     for batch in clean_test_loader:
+        batch.to(torch.device(cfg.accelerator))
         E_clean = batch.edge_index.size(1)
         batch.split = "test"
         output_clean, y = model(batch)
@@ -65,6 +66,7 @@ def transfer_unit_test(model, clean_test_loader):
             loader = get_RUT_loader(transfer_model, b)
             assert len(loader) == 1
             for batch in loader:
+                batch.to(torch.device(cfg.accelerator))
                 batch.split = "test"
                 output_pert, y = model(batch)
             # check performance of pert
