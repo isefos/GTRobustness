@@ -17,7 +17,7 @@ slurm:
 
 fixed:
 
-    graphgym:
+  graphgym:
 
     accelerator: auto
     out_dir: configs_seml/results
