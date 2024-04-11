@@ -38,7 +38,6 @@ fixed:
       eval_period: 1
       ckpt_best: true
       enable_ckpt: true
-      homophily_regularization: 0.0
 
     model:
       type: gnn
