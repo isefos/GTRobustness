@@ -202,7 +202,7 @@ def prbcd_attack_dataset(model, loaders):
             )
 
             if not random_attack:
-                attack_stats.append(prbcd.attack_statistics)
+                attack_stats.append(dict(prbcd.attack_statistics))
                 accumulated_stats["perturbation"].append(perts.tolist())
 
             num_modified_edges = perts.size(1)

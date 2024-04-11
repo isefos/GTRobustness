@@ -33,10 +33,10 @@ def get_empty_accumulated_stats():
             asr_keys.append(asr + "_random")
         keys.extend(asr_keys)
 
-        key_prefixes = ["probs", "logits", "correct", "margin"]
-
         if cfg.attack.prediction_level == "node":
-            key_prefixes.extend(["correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max"])
+            key_prefixes = ["correct_acc", "margin", "margin_mean", "margin_median", "margin_min", "margin_max"]
+        else:
+            key_prefixes = ["probs", "logits", "correct", "margin"]
         
         keys.extend([k + "_clean" for k in key_prefixes])
         keys.extend([k + "_pert" for k in key_prefixes])
@@ -199,7 +199,8 @@ def accumulate_output_stats(
         k = key + "_" + mode
         if random:
             k = k + "_random"
-        accumulated_stats[k].append(stat)
+        if k in accumulated_stats:
+            accumulated_stats[k].append(stat)
 
 
 def log_graph_classification_output_stats(

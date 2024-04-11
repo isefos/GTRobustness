@@ -72,7 +72,8 @@ def transfer_unit_test(model, clean_test_loader):
             # check performance of pert
             output_stats_pert = get_output_stats(y, output_pert)
             for k, v in output_stats_pert.items():
-                r[k].append(v)
+                if not isinstance(v, list):
+                    r[k].append(v)
             logging.info(f"Transfer model: {transfer_model}, budget: {b} ({100 * (2 * b) / E_clean:.2f}%)")
             log_node_classification_output_stats(output_stats_pert, output_stats_clean)
             pert_c = list(compress(output_stats_pert["correct"], output_stats_clean["correct"]))
