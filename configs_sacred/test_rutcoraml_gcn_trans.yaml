@@ -18,6 +18,8 @@ graphgym:
     eval_period: 1
     ckpt_best: true
     enable_ckpt: true
+    #homophily_regularization: 1.0
+    #homophily_regularization_gt_weight: 2.0
 
   model:
     type: gnn
@@ -39,7 +41,7 @@ graphgym:
   optim:
     optimizer: adam
     base_lr: 0.005
-    max_epoch: 15
+    max_epoch: 30
 
   robustness_unit_test:
     enable: true

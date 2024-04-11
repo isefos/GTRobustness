@@ -515,6 +515,8 @@ hyperparameters = {
         ("graphgym.gnn.layers_mp", True, False),
         ("graphgym.gnn.head", True, False),
         ("graphgym.gnn.layers_post_mp", True, False),
+        ("graphgym.gnn.act", True, False),
+        ("graphgym.gnn.dropout", False, False),
         ("graphgym.train.homophily_regularization", False, False),
         ("graphgym.train.homophily_regularization_gt_weight", False, False),
     ],

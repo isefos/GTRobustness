@@ -17,9 +17,9 @@ grid:
 
   graphgym.attack.e_budget:
     type: range
-    min: 0.75
-    max: 15.1
-    step: 0.75
+    min: 0.0075
+    max: 0.151
+    step: 0.0075
 
 # experiment fixed configs
 
@@ -28,7 +28,7 @@ fixed:
   graphgym:
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/PyG-RobustnessUnitTest-cora_ml-Graphormer/0'
+      dir: '/ceph/hdd/students/foth/models/PyG-RobustnessUnitTest-cora_ml-GritTransformer/0'
       finetune: false
 
     robustness_unit_test:

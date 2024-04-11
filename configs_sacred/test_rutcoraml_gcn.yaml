@@ -41,7 +41,7 @@ graphgym:
   optim:
     optimizer: adam
     base_lr: 0.005
-    max_epoch: 50
+    max_epoch: 30
 
   attack:
     enable: true
