@@ -7,6 +7,7 @@ import yaml
 from yacs.config import CfgNode
 from argparse import Namespace
 from seml.experiment import Experiment
+from seml.config import read_config, generate_configs
 
 import graphgps  # noqa, register custom modules
 from graphgps.optimizer.extra_optimizers import ExtendedSchedulerConfig
@@ -71,10 +72,10 @@ def load_best_val_model(model, training_results):
     )
     # load best model checkpoint before attack
     ckpt_file = os.path.join(cfg.run_dir, "ckpt", f"{training_results['best_val_epoch']}.ckpt")
-    return load_model(model, ckpt_file)    
+    return load_model(model, ckpt_file)
 
-    
-def main(cfg):
+
+def initialize_run(cfg):
     # Pytorch environment
     torch.set_num_threads(cfg.num_threads)
     seed_everything(cfg.seed)
@@ -106,6 +107,11 @@ def main(cfg):
     cfg.params = params_count(model)
     logging.info('Num parameters: %s', cfg.params)
     logging.info(f"[*] Starting now: {datetime.datetime.now()}, with seed={cfg.seed}, running on {cfg.accelerator}")
+    return loaders, loggers, model, optimizer, scheduler
+
+    
+def main(cfg):
+    loaders, loggers, model, optimizer, scheduler = initialize_run(cfg)
 
     # Train
     if cfg.pretrained.dir and not cfg.pretrained.finetune:
@@ -175,6 +181,15 @@ os.makedirs("configs_seml/logs", exist_ok=True)
 @ex.automain
 def run(seed, graphgym, dims_per_head: int, dims_per_head_PE: int):
     graphgym = convert_readonly_to_dict(graphgym)
+    setup_run(graphgym, dims_per_head, dims_per_head_PE, seed)
+    results = main(cfg)
+    results["run_dir"] = str(cfg.run_dir)
+    results["num_params"] = cfg.params
+    return results
+
+
+def setup_run(graphgym, dims_per_head, dims_per_head_PE, seml_seed=None, jupyter=False):
+    # calculate the composed configs
     model_type = graphgym["model"]["type"]
     if dims_per_head > 0 and graphgym["gnn"]["dim_inner"] == 0:
         if model_type == "Graphormer":
@@ -186,39 +201,63 @@ def run(seed, graphgym, dims_per_head: int, dims_per_head_PE: int):
         else:
             raise NotImplementedError(f"Please add a case for {model_type} (very easy)!")
         graphgym["gnn"]["dim_inner"] = dim_inner
-
     if dims_per_head_PE > 0 and graphgym["posenc_WLapPE"]["dim_pe"] == 0:
         dim_pe = dims_per_head_PE * graphgym["posenc_WLapPE"]["n_heads"]
         graphgym["posenc_WLapPE"]["dim_pe"] = dim_pe
-        
+    # set defaults
     set_cfg(cfg)
-
-    ex_identifier = (
-        graphgym["dataset"]["format"]
-        + "-" + graphgym["dataset"]["name"]
-        + "-"+ graphgym["model"]["type"]
+    # find and set the paths
+    if jupyter:
+        graphgym["out_dir"] += "-jupyter"
+    run_type = "train"
+    if graphgym.get("robustness_unit_test", {}).get("enable", False):
+        run_type = "rut"
+    elif graphgym.get("attack", {}).get("enable", False):
+        run_type = "attack"
+    output_dir = os.path.join(
+        graphgym["out_dir"],
+        model_type,
+        graphgym["dataset"]["format"] + "-" + graphgym["dataset"]["name"],
+        run_type
     )
-    output_dir = os.path.join(graphgym["out_dir"], ex_identifier)
     os.makedirs(output_dir, exist_ok=True)
     graphgym["out_dir"] = output_dir
-
     seed_graphgym = graphgym.get("seed", cfg.seed)
-    run_identifier = f"s{seed_graphgym}-{datetime.datetime.now().strftime('d%Y%m%d-t%H%M%S%f')}-{seed}"
+    run_identifier = f"s{seed_graphgym}-{datetime.datetime.now().strftime('d%Y%m%d-t%H%M%S%f')}"
+    if seml_seed is not None:
+        run_identifier += f"-{seml_seed}"
     run_dir = os.path.join(output_dir, run_identifier)
     os.makedirs(run_dir)
-
+    # save the config and load using YACS
     graphgym_cfg_file = os.path.join(run_dir, "configs_from_seml.yaml")
     with open(graphgym_cfg_file, 'w') as f:
         yaml.dump(graphgym, f)
     args = Namespace(cfg_file=str(graphgym_cfg_file), opts=[])
-
     load_cfg(cfg, args)
-
+    # set last configs and dump final
     cfg.run_dir = run_dir
     cfg.cfg_dest = f"{run_identifier}/config.yaml"
-
     dump_cfg(cfg)
-    results = main(cfg)
-    results["run_dir"] = str(cfg.run_dir)
-    results["num_params"] = cfg.params
-    return results
+
+
+def _convert_numpy_to_float(cfg_with_np: dict):
+    for k, v in cfg_with_np.items():
+        if isinstance(v, dict):
+            _convert_numpy_to_float(v)
+        elif isinstance(v, numpy.floating):
+            cfg_with_np[k] = float(v)
+
+
+def setup_jupyter(cfg_path, exp_index: int = 0):
+    _, _, exp_cfg = read_config(cfg_path)
+    exp_cfgs = generate_configs(exp_cfg)
+    num_exp = len(exp_cfgs)
+    if exp_index >= num_exp:
+        raise ValueError(f"Given exp_index={exp_index}, but config only generates {num_exp} experiments.")
+    g_cfg = exp_cfgs[exp_index]["graphgym"]
+    _convert_numpy_to_float(g_cfg)
+    dims_per_head = exp_cfgs[exp_index].get("dims_per_head", 0)
+    dims_per_head_PE = exp_cfgs[exp_index].get("dims_per_head_PE", 0)
+    setup_run(g_cfg, dims_per_head, dims_per_head_PE, jupyter=False)
+    loaders, loggers, model, optimizer, scheduler = initialize_run(cfg)
+    return loaders, loggers, model, optimizer, scheduler

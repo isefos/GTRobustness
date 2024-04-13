@@ -27,6 +27,8 @@ fixed:
 
   graphgym:
 
+    out_dir: configs_seml/results
+
     pretrained:
       dir: '/ceph/hdd/students/foth/models/PyG-RobustnessUnitTest-cora_ml-Graphormer/0'
       finetune: false
@@ -242,7 +244,6 @@ fixed:
       - 60
       - 90
       weight_decay: 8.0e-05
-    out_dir: configs_seml/results/PyG-RobustnessUnitTest-cora_ml-Graphormer
     posenc_ElstaticSE:
       dim_pe: 16
       enable: false
