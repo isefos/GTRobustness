@@ -188,9 +188,6 @@ class RUTAttack(RobustnessUnitTest):
         return f"{prefix}{self.budget:05}"
 
     def process(self):
-        super().process()
-
-    def process(self):
         with np.load(self.raw_paths[0]) as f:
             data = self._read_data_pert(f)
         data = data if self.pre_transform is None else self.pre_transform(data)
