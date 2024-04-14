@@ -116,16 +116,8 @@ def attack_or_skip_graph(
         log_incorrect_graph_skip(all_stats, all_stats_zb, attack_epoch_stats)
         return
 
-    # BUDGET DEFINITION, TODO: allow for other ways to define the budget
-    budget_edges = num_edges / 2 if cfg.attack.is_undirected else num_edges
-    global_budget = int(cfg.attack.e_budget * budget_edges)
-    if cfg.attack.minimum_budget > global_budget:
-        global_budget = cfg.attack.minimum_budget
-        logging.info(
-            f"Budget smaller than minimum, thus set to minimum: relative budget "
-            f"effectively increased from {cfg.attack.e_budget} to "
-            f"{cfg.attack.minimum_budget / budget_edges} for this graph."
-        )
+    # BUDGET DEFINITION
+    budget_edges, global_budget = get_budget(num_edges)
 
     # SKIP SCENARIO 2 - NO BUDGET (SMALL GRAPH)
     if global_budget == 0:
@@ -180,6 +172,20 @@ def apply_node_mask(tensor_to_mask, mask):
     if mask is not None:
         return tensor_to_mask[mask]
     return tensor_to_mask
+
+
+def get_budget(num_edges):
+    # TODO: allow for other ways to define the budget
+    budget_edges = num_edges / 2 if cfg.attack.is_undirected else num_edges
+    global_budget = int(cfg.attack.e_budget * budget_edges)
+    if cfg.attack.minimum_budget > global_budget:
+        global_budget = cfg.attack.minimum_budget
+        logging.info(
+            f"Budget smaller than minimum, thus set to minimum: relative budget "
+            f"effectively increased from {cfg.attack.e_budget} to "
+            f"{cfg.attack.minimum_budget / budget_edges} for this graph."
+        )
+    return budget_edges, global_budget
 
 
 def get_attack_graph(
@@ -272,8 +278,10 @@ def log_budget_skip(clean_data, E, N, budget_edges, output_stats_clean, all_stat
     )
     attack_epoch_stats.append(None)
     # In this case we only accumulate the stats for the clean graph in the zero budget dict
-    for k in ["budget_used", "budget_used_random"]:
+    all_stats_zb["budget"].append(0)
+    for k in ["budget_used", "budget_used_rel"]:
         all_stats_zb[k].append(0)
+        all_stats_zb[k + "_random"].append(0)
     accumulate_output_stats(all_stats_zb, output_stats_clean, mode="clean", random=False)
     for random in [False, True]:
         accumulate_output_stats_pert(all_stats_zb, output_stats_clean, output_stats_clean, random, True)
@@ -283,11 +291,15 @@ def log_budget_skip(clean_data, E, N, budget_edges, output_stats_clean, all_stat
 
 
 def log_used_budget(all_stats, all_stats_zb, global_budget, perts, is_random_attack):
+    all_stats["budget"] = global_budget
+    all_stats_zb["budget"] = global_budget
     E_mod = perts.size(1)
     b_rel = E_mod / global_budget
-    key = "budget_used_random" if is_random_attack else "budget_used"
-    all_stats[key].append(b_rel)
-    all_stats_zb[key].append(b_rel)
+    for key, value in zip(["budget_used", "budget_used_rel"], [E_mod, b_rel]):
+        if is_random_attack:
+            key += "_random"
+        all_stats[key].append(value)
+        all_stats_zb[key].append(value)
     m = "Random perturbation" if is_random_attack else "Perturbation"
     logging.info(f"{m} uses {100 * b_rel:.1f}% [{E_mod}/{global_budget}] of the given attack budget.")
 

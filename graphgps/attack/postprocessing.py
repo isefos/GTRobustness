@@ -11,6 +11,7 @@ from itertools import compress
 def get_empty_accumulated_stats():
     keys = [
         "budget_used",
+        "budget_used_rel",
         "num_edges_added",
         "num_edges_removed",
         "num_nodes_added",
@@ -24,7 +25,7 @@ def get_empty_accumulated_stats():
     if cfg.attack.run_random_baseline:
         keys.extend([k + "_random" for k in keys])
 
-    keys.extend(["num_edges_clean", "num_nodes_clean"])
+    keys.extend(["budget", "num_edges_clean", "num_nodes_clean"])
 
     if cfg.dataset.task_type.startswith("classification"):
         asr = "attack_success_rate"
