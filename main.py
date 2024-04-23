@@ -20,27 +20,8 @@ from graphgps.run_utils import (
     load_best_val_model,
 )
 
-
-ex = Experiment()
-
-set_cfg(cfg)
-cfg_dict = convert_cfg_to_dict(cfg)
-ex.add_config({"graphgym": cfg_dict, "dims_per_head": 0, "dims_per_head_PE": 0})
-
-os.makedirs("configs_seml/logs", exist_ok=True)
-
-
-@ex.automain
-def run(seed, graphgym, dims_per_head: int, dims_per_head_PE: int):
-    graphgym = convert_readonly_to_dict(graphgym)
-    setup_run(graphgym, dims_per_head, dims_per_head_PE, seed)
-    results = main(cfg)
-    results["run_dir"] = str(cfg.run_dir)
-    results["num_params"] = cfg.params
-    return results
-
     
-def main(cfg):
+def main_function(cfg):
     loaders, loggers, model, optimizer, scheduler = initialize_run(cfg)
     logging.info(f"[*] Starting now: {datetime.datetime.now()}, with seed={cfg.seed}, running on {cfg.accelerator}")
     # Train
@@ -71,4 +52,23 @@ def main(cfg):
 
     logging.info(f"[*] Finished now: {datetime.datetime.now()}")
     results = {"training": training_results, "attack": attack_results, "robustness_unit_test": rut_results}
+    return results
+
+
+ex = Experiment()
+
+set_cfg(cfg)
+cfg_dict = convert_cfg_to_dict(cfg)
+ex.add_config({"graphgym": cfg_dict, "dims_per_head": 0, "dims_per_head_PE": 0})
+
+os.makedirs("configs_seml/logs", exist_ok=True)
+
+
+@ex.automain
+def run(seed, graphgym, dims_per_head: int, dims_per_head_PE: int):
+    graphgym = convert_readonly_to_dict(graphgym)
+    setup_run(graphgym, dims_per_head, dims_per_head_PE, seed)
+    results = main_function(cfg)
+    results["run_dir"] = str(cfg.run_dir)
+    results["num_params"] = cfg.params
     return results

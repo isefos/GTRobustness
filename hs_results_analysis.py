@@ -226,8 +226,14 @@ def save_single_plots(
             v = result["config"]
             conf_split = conf.split(".")
             for k in conf_split:
-                v = v[k]
+                v = v.get(k, None)
+                if v is None:
+                    break
+            if v is None:
+                break
             x.append(v)
+        if v is None:
+            continue
         if discrete:
             try:
                 x = np.array(x)

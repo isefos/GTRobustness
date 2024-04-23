@@ -49,14 +49,12 @@ fixed:
 
     # copied from config of model that gets loaded
 
-
     accelerator: cuda
     benchmark: false
     best_by_loss: false
     bn:
       eps: 1.0e-05
       mom: 0.1
-    cfg_dest: s37-d20240411-t023022452733-10920733/config.yaml
     custom_metrics: []
     dataset:
       cache_load: false
