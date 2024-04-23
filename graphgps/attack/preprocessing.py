@@ -3,36 +3,33 @@ from torch_geometric.utils import remove_self_loops, scatter
 from torch_geometric.data import Data, Batch
 from torch_geometric.utils import to_scipy_sparse_matrix, index_to_mask
 from scipy.sparse.csgraph import breadth_first_order
-from torch_geometric.transforms import LargestConnectedComponents
 from typing import Callable
+from scipy.sparse.csgraph import connected_components
 import functools
+import numpy as np
 from torch_geometric.graphgym.config import cfg
 
 
-get_largest_connected_subgraph = LargestConnectedComponents(num_components=1, connection="weak")
-
-
 def remove_isolated_components(data: Batch):
+    assert data.num_graphs == 1
+    if not cfg.attack.remove_isolated_components:
+        return data, cfg.attack.root_node_idx
     root_node = cfg.attack.root_node_idx
     if root_node is not None:
         data, root_node = get_only_root_graph(data, root_node)
     else:
-        data = get_largest_connected_subgraph(data)
+        data = get_only_lcc_graph(data)
     return data, root_node
 
 
 def forward_wrapper(forward: Callable) -> Callable:
 
     @functools.wraps(forward)
-    def wrapped_forward(data: Batch, unmodified: bool = False):
+    def wrapped_forward(data: Batch, unmodified: bool = False, root_node: None | int = None):
         
-        assert data.num_graphs == 1
-        if cfg.attack.remove_isolated_components:
-            data, root_node = remove_isolated_components(data)
-        else:
-            root_node = cfg.attack.root_node_idx
-
+        data.attack_mode = False
         if not unmodified:
+            data.attack_mode = True
                 
             use_64bit = False
             num_nodes = data.x.size(0)
@@ -57,10 +54,6 @@ def forward_wrapper(forward: Callable) -> Callable:
                         root_node=root_node,
                         num_iterations=cfg.attack.node_prob_iterations,
                     )
-            data.attack_mode = True
-
-        else:
-            data.attack_mode = False
 
         model_prediction, _ = forward(data)  # don't need the y ground truth
         return model_prediction
@@ -83,6 +76,17 @@ def get_only_root_graph(batch: Batch, root_node: int):
     new_root_node = int(subset_mask[:root_node].sum().item())
     assert torch.allclose(data.x[root_node, :], new_data.x[new_root_node, :])
     return new_data, new_root_node
+
+
+def get_only_lcc_graph(data):
+    adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=data.num_nodes)
+    num_components, component = connected_components(adj, connection="weak")
+    if num_components == 1:
+        return data
+
+    _, count = np.unique(component, return_counts=True)
+    subset = component == count.argmax()
+    return data.subgraph(torch.from_numpy(subset).to(torch.bool))
 
 
 def get_node_logprob(

@@ -44,9 +44,6 @@ fixed:
         laplacian_norm: sym
         eigvec_norm: L2
         max_freqs: 10
-        use_gradient: false  # no attack
-        correct_pert_eigvec_sign: false
-        straight_through_estimator: false
       layers: 2
       n_heads: 4
       raw_norm_type: none
@@ -57,8 +54,6 @@ fixed:
       mode: custom
       batch_size: 32
       eval_period: 1
-      # hyperparameter search, no need to save the models
-      enable_ckpt: false
 
     model:
       type: WeightedSANTransformer
@@ -184,10 +179,17 @@ random:
       - 2
       - 3
 
-  graphgym.posenc_WLapPE.dim_pe:
+  graphgym.posenc_WLapPE.dim_pe:  # TODO: add option with dim per head, like for rutcoraml
     seed: 6384
     type: choice
     options:
       - 8
       - 12
       - 16
+
+  graphgym.posenc_WLapPE.eigen.max_freqs:
+    seed: 52157
+      type: randint
+      min: 8
+      max: 60
+

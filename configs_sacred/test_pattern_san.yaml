@@ -26,9 +26,8 @@ graphgym:
       laplacian_norm: sym
       eigvec_norm: L2
       max_freqs: 10
-      use_gradient: true
-      correct_pert_eigvec_sign: false
-      straight_through_estimator: true
+      eps_repeated_eigenvalue: 1e-5
+      nia_pert: half_eps
     dim_pe: 16
     layers: 3
     n_heads: 4

@@ -4,7 +4,7 @@ from torch_geometric.graphgym.config import cfg
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data, Batch
 from graphgps.attack.prbcd import PRBCDAttack
-from graphgps.attack.preprocessing import forward_wrapper
+from graphgps.attack.preprocessing import forward_wrapper, remove_isolated_components
 from graphgps.attack.dataset_attack import (
     get_total_dataset_graphs,
     get_augmented_graph,
@@ -158,6 +158,7 @@ def attack_or_skip_graph(
         
         # CHECK OUTPUT
         data = Batch.from_data_list([Data(x=attack_graph_data.x.clone(), edge_index=pert_edge_index.clone())])
+        data, _ = remove_isolated_components(data)
         output_pert = model(data.to(device=cfg.accelerator), unmodified=True)
         output_pert = apply_node_mask(output_pert, node_mask)
         output_stats_pert = get_output_stats(y_gt, output_pert)
@@ -291,8 +292,8 @@ def log_budget_skip(clean_data, E, N, budget_edges, output_stats_clean, all_stat
 
 
 def log_used_budget(all_stats, all_stats_zb, global_budget, perts, is_random_attack):
-    all_stats["budget"] = global_budget
-    all_stats_zb["budget"] = global_budget
+    all_stats["budget"].append(global_budget)
+    all_stats_zb["budget"].append(global_budget)
     E_mod = perts.size(1)
     b_rel = E_mod / global_budget
     for key, value in zip(["budget_used", "budget_used_rel"], [E_mod, b_rel]):

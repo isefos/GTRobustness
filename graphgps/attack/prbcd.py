@@ -4,6 +4,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 from scipy.sparse.csgraph import minimum_spanning_tree
+from scipy.linalg import eigh
 import torch
 import torch.nn.functional as F
 from torch import Tensor
@@ -13,10 +14,14 @@ from torch_geometric.utils import (
     coalesce,
     to_undirected,
     to_scipy_sparse_matrix,
+    remove_self_loops,
+    scatter,
 )
 from torch_geometric.data import Data, Batch
 
 from graphgps.attack.sampling import WeightedIndexSampler, get_connected_sampling_fun
+from graphgps.attack.preprocessing import remove_isolated_components
+from graphgps.transform.lap_eig import get_lap_decomp_stats, get_repeated_eigenvalue_slices
 from torch_geometric.graphgym.loss import compute_loss
 import logging
 
@@ -146,20 +151,19 @@ class PRBCDAttack(torch.nn.Module):
 
         # 'Weighted' sampling
         if self.included_weighted:
-            sorted_included_nodes: torch.Tensor = self.edge_index.unique(sorted=True)
             to_lin_idx = self._triu_to_linear_idx if self.is_undirected else self._full_to_linear_idx
             idx_to_included = None
             idx_between_included = None
             if self.included_weighted:
                 # give edges to included nodes a higher probability of getting sampled
                 edges_to_included = self._get_new_1hop_edges(
-                    sorted_included_nodes, self.num_nodes, self.is_undirected,
+                    self.connected_nodes, self.num_nodes, self.is_undirected,
                 )
                 idx_to_included = to_lin_idx(self.num_nodes, edges_to_included)
             if not self.allow_existing_graph_pert:
                 # don't allow the edges between to included nodes to change, only adding new edges
                 edges_between_included = self._get_fully_connected_edges(
-                    sorted_included_nodes, self.is_undirected,
+                    self.connected_nodes, self.is_undirected,
                 )
                 idx_between_included = to_lin_idx(self.num_nodes, edges_between_included)
             # Now use these for sampling
@@ -175,22 +179,35 @@ class PRBCDAttack(torch.nn.Module):
         # 'Only connected' sampling
         elif self.sample_only_connected:
             # assume the existing nodes are the first ones:
-            sorted_included_nodes: torch.Tensor = self.edge_index.unique(sorted=True)
-            num_existing_nodes = sorted_included_nodes.size(0)
-            num_new_nodes = self.num_nodes - num_existing_nodes
-            num_existing_edges = self._num_possible_edges(num_existing_nodes, self.is_undirected)
+            num_new_nodes = self.num_nodes - self.num_connected_nodes
+            num_existing_edges = self._num_possible_edges(self.num_connected_nodes, self.is_undirected)
             self.sample_edge_indices = get_connected_sampling_fun(
                 allow_existing_graph_pert=self.allow_existing_graph_pert,
                 is_undirected=self.is_undirected,
                 n_ex_edges=num_existing_edges,
-                n_ex_nodes=num_existing_nodes,
+                n_ex_nodes=self.num_connected_nodes,
                 n_new_nodes=num_new_nodes,
                 device=self.device,
             )
         
         # 'Normal' sampling (all possible edges)
         else:
-            self.sample_edge_indices = lambda n: torch.randint(num_possible_edges, (n, ), device=self.device)   
+            self.sample_edge_indices = lambda n: torch.randint(num_possible_edges, (n, ), device=self.device)
+
+    def _attack_self_setup(self, x, edge_index, kwargs):
+        self.model.eval()
+        self.device = x.device
+        assert kwargs.get('edge_weight') is None
+        edge_weight = torch.ones(edge_index.size(1), device=self.device)
+        self.edge_index = edge_index.cpu().clone()
+        self.edge_weight = edge_weight.cpu().clone()
+        self.num_nodes = x.size(0)
+        self.connected_nodes: torch.Tensor = self.edge_index.unique(sorted=True)
+        self.num_connected_nodes = self.connected_nodes.size(0)
+        assert self.connected_nodes[-1] == self.num_connected_nodes - 1, "some nodes of the clean graph are isolated"
+        self.num_injection_nodes =  self.num_nodes - self.num_connected_nodes
+        # handles settings for node injection attacks:
+        self._setup_sampling()
 
     def attack(
         self,
@@ -221,17 +238,24 @@ class PRBCDAttack(torch.nn.Module):
 
         :rtype: (:class:`torch.Tensor`, :class:`torch.Tensor`)
         """
-        self.model.eval()
+        self._attack_self_setup(x, edge_index, kwargs)
 
-        self.device = x.device
-        assert kwargs.get('edge_weight') is None
-        edge_weight = torch.ones(edge_index.size(1), device=self.device)
-        self.edge_index = edge_index.cpu().clone()
-        self.edge_weight = edge_weight.cpu().clone()
-        self.num_nodes = x.size(0)
-
-        # handles settings for node injection attacks:
-        self._setup_sampling()
+        # get the clean laplacian eigendecomposition
+        if cfg.posenc_WLapPE.enable:
+            assert self.is_undirected
+            if self.num_injection_nodes == 0:
+                out = get_lap_decomp_stats(
+                    edge_index,
+                    None,
+                    self.num_connected_nodes,
+                    cfg.posenc_WLapPE.eigen.laplacian_norm,
+                    max_freqs=cfg.posenc_WLapPE.eigen.max_freqs,
+                    eigvec_norm=cfg.posenc_WLapPE.eigen.eigvec_norm,
+                    pad_too_small=False,
+                    need_full=True,
+                    return_lap=True,
+                )
+                self.E_lap, self.U_lap, self.lap_edge_index, self.lap_edge_attr = out
 
         # For collecting attack statistics
         self.attack_statistics = defaultdict(list)
@@ -285,17 +309,7 @@ class PRBCDAttack(torch.nn.Module):
 
         :rtype: (:class:`torch.Tensor`, :class:`torch.Tensor`)
         """
-        self.model.eval()
-
-        self.device = x.device
-        assert kwargs.get('edge_weight') is None
-        edge_weight = torch.ones(edge_index.size(1), device=self.device)
-        self.edge_index = edge_index.cpu().clone()
-        self.edge_weight = edge_weight.cpu().clone()
-        self.num_nodes = x.size(0)
-
-        # handles settings for node injection attacks:
-        self._setup_sampling()
+        self._attack_self_setup(x, edge_index, kwargs)
 
         highest_loss = float('-inf')
         best_edge_index = None
@@ -324,7 +338,7 @@ class PRBCDAttack(torch.nn.Module):
                 self.block_edge_weight,
             )
 
-            prediction = self._forward(x, edge_index, edge_weight, discrete=True, **kwargs)
+            prediction = self._forward(x, edge_index, None, discrete=True, **kwargs)
             loss = self.loss(prediction, labels, idx_attack)
 
             if loss > highest_loss:
@@ -388,9 +402,9 @@ class PRBCDAttack(torch.nn.Module):
         topk_indices = torch.topk(self.block_edge_weight, budget).indices
         topk_block_edge_weight[topk_indices] = self.block_edge_weight[topk_indices]
         
-        edge_index, edge_weight, _, _ = self._get_discrete_sampled_graph(topk_block_edge_weight)
+        edge_index = self._get_discrete_sampled_graph(topk_block_edge_weight)[0]
         
-        prediction = self._forward(x, edge_index, edge_weight, discrete=True, **kwargs)
+        prediction = self._forward(x, edge_index, None, discrete=True, **kwargs)
         metric = self.metric(prediction, labels, idx_attack)
 
         # Save best epoch for early stopping
@@ -436,14 +450,66 @@ class PRBCDAttack(torch.nn.Module):
         edge_index, flipped_edges = self._sample_final_edges(x, labels, budget, idx_attack=idx_attack, **kwargs)
         return edge_index, flipped_edges
 
-    def _forward(self, x: Tensor, edge_index: Tensor, edge_weight: Tensor, discrete: bool, **kwargs) -> Tensor:
-        """Forward model."""
+    def _forward(self, x: Tensor, edge_index: None | Tensor, edge_weight: Tensor, discrete: bool, **kwargs) -> Tensor:
+        assert (discrete and edge_weight is None) or (not discrete and edge_weight is not None)
+        # when node injection and laplacian eigen PE, get an off-perturbation
+        edge_weight_off = None
+        if not discrete and cfg.posenc_WLapPE.enable and self.num_injection_nodes > 0:
+            node_inj_pert = cfg.posenc_WLapPE.eigen.nia_pert
+            if node_inj_pert == "half_weight":
+                block_weights_off = self.block_edge_weight.detach() / 2
+            elif node_inj_pert == "half_eps":
+                block_weights_off = self.block_edge_weight.detach() - (self.coeffs['eps'] / 2)
+            else:
+                raise ValueError(f"cfg.posenc_WLapPE.eigen.nia_pert = {node_inj_pert} is not valid")
+
+            _, edge_weight_off = self._get_modified_adj(
+                self.edge_index,
+                self.edge_weight,
+                self.block_edge_index,
+                block_weights_off,
+            )
+        
         # create a data / batch object, clone x, since it gets modified inplace in the forward pass
-        if discrete:
-            data = Batch.from_data_list([Data(x=x.clone(), edge_index=edge_index)])
+        data = Batch.from_data_list([
+            Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight, edge_weight_off=edge_weight_off)
+        ])
+
+        # remove isolated components (if specified in cfg), important for efficient node injection
+        data, root_node = remove_isolated_components(data)
+
+        # add the "clean" laplacian info, from which will be perturbed
+        if not discrete and cfg.posenc_WLapPE.enable:
+            self._add_laplacian_info(data)
+
+        return self.model(data, unmodified=discrete, root_node=root_node, **kwargs)
+    
+    def _add_laplacian_info(self, data):
+        num_nodes = data.x.size(0)
+        num_nodes_added = num_nodes - self.num_connected_nodes
+        if num_nodes_added == 0:
+            data.lap_clean_edge_index = self.lap_edge_index
+            data.lap_clean_edge_attr = self.lap_edge_attr
+            data.E_clean = self.E_lap
+            data.U_clean = self.U_lap
         else:
-            data = Batch.from_data_list([Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight)])
-        return self.model(data, unmodified=discrete, **kwargs)
+            assert num_nodes_added > 0, "Shouldn't be possible to have less during non-discrete"
+            # compute the laplcaian eigendecomposition of a slightly off-perturbed adjacency
+            data.E_clean, data.U_clean, data.lap_clean_edge_index, data.lap_clean_edge_attr = get_lap_decomp_stats(
+                data.edge_index,
+                data.edge_weight_off,
+                data.x.size(0),
+                cfg.posenc_WLapPE.eigen.laplacian_norm,
+                max_freqs=cfg.posenc_WLapPE.eigen.max_freqs,
+                eigvec_norm=cfg.posenc_WLapPE.eigen.eigvec_norm,
+                pad_too_small=False,
+                need_full=True,
+                return_lap=True,
+            )
+        # check for repeated eigenvalues:
+        data.E_rep_slices_min, data.E_rep_slices_max = get_repeated_eigenvalue_slices(
+            data.E_clean, cfg.posenc_WLapPE.eigen.eps_repeated_eigenvalue,
+        )
 
     def _forward_and_gradient(
         self,
@@ -573,7 +639,7 @@ class PRBCDAttack(torch.nn.Module):
             if cfg.attack.eps_init_noised:
                 # remove upto half of eps
                 self.block_edge_weight -= (
-                    0.5 * self.coeffs['eps'] * torch.rand((self.current_block.shape, ), device=self.device)
+                    0.2 * self.coeffs['eps'] * torch.rand((self.current_block.shape, ), device=self.device)
                 )
 
             if self.current_block.size(0) >= budget:
@@ -661,7 +727,7 @@ class PRBCDAttack(torch.nn.Module):
                 # Allowed budget is exceeded
                 continue
 
-            prediction = self._forward(x, edge_index, edge_weight, discrete=True, **kwargs)
+            prediction = self._forward(x, edge_index, None, discrete=True, **kwargs)
             metric = self.metric(prediction, labels, idx_attack)
 
             # Save best sample

@@ -1,8 +1,11 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.register import register_node_encoder
-from graphgps.transform.lap_eig import get_lap_decomp_stats
+from torch_geometric.utils import get_laplacian, coalesce, to_torch_coo_tensor
+from graphgps.transform.lap_eig import get_lap_decomp_stats, eigvec_normalizer, invert_wrong_signs
+from torch.linalg import eigh
 
 
 @register_node_encoder("WLapPE")
@@ -65,32 +68,8 @@ class WeightedLapPENodeEncoder(torch.nn.Module):
 
 
     def forward(self, batch):
-        attack_mode = batch.get("attack_mode", False)
-        if attack_mode or batch.get("EigVals") is None:
-            # for attack
-            assert batch.num_graphs == 1, "On the fly preprocessing only works for single graphs"
-            pe_cfg = cfg.posenc_WLapPE
-            lap_norm_type = pe_cfg.eigen.laplacian_norm.lower()
-            if lap_norm_type == 'none':
-                lap_norm_type = None
-            max_freqs = pe_cfg.eigen.max_freqs
-            eigvec_norm = pe_cfg.eigen.eigvec_norm
-            if attack_mode and pe_cfg.eigen.use_gradient:
-                batch.EigVals, batch.EigVecs = get_lap_decomp_stats(
-                    batch,
-                    lap_norm_type,
-                    max_freqs=max_freqs,
-                    eigvec_norm=eigvec_norm,
-                    requires_grad=True,
-                )
-            else:
-                with torch.no_grad():
-                    batch.EigVals, batch.EigVecs = get_lap_decomp_stats(
-                        batch,
-                        lap_norm_type,
-                        max_freqs=max_freqs,
-                        eigvec_norm=eigvec_norm,
-                    )
+        if batch.get("EigVals") is None:
+            add_eig(batch)
 
         EigVals = batch.EigVals
         EigVecs = batch.EigVecs
@@ -131,3 +110,124 @@ class WeightedLapPENodeEncoder(torch.nn.Module):
         if self.pass_as_var:
             batch.pe_LapPE = pos_enc
         return batch
+
+
+def add_eig(batch):
+    assert batch.num_graphs == 1, "On the fly getting PE currently only works for single graphs."
+    num_nodes = batch.x.size(0)
+    pe_cfg = cfg.posenc_WLapPE
+    max_freqs = pe_cfg.eigen.max_freqs
+    lap_norm_type = pe_cfg.eigen.laplacian_norm
+    lap_norm_type = lap_norm_type.lower() if lap_norm_type is not None else None
+    eigvec_norm = pe_cfg.eigen.eigvec_norm
+    if lap_norm_type == 'none':
+        lap_norm_type = None
+    attack_mode = batch.get("attack_mode", False)
+
+    if (not attack_mode) or (batch.edge_attr is None):
+        pe_cfg = cfg.posenc_WLapPE
+        batch.EigVals, batch.EigVecs = get_lap_decomp_stats(
+            batch.edge_index,
+            batch.edge_attr,
+            batch.x.size(0),
+            lap_norm_type,
+            max_freqs=max_freqs,
+            eigvec_norm=eigvec_norm,
+        )
+        batch.EigVals = batch.EigVals.repeat(num_nodes, 1)[:, :, None]
+        return
+    
+    # update original eig with perturbation approximation as function of laplacian perturbation
+    check_approx = False
+    if check_approx:
+        out = get_lap_decomp_stats(
+            batch.edge_index,
+            batch.edge_attr,
+            num_nodes,
+            lap_norm_type,
+            max_freqs,
+            eigvec_norm,
+            return_lap=True,
+        )
+        eigenvalues_true, eigenvectors_true, lap_attack_edge_index, lap_attack_edge_attr = out
+    else:
+        lap_attack_edge_index, lap_attack_edge_attr = get_laplacian(
+            batch.edge_index, batch.edge_attr, lap_norm_type, num_nodes=num_nodes,
+        )
+
+    delta_lap_edge_index, delta_lap_edge_attr = coalesce(
+        torch.cat((lap_attack_edge_index, batch.lap_clean_edge_index), 1),
+        torch.cat((lap_attack_edge_attr, -batch.lap_clean_edge_attr)),
+        num_nodes=num_nodes,
+        reduce="add",
+    )
+    zero_mask = delta_lap_edge_attr != 0
+    delta_lap_edge_index = delta_lap_edge_index[:, zero_mask]
+    delta_lap_edge_attr = delta_lap_edge_attr[zero_mask]
+    delta_lap = to_torch_coo_tensor(
+        delta_lap_edge_index, delta_lap_edge_attr, size=(num_nodes, num_nodes), is_coalesced=True,
+    )
+
+    E_clean = batch.E_clean
+    U_clean = batch.U_clean
+    P = E_clean[:, None] - E_clean[None, :]
+    P[P == 0] = float("inf")
+    P_inv = 1 / P
+    if batch.E_rep_slices_min is not None:
+        # handle repeated eigenvalues
+        basis_transform_repeated_eigenvectors_(
+            U_clean, delta_lap, batch.E_rep_slices_min, batch.E_rep_slices_max, P_inv,
+        )
+
+    # calculate the eigenperturbation from the formulas of matrix perturbation theory
+    Q = U_clean.T @ torch.sparse.mm(delta_lap, U_clean)
+    E_delta = torch.diag(Q)
+    U_delta = - U_clean @ (P_inv * Q)
+    E_pert = E_clean + E_delta
+    U_pert = U_clean + U_delta
+
+    # sort by smallest eigenvalue and select only the smallest max_freqs
+    E_pert, idx = torch.topk(E_pert, max_freqs, largest=False, sorted=True)
+    U_pert = U_pert[:, idx]
+
+    # normalize the eigenvectors
+    U_pert = eigvec_normalizer(U_pert, E_pert, eigvec_norm)
+
+    # pad if max_freq > num_nodes
+    if num_nodes < max_freqs:
+        evals = F.pad(evals, (0, max_freqs - num_nodes), value=float('nan'))
+        evects = F.pad(evects, (0, max_freqs - num_nodes), value=float('nan'))
+
+    eigenvalues = torch.zeros((max_freqs, ), device=batch.x.device)
+    eigenvalues[1:] = E_pert[1:]
+
+    if check_approx:
+        E_error = torch.nan_to_num(E_pert - eigenvalues_true, nan=0.0, posinf=0.0, neginf=0.0)
+        E_error = E_error.abs()
+        U_pert_correct_sign = invert_wrong_signs(eigenvectors_true, U_pert)
+        U_error = torch.nan_to_num(U_pert_correct_sign - eigenvectors_true, nan=0.0, posinf=0.0, neginf=0.0)
+        U_error = (U_error ** 2).sum(0).sqrt()
+        print(f"Min eigval error: {E_error.min().item()}")
+        print(f"Avg eigval error: {E_error.mean().item()}")
+        print(f"Max eigval error: {E_error.max().item()}")
+        print(f"Min eigvec error: {U_error.min().item()}")
+        print(f"Avg eigvec error: {U_error.mean().item()}")
+        print(f"Max eigvec error: {U_error.max().item()}")
+
+    eigenvalues = eigenvalues.repeat(num_nodes, 1)[:, :, None]
+    batch.EigVals, batch.EigVecs = eigenvalues, U_pert
+
+
+@torch.no_grad
+def basis_transform_repeated_eigenvectors_(U, L_delta, slices_min, slices_max, P_inv):
+    # find the repeated eigenvalue blocks, set the corresponding eigenvector entries
+    for i in range(slices_min.size(0)):
+        start, end = slices_min[i].item(), slices_max[i].item()
+        U_block = U[:, start:end]  # n x m
+        # project L_delta into U basis
+        L_delta_block_p = U_block.T @ torch.sparse.mm(L_delta, U_block)  # m x m <- ((m x n) x (n x n) x (n x m))
+        _, U_p = eigh(L_delta_block_p)
+        # set the block in U to be equal to the eigenvectors of L_delta_block_p projected back
+        U[:, start:end] = U_block @ U_p
+        # set the entries in P_inv to zero
+        P_inv[start:end, start:end] = 0

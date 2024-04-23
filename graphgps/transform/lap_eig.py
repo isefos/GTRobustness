@@ -1,63 +1,66 @@
 import torch
 import torch.nn.functional as F
-from torch_geometric.utils import get_laplacian, to_dense_adj
-from torch_geometric.graphgym.config import cfg
+from torch_geometric.utils import get_laplacian, to_scipy_sparse_matrix
+from scipy.sparse.linalg import eigsh
+from scipy.linalg import eigh
+import numpy as np
 
 
-def get_lap_decomp_stats(data, lap_norm_type, max_freqs, eigvec_norm, requires_grad=False):
+@torch.no_grad
+def get_lap_decomp_stats(
+    edge_index: torch.Tensor,
+    edge_attr: torch.Tensor,
+    num_nodes: int | None,
+    lap_norm_type: str | None,
+    max_freqs: int,
+    eigvec_norm: str,
+    pad_too_small: bool = True,
+    need_full: bool = False,
+    return_lap: bool = False,
+):
     """Compute Laplacian eigen-decomposition-based PE stats of the given graph.
     """
-    N = data.num_nodes
+    lap_norm_type = lap_norm_type.lower() if lap_norm_type is not None else None
+    if lap_norm_type == 'none':
+        lap_norm_type = None
 
-    L_sp = get_laplacian(data.edge_index, data.edge_attr, normalization=lap_norm_type)
-    L = to_dense_adj(L_sp[0], None, L_sp[1])[0].to(dtype=torch.float64)
-    
-    E, U = torch.linalg.eigh(L)
+    L_edge_index, L_edge_attr = get_laplacian(edge_index, edge_attr, lap_norm_type, num_nodes=num_nodes)
+    L = to_scipy_sparse_matrix(L_edge_index, L_edge_attr, num_nodes)
 
-    # for attack, when we want to compute the gradient of the eigenvalues and eigenvectors
-    if requires_grad:
-        perturbation = get_pert_diff_eigenvects(E, U)
-        if perturbation is not None:
-            _, U_pert = torch.linalg.eigh(L + perturbation)
+    E, U = None, None
+    if not need_full and (4 * max_freqs) < num_nodes:
+        try:
+            E, U = eigsh(L, k=max_freqs, which='SM', return_eigenvectors=True)
+        except:
+            pass
+    if E is None:
+        # do dense calculation
+        E, U = eigh(L.toarray())
 
-            if cfg.posenc_WLapPE.eigen.correct_pert_eigvec_sign:
-                U_pert = invert_wrong_signs(U, U_pert)
+    if not need_full:
+        E = E[:max_freqs]
+        U = U[:, :max_freqs]
 
-            if cfg.posenc_WLapPE.eigen.straight_through_estimator:
-                U = U.detach() + U_pert - U_pert.detach()
-            else:
-                U = U_pert
+    idx = E.argsort()
+    E = E[idx]
+    U = U[:, idx]
 
-    # now that the solver is finished, transform back to float32
-    E = E.to(dtype=torch.float32)
-    U = U.to(dtype=torch.float32)
-
-    # set first eigenvalue to zero (is non-zero because of numerical error)
-    evals = torch.zeros_like(E)
-    evals[1:] = E[1:]
-    evects = U
-
-    # Keep up to the maximum desired number of frequencies, output is already sorted
-    evals = evals[:max_freqs]
-    evects = evects[:, :max_freqs]
+    evals = torch.from_numpy(E).float().clamp_min(0)
+    evals[0] = 0
+    evects = torch.from_numpy(U).float()
 
     # Normalize and pad eigen vectors.
-    if eigvec_norm != "L2":
-        # solver automatically normalizes eigenvectors to L2 norm.
-        evects = eigvec_normalizer(evects, evals, normalization=eigvec_norm)
-    if N < max_freqs:
-        EigVecs = F.pad(evects, (0, max_freqs - N), value=float('nan'))
-    else:
-        EigVecs = evects
+    evects = eigvec_normalizer(evects, evals, normalization=eigvec_norm)
 
-    # Pad and save eigenvalues.
-    if N < max_freqs:
-        EigVals = F.pad(evals, (0, max_freqs - N), value=float('nan')).unsqueeze(0)
-    else:
-        EigVals = evals.unsqueeze(0)
-    EigVals = EigVals.repeat(N, 1).unsqueeze(2)
+    # Pad if less than max_freqs.
+    if num_nodes < max_freqs and pad_too_small:
+        evals = F.pad(evals, (0, max_freqs - num_nodes), value=float('nan'))
+        evects = F.pad(evects, (0, max_freqs - num_nodes), value=float('nan'))
 
-    return EigVals, EigVecs
+    if return_lap:
+        return evals, evects, L_edge_index, L_edge_attr
+
+    return evals, evects
 
 
 def eigvec_normalizer(EigVecs, EigVals, normalization):
@@ -129,11 +132,25 @@ def get_pert_diff_eigenvects(E, U):
     return P
 
 
+def get_repeated_eigenvalue_slices(E, eta):
+    E_diff = torch.diff(E)
+    # check if it has "repeated" eigenvalues
+    if not torch.any(E_diff < eta):
+        return None, None
+
+    pad = E_diff.new_zeros((1, ), dtype=bool)
+    edges = torch.diff(torch.cat((pad, E_diff < eta, pad)).to(dtype=torch.int64))
+    slices_min = torch.nonzero(edges == 1).flatten()
+    slices_max = torch.nonzero(edges == -1).flatten() + 1
+    return slices_min, slices_max
+
+
 def get_ev_pert(E: torch.Tensor, E_diff: torch.Tensor, U: torch.Tensor, eta: float):
     pad = E_diff.new_zeros((1, ), dtype=bool)
     edges = torch.diff(torch.cat((pad, E_diff < eta, pad)).to(dtype=torch.int64))
     slices_min = torch.nonzero(edges == 1).flatten()
     slices_max = torch.nonzero(edges == -1).flatten() + 1
+    multiplicities = slices_max - slices_min
 
     # space to left of smallest and to the right of larges are zero
     # (so we ensure that the total range of eigenvalues stays the same)
@@ -143,8 +160,6 @@ def get_ev_pert(E: torch.Tensor, E_diff: torch.Tensor, U: torch.Tensor, eta: flo
     spaces[1:-1][torch.diff(edges) == 2] /= 2
     space_left = spaces[slices_min]
     space_right = spaces[slices_max]
-
-    multiplicities = slices_max - slices_min
 
     eig_pert_diag = torch.zeros_like(E)
     for rep in range(slices_min.size(0)):
@@ -168,6 +183,6 @@ def get_ev_pert(E: torch.Tensor, E_diff: torch.Tensor, U: torch.Tensor, eta: flo
 
 def invert_wrong_signs(U: torch.Tensor, U_noised: torch.Tensor):
     inverted_sign = (U_noised - U).abs().sum(0) > (U_noised + U).abs().sum(0)
-    flipper = U.new_ones((U.size(0), ))
+    flipper = U.new_ones((U.size(1), ))
     flipper[inverted_sign] = -1
     return U_noised * flipper[None, :]

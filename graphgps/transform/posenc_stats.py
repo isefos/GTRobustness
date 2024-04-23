@@ -15,7 +15,6 @@ from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import Data
 from graphgps.transform.rrwp import add_full_rrwp
 from graphgps.transform.lap_eig import get_lap_decomp_stats
-from functools import partial
 
 
 def compute_posenc_stats(data, pe_types, is_undirected, cfg):
@@ -59,36 +58,31 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
         undir_edge_index = to_undirected(data.edge_index)
 
     # Eigen values and vectors, Eigen-decomposition can be reused for Heat kernels.
-    evals, evects = None, None
+    eigenvalues, eigenvectors, lap_norm = None, None, None
     eigPEs = set(('LapPE', 'WLapPE', 'EquivStableLapPE', 'SignNet'))
     eigPE = eigPEs.intersection(pe_types)
     assert len(eigPE) <= 1, "Selection of only one eigen-decomposition PE type currently supported."
     if eigPE:
         eigPE = eigPE.pop()
         pe_cfg = cfg.get(f"posenc_{eigPE}")
-        lap_norm_type = pe_cfg.eigen.laplacian_norm.lower()
-        if lap_norm_type == 'none':
-            lap_norm_type = None
-        
-        max_freqs = pe_cfg.eigen.max_freqs
-        eigvec_norm = pe_cfg.eigen.eigvec_norm
-
+        lap_norm = pe_cfg.eigen.laplacian_norm
         assert is_undirected, (
             "Lap. Eig. decomposition currently requires undirected graphs (transform dataset to undirected)."
         )
-        
-        with torch.no_grad():
-            evals, evects = get_lap_decomp_stats(
-                data,
-                lap_norm_type,
-                max_freqs=max_freqs,
-                eigvec_norm=eigvec_norm,
-            )
-        
+        num_nodes = data.x.size(0)
+        eigenvalues, eigenvectors = get_lap_decomp_stats(
+            data.edge_index,
+            data.edge_attr,
+            num_nodes,
+            pe_cfg.eigen.laplacian_norm,
+            max_freqs=pe_cfg.eigen.max_freqs,
+            eigvec_norm=pe_cfg.eigen.eigvec_norm,
+        )
+        eigenvalues = eigenvalues.repeat(num_nodes, 1)[:, :, None]
         if eigPE == 'SignNet':
-            data.eigvals_sn, data.eigvecs_sn = evals, evects
+            data.eigvals_sn, data.eigvecs_sn = eigenvalues, eigenvectors
         else:
-            data.EigVals, data.EigVecs = evals, evects
+            data.EigVals, data.EigVecs = eigenvalues, eigenvectors
 
     # Random Walks.
     if 'RWSE' in pe_types:
@@ -106,13 +100,13 @@ def compute_posenc_stats(data, pe_types, is_undirected, cfg):
     if 'HKdiagSE' in pe_types or 'HKfullPE' in pe_types:
         # Get the eigenvalues and eigenvectors of the regular Laplacian,
         # if they have not yet been computed for 'eigen'.
-        if lap_norm_type is not None or evals is None or evects is None:
+        if lap_norm is not None or eigenvalues is None or eigenvectors is None:
             L_heat = to_scipy_sparse_matrix(
                 *get_laplacian(undir_edge_index, normalization=None, num_nodes=N)
             )
             evals_heat, evects_heat = np.linalg.eigh(L_heat.toarray())
         else:
-            evals_heat, evects_heat = evals, evects
+            evals_heat, evects_heat = eigenvalues, eigenvectors
         evals_heat = torch.from_numpy(evals_heat)
         evects_heat = torch.from_numpy(evects_heat)
 

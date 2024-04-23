@@ -44,7 +44,8 @@ fixed:
       eigen:
         laplacian_norm: sym
         eigvec_norm: L2
-        max_freqs: 30
+        eps_repeated_eigenvalue: 1e-5
+        nia_pert: half_weight
       dim_pe: 16
       layers: 2
       n_heads: 4
@@ -145,42 +146,16 @@ grid:
       - 3
       - 5
 
-  graphgym.posenc_WLapPE.eigen.use_gradient:
-    type: choice
-    options:
-      - false
-      - true
-      - true
-      - true
-      - true
-    zip_id: eig_grad
-
-  graphgym.posenc_WLapPE.eigen.straight_through_estimator:
-    type: choice
-    options:
-      - false
-      - false
-      - false
-      - true
-      - true
-    zip_id: eig_grad
-
-  graphgym.posenc_WLapPE.eigen.correct_pert_eigvec_sign:
-    type: choice
-    options:
-      - false
-      - false
-      - false
-      - true
-      - true
-    zip_id: eig_grad
-
   graphgym.attack.eps_init_noised:
     type: choice
     options:
-      - false
-      - false
       - true
       - false
-      - true
-    zip_id: eig_grad
+
+  graphgym.posenc_WLapPE.eigen.max_freqs:
+    type: choice
+    options:
+      - 5
+      - 10
+      - 30
+      - 50

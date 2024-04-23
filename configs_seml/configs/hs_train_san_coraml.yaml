@@ -46,9 +46,6 @@ fixed:
       eigen:
         laplacian_norm: sym
         eigvec_norm: L2
-        use_gradient: false  # no attack
-        correct_pert_eigvec_sign: false
-        straight_through_estimator: false
       raw_norm_type: none
       post_layers: 0
       pass_as_var: false

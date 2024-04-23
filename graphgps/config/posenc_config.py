@@ -68,9 +68,10 @@ def set_cfg_posenc(cfg):
         pecfg.eigen.max_freqs = 10
 
     # Use gradient-based eigen-decomposition for adversarial attacks
-    cfg.posenc_WLapPE.eigen.use_gradient = False
-    cfg.posenc_WLapPE.eigen.correct_pert_eigvec_sign = False
-    cfg.posenc_WLapPE.eigen.straight_through_estimator = True
+    cfg.posenc_WLapPE.eigen.eps_repeated_eigenvalue = 1e-6
+
+    # Node Injection Attack with LapPE -> how to define the approximation perturbation
+    cfg.posenc_WLapPE.eigen.nia_pert = "half_weight"  # or half_eps
 
     # Config for SignNet-specific options.
     cfg.posenc_SignNet.phi_out_dim = 4

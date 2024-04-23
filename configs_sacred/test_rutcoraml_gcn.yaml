@@ -33,7 +33,7 @@ graphgym:
     layer_type: gcnconvweighted
     stage_type: stack
     batchnorm: true
-    act: prelu
+    act: prelu  # relu is a bit more robust (or harder to attack)
     dropout: 0.0
     agg: add
     normalize_adj: false
@@ -56,7 +56,7 @@ graphgym:
     max_edge_weight_update: 0.0  # 0.0 means no gradient clipping
     lr: 4_000
     block_size: 10_000
-    e_budget: 0.15
+    e_budget: 0.05
     minimum_budget: 0
     eps: 1e-7
     is_undirected: false
