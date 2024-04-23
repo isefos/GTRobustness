@@ -165,8 +165,11 @@ def add_eig(batch):
     delta_lap_edge_index = delta_lap_edge_index[:, zero_mask]
     delta_lap_edge_attr = delta_lap_edge_attr[zero_mask]
     delta_lap = to_torch_coo_tensor(
-        delta_lap_edge_index, delta_lap_edge_attr, size=(num_nodes, num_nodes), is_coalesced=True,
-    )
+        delta_lap_edge_index,
+        delta_lap_edge_attr,
+        size=(num_nodes, num_nodes),
+        is_coalesced=True,
+    ).to(batch.x.device)
 
     E_clean = batch.E_clean
     U_clean = batch.U_clean

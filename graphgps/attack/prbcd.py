@@ -488,10 +488,10 @@ class PRBCDAttack(torch.nn.Module):
         num_nodes = data.x.size(0)
         num_nodes_added = num_nodes - self.num_connected_nodes
         if num_nodes_added == 0:
-            data.lap_clean_edge_index = self.lap_edge_index
-            data.lap_clean_edge_attr = self.lap_edge_attr
-            data.E_clean = self.E_lap
-            data.U_clean = self.U_lap
+            data.lap_clean_edge_index = self.lap_edge_index.to(self.device)
+            data.lap_clean_edge_attr = self.lap_edge_attr.to(self.device)
+            data.E_clean = self.E_lap.to(self.device)
+            data.U_clean = self.U_lap.to(self.device)
         else:
             assert num_nodes_added > 0, "Shouldn't be possible to have less during non-discrete"
             # compute the laplcaian eigendecomposition of a slightly off-perturbed adjacency
