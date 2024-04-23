@@ -168,7 +168,6 @@ def add_eig(batch):
         delta_lap_edge_index,
         delta_lap_edge_attr,
         size=(num_nodes, num_nodes),
-        is_coalesced=True,
     ).to(batch.x.device)
 
     E_clean = batch.E_clean
