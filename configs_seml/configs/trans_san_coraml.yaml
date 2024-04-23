@@ -13,14 +13,6 @@ slurm:
     cpus-per-task: 4  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
-grid:
-
-  graphgym.attack.e_budget:
-    type: range
-    min: 0.0075
-    max: 0.151
-    step: 0.0075
-
 # experiment fixed configs
 
 fixed:
