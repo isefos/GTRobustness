@@ -4,6 +4,7 @@ from torch_geometric.graphgym.config import cfg
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data, Batch
 from graphgps.attack.prbcd import PRBCDAttack
+from graphgps.attack.prbcd_nia import PRBCDAttackNI
 from graphgps.attack.preprocessing import forward_wrapper, remove_isolated_components
 from graphgps.attack.dataset_attack import (
     get_total_dataset_graphs,
@@ -34,7 +35,10 @@ def prbcd_attack_dataset(model, loaders):
     logging.info("Start of attack:")
     model.eval()
     model.forward = forward_wrapper(model.forward)
-    prbcd = PRBCDAttack(model)
+    if cfg.attack.enable_node_injection:
+        prbcd = PRBCDAttackNI(model)
+    else:
+        prbcd = PRBCDAttack(model)
     attack_epoch_stats = []
     all_stats, all_stats_zb = get_empty_accumulated_stats()
     # PREPARE DATASETS

@@ -230,9 +230,9 @@ def save_single_plots(
                 if v is None:
                     break
             if v is None:
-                break
+                continue
             x.append(v)
-        if v is None:
+        if not x:
             continue
         if discrete:
             try:
