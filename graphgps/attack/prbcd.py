@@ -637,9 +637,9 @@ class PRBCDAttack(torch.nn.Module):
 
             # add noise onto eps if specified
             if cfg.attack.eps_init_noised:
-                # remove upto half of eps
+                # remove a bit of eps
                 self.block_edge_weight -= (
-                    0.2 * self.coeffs['eps'] * torch.rand((self.current_block.shape, ), device=self.device)
+                    0.2 * self.coeffs['eps'] * torch.rand(self.current_block.shape, device=self.device)
                 )
 
             if self.current_block.size(0) >= budget:
@@ -679,9 +679,9 @@ class PRBCDAttack(torch.nn.Module):
 
             # if specified add noise to eps
             if cfg.attack.eps_init_noised:
-                # remove upto half of eps
+                # remove a bit of eps
                 self.block_edge_weight -= (
-                    0.5 * self.coeffs['eps'] * torch.rand((self.current_block.shape, ), device=self.device)
+                    0.5 * self.coeffs['eps'] * torch.rand(self.current_block.shape, device=self.device)
                 )
 
             self.block_edge_weight[unique_idx[:n_prev]] = block_edge_weight_prev

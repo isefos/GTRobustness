@@ -27,7 +27,7 @@ graphgym:
       eigvec_norm: L2
       max_freqs: 10
       eps_repeated_eigenvalue: 1e-5
-      nia_pert: half_eps
+      nia_pert: half_weight
     dim_pe: 8
     layers: 2
     n_heads: 4
@@ -97,9 +97,10 @@ graphgym:
     block_size: 500
     e_budget: 0.1
     minimum_budget: 0
-    eps: 1e-4
+    eps: 1e-5
+    eps_init_noised: true
     is_undirected: true
-    loss: reflected_cross_entropy  # raw_prediction
+    loss: raw_prediction
     metric: null
     max_final_samples: 20
     max_trials_sampling: 20
