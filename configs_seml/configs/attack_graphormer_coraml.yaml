@@ -45,22 +45,21 @@ fixed:
       node_prob_enable: false
       remove_isolated_components: false
       run_random_baseline: true
-      block_size: 20_000
-      epochs: 125
+      block_size: 20_000  # TODO: test
+      epochs: 125  # TODO: test
       epochs_resampling: 100
-      resample_period: 1
-      max_final_samples: 20
-      eps: 1.0e-07
-      #
+      resample_period: 1  # TODO: test
+      max_final_samples: 20  # TODO: test
+      eps: 1.0e-07  # TODO: test
+      eps_init_noised: false  # TODO: test
       allow_existing_graph_pert: true
       enable_node_injection: false
-      eps_init_noised: false
       existing_node_prob_multiplier: 1
       include_root_nodes_for_injection: true
       is_undirected: true
-      loss: train
-      lr: 4000
-      max_edge_weight_update: 0.0
+      loss: tanh_margin  # TODO: test
+      lr: 4000  # TODO: test
+      max_edge_weight_update: 0.0  # TODO: test
       max_trials_sampling: 20
       metric: null
       minimum_budget: 1

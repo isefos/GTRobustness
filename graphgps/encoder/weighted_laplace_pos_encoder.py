@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.register import register_node_encoder
-from torch_geometric.utils import get_laplacian, coalesce, to_torch_coo_tensor
+from torch_geometric.utils import get_laplacian, coalesce
+from torch_sparse import spmm
 from graphgps.transform.lap_eig import get_lap_decomp_stats, eigvec_normalizer, invert_wrong_signs
 from torch.linalg import eigh
 
@@ -164,11 +165,6 @@ def add_eig(batch):
     zero_mask = delta_lap_edge_attr != 0
     delta_lap_edge_index = delta_lap_edge_index[:, zero_mask]
     delta_lap_edge_attr = delta_lap_edge_attr[zero_mask]
-    delta_lap = to_torch_coo_tensor(
-        delta_lap_edge_index,
-        delta_lap_edge_attr,
-        size=(num_nodes, num_nodes),
-    ).to(batch.x.device)
 
     E_clean = batch.E_clean
     U_clean = batch.U_clean
@@ -178,11 +174,17 @@ def add_eig(batch):
     if batch.E_rep_slices_min is not None:
         # handle repeated eigenvalues
         basis_transform_repeated_eigenvectors_(
-            U_clean, delta_lap, batch.E_rep_slices_min, batch.E_rep_slices_max, P_inv,
+            U_clean,
+            delta_lap_edge_index,
+            delta_lap_edge_attr,
+            num_nodes,
+            batch.E_rep_slices_min,
+            batch.E_rep_slices_max,
+            P_inv,
         )
 
     # calculate the eigenperturbation from the formulas of matrix perturbation theory
-    Q = U_clean.T @ torch.sparse.mm(delta_lap, U_clean)
+    Q = U_clean.T @ spmm(delta_lap_edge_index, delta_lap_edge_attr, num_nodes, num_nodes, U_clean)
     E_delta = torch.diag(Q)
     U_delta = - U_clean @ (P_inv * Q)
     E_pert = E_clean + E_delta
@@ -221,13 +223,21 @@ def add_eig(batch):
 
 
 @torch.no_grad
-def basis_transform_repeated_eigenvectors_(U, L_delta, slices_min, slices_max, P_inv):
+def basis_transform_repeated_eigenvectors_(
+    U,
+    delta_lap_edge_index,
+    delta_lap_edge_attr,
+    num_nodes,
+    slices_min,
+    slices_max,
+    P_inv,
+):
     # find the repeated eigenvalue blocks, set the corresponding eigenvector entries
     for i in range(slices_min.size(0)):
         start, end = slices_min[i].item(), slices_max[i].item()
         U_block = U[:, start:end]  # n x m
-        # project L_delta into U basis
-        L_delta_block_p = U_block.T @ torch.sparse.mm(L_delta, U_block)  # m x m <- ((m x n) x (n x n) x (n x m))
+        # project L_delta into U basis -- m x m <- ((m x n) x (n x n) x (n x m))
+        L_delta_block_p = U_block.T @ spmm(delta_lap_edge_index, delta_lap_edge_attr, num_nodes, num_nodes, U_block)
         _, U_p = eigh(L_delta_block_p)
         # set the block in U to be equal to the eigenvectors of L_delta_block_p projected back
         U[:, start:end] = U_block @ U_p
