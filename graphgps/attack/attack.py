@@ -161,7 +161,7 @@ def attack_or_skip_graph(
         log_used_budget(all_stats, all_stats_zb, global_budget, perts, is_random_attack)
         
         # CHECK OUTPUT
-        data = Batch.from_data_list([Data(x=attack_graph_data.x.clone(), edge_index=pert_edge_index.clone())])
+        data = Batch.from_data_list([Data(x=attack_graph_data.x.clone(), edge_index=pert_edge_index.cpu().clone())])
         data, _ = remove_isolated_components(data)
         output_pert = model(data.to(device=cfg.accelerator), unmodified=True)
         output_pert = apply_node_mask(output_pert, node_mask)

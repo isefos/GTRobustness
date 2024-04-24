@@ -65,9 +65,9 @@ def get_lap_decomp_stats(
     E = E[idx]
     U = U[:, idx]
 
-    evals = torch.from_numpy(E).float().clamp_min(0)
+    evals = torch.from_numpy(E).float().clamp_min(0).to(edge_index.device)
     evals[0] = 0
-    evects = torch.from_numpy(U).float()
+    evects = torch.from_numpy(U).float().to(edge_index.device)
 
     # Normalize and pad eigen vectors.
     evects = eigvec_normalizer(evects, evals, normalization=eigvec_norm)

@@ -51,7 +51,7 @@ fixed:
     posenc_WLapPE:
       dim_pe: 16
       eigen:
-        max_freqs: 10
+        max_freqs: 15  # TODO: test
         eigvec_norm: L2
         laplacian_norm: sym
         eps_repeated_eigenvalue: 1e-5  # TODO: test        
