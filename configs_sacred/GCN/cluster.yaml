@@ -70,7 +70,7 @@ graphgym:
     block_size: 800
     e_budget: 0.1
     minimum_budget: 0
-    eps: 1e-5
+    eps: 1.0e-5
     is_undirected: true
     prediction_level: node
     loss: tanh_margin
