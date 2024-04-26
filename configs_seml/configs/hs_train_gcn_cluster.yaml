@@ -46,7 +46,6 @@ random:
   graphgym.gnn.layers_mp:
     seed: 357
     type: randint
-    options:
     min: 4
     max: 15
   
