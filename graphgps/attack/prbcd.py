@@ -368,8 +368,8 @@ class PRBCDAttack(torch.nn.Module):
         return edge_index, flipped_edges
     
     def _get_forward_data(self, x, edge_index, edge_weight, discrete):
-        # create a data / batch object, clone x, since it gets modified inplace in the forward pass
-        data = Batch.from_data_list([Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight)])
+        # create a data object, clone x, since it gets modified inplace in the forward pass
+        data = Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight)
         return data
 
     def _forward(self, x: Tensor, edge_index: None | Tensor, edge_weight: Tensor, discrete: bool, **kwargs) -> Tensor:

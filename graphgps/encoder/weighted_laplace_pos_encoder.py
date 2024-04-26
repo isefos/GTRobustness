@@ -171,7 +171,7 @@ def add_eig(batch):
     P = E_clean[:, None] - E_clean[None, :]
     P[P == 0] = float("inf")
     P_inv = 1 / P
-    if batch.E_rep_slices_min is not None:
+    if batch.E_rep_slices_min.size(0) > 0:
         # handle repeated eigenvalues
         basis_transform_repeated_eigenvectors_(
             U_clean,

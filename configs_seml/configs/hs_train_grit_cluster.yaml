@@ -100,7 +100,7 @@ fixed:
 
     accelerator: cuda
     out_dir: configs_seml/results
-    metric_best: accuracy
+    metric_best: accuracy-SBM
     metric_agg: argmax
     tensorboard_each_run: false
 

@@ -134,6 +134,8 @@ def setup_run(graphgym, dims_per_head, dims_per_head_PE, seml_seed=None, jupyter
         elif model_type in ["SANTransformer", "WeightedSANTransformer", "GritTransformer"]:
             dim_inner = dims_per_head * graphgym["gt"]["n_heads"]
             graphgym["gt"]["dim_hidden"] = dim_inner
+        elif model_type == "gnn" and graphgym["gnn"]["layer_type"] in ["gatconvweighted"]:
+            dim_inner = dims_per_head * graphgym["gnn"]["att_heads"]
         else:
             raise NotImplementedError(f"Please add a case for {model_type} (very easy)!")
         graphgym["gnn"]["dim_inner"] = dim_inner

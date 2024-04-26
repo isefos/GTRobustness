@@ -10,22 +10,25 @@ import numpy as np
 from torch_geometric.graphgym.config import cfg
 
 
-def remove_isolated_components(data: Batch):
-    assert data.num_graphs == 1
-    if not cfg.attack.remove_isolated_components:
-        return data, cfg.attack.root_node_idx
+def remove_isolated_components(data: Data) -> tuple[Data, int | None]:
     root_node = cfg.attack.root_node_idx
-    if root_node is not None:
-        data, root_node = get_only_root_graph(data, root_node)
-    else:
-        data = get_only_lcc_graph(data)
+    if cfg.attack.remove_isolated_components:
+        if root_node is not None:
+            data, root_node = get_only_root_graph(data, root_node)
+        else:
+            data = get_only_lcc_graph(data)
     return data, root_node
 
 
 def forward_wrapper(forward: Callable) -> Callable:
 
     @functools.wraps(forward)
-    def wrapped_forward(data: Batch, unmodified: bool = False, root_node: None | int = None):
+    def wrapped_forward(
+        data: Data,
+        unmodified: bool = False,
+        root_node: int | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
         
         data.attack_mode = False
         if not unmodified:
@@ -49,22 +52,19 @@ def forward_wrapper(forward: Callable) -> Callable:
                     data.node_prob = node_in_graph_prob(
                         edge_index=data.edge_index,
                         edge_weights=data.edge_attr,
-                        batch=data.batch,
+                        num_nodes=num_nodes,
                         undirected=cfg.attack.is_undirected,
                         root_node=root_node,
                         num_iterations=cfg.attack.node_prob_iterations,
                     )
-
-        model_prediction, _ = forward(data)  # don't need the y ground truth
+        data = Batch.from_data_list([data])
+        model_prediction, _ = forward(data, **kwargs)  # don't need the y ground truth
         return model_prediction
 
     return wrapped_forward
 
 
-def get_only_root_graph(batch: Batch, root_node: int):
-    # only works for a single graph
-    assert torch.all(batch.batch == 0)
-    data: Data = batch.get_example(0)
+def get_only_root_graph(data: Data, root_node: int):
     num_nodes = data.x.size(0)
     device = data.x.device
     # do graph traversal starting from root to find the root component
@@ -72,13 +72,12 @@ def get_only_root_graph(batch: Batch, root_node: int):
     bfs_order = breadth_first_order(adj, root_node, return_predecessors=False)
     subset_mask = index_to_mask(torch.tensor(bfs_order, dtype=torch.long, device=device), size=num_nodes)
     data_root_component = data.subgraph(subset_mask)
-    new_data = Batch.from_data_list([data_root_component])
     new_root_node = int(subset_mask[:root_node].sum().item())
-    assert torch.allclose(data.x[root_node, :], new_data.x[new_root_node, :])
-    return new_data, new_root_node
+    assert torch.allclose(data.x[root_node, :], data_root_component.x[new_root_node, :])
+    return data_root_component, new_root_node
 
 
-def get_only_lcc_graph(data):
+def get_only_lcc_graph(data: Data):
     adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=data.num_nodes)
     num_components, component = connected_components(adj, connection="weak")
     if num_components == 1:
@@ -287,7 +286,7 @@ def log1mexp(x: torch.Tensor) -> torch.Tensor:
 def node_in_graph_prob_undirected(
     edge_index: torch.Tensor,
     edge_weights: torch.Tensor,
-    batch: torch.Tensor,
+    num_nodes: int,
     num_iterations: int = 5,
     root_node: None | int = None,
 ) -> torch.Tensor:
@@ -296,7 +295,6 @@ def node_in_graph_prob_undirected(
     """
     assert num_iterations > 0, "Must do at least one iteration"
     assert len(edge_weights.shape) == 1, "Only scalar edge weights are supported"
-    num_nodes = batch.size(0)
     edge_index_nsl, edge_weights_nsl = remove_self_loops(edge_index, edge_weights)
     prob_nodes = torch.ones(num_nodes, device=edge_index.device)
     for _ in range(num_iterations):
@@ -312,7 +310,7 @@ def node_in_graph_prob_undirected(
 def node_in_graph_prob_directed(
     edge_index: torch.Tensor,
     edge_weights: torch.Tensor,
-    batch: torch.Tensor,
+    num_nodes: int,
     num_iterations: int = 5,
     root_node: None | int = None,
 ) -> torch.Tensor:
@@ -321,7 +319,6 @@ def node_in_graph_prob_directed(
     """
     assert num_iterations > 0, "Must do at least one iteration"
     assert len(edge_weights.shape) == 1, "Only scalar edge weights are supported"
-    num_nodes = batch.size(0)
     edge_index_nsl, edge_weights_nsl = remove_self_loops(edge_index, edge_weights)
     prob_nodes = torch.ones(num_nodes, device=edge_index.device)
     for _ in range(num_iterations):
@@ -344,18 +341,18 @@ def node_in_graph_prob_directed(
 def node_in_graph_prob(
     edge_index: torch.Tensor,
     edge_weights: torch.Tensor,
-    batch: torch.Tensor,
+    num_nodes: int,
     undirected: bool,
     num_iterations: int = 5,
     root_node: None | int = None,
 ):
     if edge_weights is None:
-        return torch.ones(batch.size(0))
+        return torch.ones((num_nodes, ))
     fun = node_in_graph_prob_undirected if undirected else node_in_graph_prob_directed
     node_prob = fun(
         edge_index=edge_index,
         edge_weights=edge_weights,
-        batch=batch,
+        num_nodes=num_nodes,
         num_iterations=num_iterations,
         root_node=root_node,
     )

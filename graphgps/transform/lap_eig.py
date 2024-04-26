@@ -12,6 +12,7 @@ def compute_dense_eigh(L, max_freqs, need_full, driver="evr"):
     else:
         # TODO: maybe only take the lowest and highest
         E, U = eigh(L, driver=driver)
+    return E, U
 
 
 @torch.no_grad
@@ -57,7 +58,7 @@ def get_lap_decomp_stats(
 
 
     if not need_full:
-        assert E.size(0) == max_freqs
+        assert E.size == max_freqs
         #E = E[:max_freqs]
         #U = U[:, :max_freqs]
 
@@ -156,7 +157,7 @@ def get_repeated_eigenvalue_slices(E, eta):
     E_diff = torch.diff(E)
     # check if it has "repeated" eigenvalues
     if not torch.any(E_diff < eta):
-        return None, None
+        return torch.tensor([]), torch.tensor([])
 
     pad = E_diff.new_zeros((1, ), dtype=bool)
     edges = torch.diff(torch.cat((pad, E_diff < eta, pad)).to(dtype=torch.int64))

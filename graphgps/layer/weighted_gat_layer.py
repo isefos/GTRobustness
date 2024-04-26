@@ -56,5 +56,5 @@ class WeightedGATConvGraphGymLayer(nn.Module):
         )
 
     def forward(self, batch):
-        batch.x = self.model(batch.x, batch.edge_index)
+        batch.x = self.model(batch.x, batch.edge_index, batch.edge_attr)
         return batch

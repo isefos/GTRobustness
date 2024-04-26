@@ -57,11 +57,13 @@ def prbcd_attack_dataset(model, loaders):
     for i, clean_data in enumerate(clean_loader):
         if cfg.attack.num_attacked_graphs and i >= cfg.attack.num_attacked_graphs:
             break
+        clean_data: Batch
+        assert clean_data.num_graphs == 1
         attack_or_skip_graph(
             i,
             model,
             prbcd,
-            clean_data,
+            clean_data.get_example(0),
             all_stats,
             all_stats_zb,
             attack_epoch_stats,
@@ -84,16 +86,16 @@ def prbcd_attack_dataset(model, loaders):
 
 
 def attack_or_skip_graph(
-    i,
+    i: int,
     model,
-    prbcd,
-    clean_data,
-    all_stats,
-    all_stats_zb,
-    attack_epoch_stats,
-    total_attack_dataset_graph,
-    attack_dataset_slices,
-    total_additional_datasets_graph,
+    prbcd: PRBCDAttack,
+    clean_data: Data,
+    all_stats: dict[str, list],
+    all_stats_zb: dict[str, list],
+    attack_epoch_stats: list,
+    total_attack_dataset_graph: Data | None,
+    attack_dataset_slices: list[tuple[int, int]] | None,
+    total_additional_datasets_graph: Data | None,
 ):
     """
     """
@@ -126,7 +128,13 @@ def attack_or_skip_graph(
     # SKIP SCENARIO 2 - NO BUDGET (SMALL GRAPH)
     if global_budget == 0:
         log_budget_skip(
-            clean_data, num_edges, num_nodes, budget_edges, output_stats_clean, all_stats_zb, attack_epoch_stats
+            clean_data.edge_index,
+            num_edges,
+            num_nodes,
+            budget_edges,
+            output_stats_clean,
+            all_stats_zb,
+            attack_epoch_stats,
         )
         return
 
@@ -137,7 +145,7 @@ def attack_or_skip_graph(
 
     # AUGMENT GRAPH (ONLY WHEN NODE INJECTION)
     attack_graph_data = get_attack_graph(
-        graph_data=clean_data.get_example(0),
+        graph_data=clean_data,
         total_attack_dataset_graph=total_attack_dataset_graph,
         attack_dataset_slice=None if attack_dataset_slices is None else attack_dataset_slices[i],
         total_additional_datasets_graph=total_additional_datasets_graph,
@@ -161,7 +169,7 @@ def attack_or_skip_graph(
         log_used_budget(all_stats, all_stats_zb, global_budget, perts, is_random_attack)
         
         # CHECK OUTPUT
-        data = Batch.from_data_list([Data(x=attack_graph_data.x.clone(), edge_index=pert_edge_index.cpu().clone())])
+        data = Data(x=attack_graph_data.x.clone(), edge_index=pert_edge_index.cpu().clone())
         data, _ = remove_isolated_components(data)
         output_pert = model(data.to(device=cfg.accelerator), unmodified=True)
         output_pert = apply_node_mask(output_pert, node_mask)
@@ -198,7 +206,7 @@ def get_attack_graph(
     total_attack_dataset_graph: None | Data,
     attack_dataset_slice: None | tuple[int, int],
     total_additional_datasets_graph: None | Data,
-) -> tuple[Data, torch.Tensor, torch.Tensor]:
+) -> Data:
     """
     """
     num_edges = graph_data.edge_index.size(1)
@@ -225,7 +233,7 @@ def attack_single_graph(
     node_mask: None | torch.Tensor = None,
     _model_forward_already_wrapped: bool = False,
     _keep_forward_wrapped: bool = False,
-) -> tuple[Data, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     """
     if not _model_forward_already_wrapped:
@@ -276,7 +284,7 @@ def log_incorrect_graph_skip(all_stats, all_stats_zb, attack_epoch_stats):
             all_stats_zb[k].append(None)
 
 
-def log_budget_skip(clean_data, E, N, budget_edges, output_stats_clean, all_stats_zb, attack_epoch_stats):
+def log_budget_skip(edge_index, E, N, budget_edges, output_stats_clean, all_stats_zb, attack_epoch_stats):
     logging.info(
         f"Skipping graph attack because maximum budget is less than 1 "
         f"({cfg.attack.e_budget} of {budget_edges}), so cannot make perturbations."
@@ -290,7 +298,7 @@ def log_budget_skip(clean_data, E, N, budget_edges, output_stats_clean, all_stat
     accumulate_output_stats(all_stats_zb, output_stats_clean, mode="clean", random=False)
     for random in [False, True]:
         accumulate_output_stats_pert(all_stats_zb, output_stats_clean, output_stats_clean, random, True)
-    _, num_stats = zero_budget_edge_and_node_stats(clean_data.edge_index, E, N)
+    _, num_stats = zero_budget_edge_and_node_stats(edge_index, E, N)
     for random in [False, True]:
         log_and_accumulate_num_stats(all_stats_zb, num_stats, random, zero_budget=True)
 

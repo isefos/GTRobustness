@@ -115,10 +115,8 @@ class PRBCDAttackNI(PRBCDAttack):
                 self.block_edge_index,
                 block_weights_off,
             )
-        # create a data / batch object, clone x, since it gets modified inplace in the forward pass
-        data = Batch.from_data_list([
-            Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight, edge_weight_off=edge_weight_off)
-        ])
+        # create a data, clone x, since it gets modified inplace in the forward pass
+        data = Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight, edge_weight_off=edge_weight_off)
         return data
     
     def _add_laplacian_info(self, data):
