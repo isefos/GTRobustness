@@ -36,8 +36,8 @@ def get_split_metric_results(training_results, split: str, metric: str, agg: str
     else:
         # "new"
         all_values = [r[split][metric] for r in training_results]
-    agg_values = [agg_fun(acc) for acc in all_values]
-    epochs_of_agg_values = [np.arange(len(acc))[np.array(acc) == max_acc].tolist() for acc, max_acc in zip(all_values, agg_values)]
+    agg_values = [agg_fun(m) for m in all_values]
+    epochs_of_agg_values = [np.arange(len(m))[np.array(m) == max_m].tolist() for m, max_m in zip(all_values, agg_values)]
     agg_value = max(agg_values)
     ind_of_agg_value = np.arange(len(training_results))[np.array(agg_values) == agg_value].tolist()
     return {
@@ -57,49 +57,53 @@ def get_highest_k_indices(values, k):
 
 
 def get_ranked_results(results, k):
+    metric = results[0]["config"]["graphgym"]["metric_best"]
+    for result in results:
+        assert result["config"]["graphgym"]["metric_best"] == metric, "Not all metrics are the same"
     old_logging = "train" in results[0]["result"]
     if old_logging:
         training_results = [result["result"]["train"] for result in results]
     else:
         training_results = [result["result"]["training"] for result in results]
-    train_acc = get_split_metric_results(training_results, "train", "accuracy", "max", old_logging)
+    train_metric = get_split_metric_results(training_results, "train", metric, "max", old_logging)
     train_loss = get_split_metric_results(training_results, "train", "loss", "min", old_logging)
     # val:
-    val_acc = get_split_metric_results(training_results, "val", "accuracy", "max", old_logging)
+    val_metric = get_split_metric_results(training_results, "val", metric, "max", old_logging)
     best_val_epochs = [r["best_val_epoch"] for r in training_results]
-    for epochs_max_acc, best_val_epoch in zip(val_acc["epochs_of_max_values"], best_val_epochs):
-        assert best_val_epoch in epochs_max_acc
-    best_val_acc_ind = get_highest_k_indices(val_acc["max_values"], k)
+    for epochs_max_metric, best_val_epoch in zip(val_metric["epochs_of_max_values"], best_val_epochs):
+        assert best_val_epoch in epochs_max_metric
+    best_val_metric_ind = get_highest_k_indices(val_metric["max_values"], k)
     val_loss = get_split_metric_results(training_results, "val", "loss", "min", old_logging)
     # test:
-    test_acc = get_split_metric_results(training_results, "test", "accuracy", "max", old_logging)
-    best_test_acc_ind = get_highest_k_indices(test_acc["max_values"], k)
+    test_metric = get_split_metric_results(training_results, "test", metric, "max", old_logging)
+    best_test_metric_ind = get_highest_k_indices(test_metric["max_values"], k)
     test_loss = get_split_metric_results(training_results, "test", "loss", "min", old_logging)
     # looking at interesting epochs of best experiments
-    best_experiments = sorted(set(best_val_acc_ind + best_test_acc_ind))
+    best_experiments = sorted(set(best_val_metric_ind + best_test_metric_ind))
     best_epochs = [
         sorted(
             set(
-                val_acc["epochs_of_max_values"][i]
+                val_metric["epochs_of_max_values"][i]
                 + val_loss["epochs_of_min_values"][i]
-                + test_acc["epochs_of_max_values"][i]
+                + test_metric["epochs_of_max_values"][i]
                 + test_loss["epochs_of_min_values"][i]
             )
         ) 
         for i in best_experiments
     ]
-    best_val_with_test_acc = []
-    for i in best_val_acc_ind:
-        best_val_with_test_acc.append((val_acc["max_values"][i], test_acc["all_values"][i][best_val_epochs[i]], i))
-    best_val_with_test_acc = sorted(best_val_with_test_acc, reverse=True)
+    best_val_with_test_metric = []
+    for i in best_val_metric_ind:
+        best_val_with_test_metric.append((val_metric["max_values"][i], test_metric["all_values"][i][best_val_epochs[i]], i))
+    best_val_with_test_metric = sorted(best_val_with_test_metric, reverse=True)
     return (
+        metric,
         best_experiments,
         best_epochs,
-        best_val_with_test_acc,
-        best_test_acc_ind,
-        train_acc,
-        val_acc,
-        test_acc,
+        best_val_with_test_metric,
+        best_test_metric_ind,
+        train_metric,
+        val_metric,
+        test_metric,
         train_loss,
         val_loss,
         test_loss,
@@ -110,13 +114,14 @@ def write_results_into_file(
     result_log_file,
     results,
     configs,
+    metric,
     best_experiments,
     best_epochs,
-    best_val_with_test_acc,
-    best_test_acc_ind,
-    train_acc,
-    val_acc,
-    test_acc,
+    best_val_with_test_metric,
+    best_test_metric_ind,
+    train_metric,
+    val_metric,
+    test_metric,
     train_loss,
     val_loss,
     test_loss,
@@ -128,12 +133,12 @@ def write_results_into_file(
     num_params,
 ):
     with open(result_log_file, "w") as f:
-        f.write("\nHighest val accurracies:")
-        for (v_a, t_a, i) in best_val_with_test_acc:
-            f.write(f"\n\tval acc: {v_a}, with {t_a} test acc, by experiment: {run_ids[i]}")
-        f.write("\nHighest test accurracies:")
-        for i in best_test_acc_ind:
-            f.write(f"\n\ttest acc: {test_acc['max_values'][i]}, by experiment: {run_ids[i]}")
+        f.write(f"\nHighest val {metric}:")
+        for (v_a, t_a, i) in best_val_with_test_metric:
+            f.write(f"\n\tval {metric}: {v_a}, with {t_a} test {metric}, by experiment: {run_ids[i]}")
+        f.write(f"\nHighest test {metric}:")
+        for i in best_test_metric_ind:
+            f.write(f"\n\ttest {metric}: {test_metric['max_values'][i]}, by experiment: {run_ids[i]}")
         f.write("\nBest experiments with best epochs:")
         for i, epochs in zip(best_experiments, best_epochs):
             f.write(f"\nexperiment: {run_ids[i]}")
@@ -148,8 +153,8 @@ def write_results_into_file(
             run_dir = run_dirs[i]
             if run_dir is not None:
                 f.write(f"\n\t\trun_dir: {run_dir}")
-            f.write(f"\n\tbest val acc: {val_acc['max_values'][i]}, at epochs: {val_acc['epochs_of_max_values'][i]}")
-            f.write(f"\n\tbest test acc: {test_acc['max_values'][i]}, at epochs: {test_acc['epochs_of_max_values'][i]}")
+            f.write(f"\n\tbest val {metric}: {val_metric['max_values'][i]}, at epochs: {val_metric['epochs_of_max_values'][i]}")
+            f.write(f"\n\tbest test {metric}: {test_metric['max_values'][i]}, at epochs: {test_metric['epochs_of_max_values'][i]}")
             f.write(f"\n\tbest val loss: {val_loss['min_values'][i]}, at epochs: {val_loss['epochs_of_min_values'][i]}")
             f.write(f"\n\tbest test loss: {test_loss['min_values'][i]}, at epochs: {test_loss['epochs_of_min_values'][i]}")
             f.write("\n\tconfigs:")
@@ -164,9 +169,9 @@ def write_results_into_file(
             f.write("\n\tinteresting epochs:")
             for e in epochs:
                 f.write(f"\n\t\tepoch: {e}")
-                f.write(f"\n\t\t\ttrain acc: {train_acc['all_values'][i][e]}")
-                f.write(f"\n\t\t\tval acc: {val_acc['all_values'][i][e]}")
-                f.write(f"\n\t\t\ttest acc: {test_acc['all_values'][i][e]}")
+                f.write(f"\n\t\t\ttrain {metric}: {train_metric['all_values'][i][e]}")
+                f.write(f"\n\t\t\tval {metric}: {val_metric['all_values'][i][e]}")
+                f.write(f"\n\t\t\ttest {metric}: {test_metric['all_values'][i][e]}")
                 f.write(f"\n\t\t\ttrain loss: {train_loss['all_values'][i][e]}")
                 f.write(f"\n\t\t\tval loss: {val_loss['all_values'][i][e]}")
                 f.write(f"\n\t\t\ttest loss: {test_loss['all_values'][i][e]}")
@@ -176,10 +181,11 @@ def write_results_into_file(
 def save_single_plots(
     results,
     results_path,
+    metric,
     best_experiments,
-    train_acc,
-    val_acc,
-    test_acc,
+    train_metric,
+    val_metric,
+    test_metric,
     train_loss,
     val_loss,
     test_loss,
@@ -189,22 +195,22 @@ def save_single_plots(
     single_plots_dir = results_path / "single-plots"
     train_plot_dir = single_plots_dir / "training"
     train_plot_dir.mkdir(parents=True)
-    fig, ((ax_acc), (ax_loss)) = plt.subplots(nrows=2, ncols=1, figsize=(12, 8))
+    fig, (((ax_metric)), (ax_loss)) = plt.subplots(nrows=2, ncols=1, figsize=(12, 8))
     for i in best_experiments:
-        ax_acc.set_title("Accuracy")
+        (ax_metric).set_title(metric)
         ax_loss.set_title("Loss")
-        x = np.arange(len(val_acc['all_values'][i]))
-        ax_acc.plot(x, train_acc['all_values'][i], "-g", label='train')
-        ax_acc.plot(x, val_acc['all_values'][i], "-b", label='val')
-        ax_acc.plot(x, test_acc['all_values'][i], "-r", label='test')
-        ax_acc.legend()
+        x = np.arange(len(val_metric['all_values'][i]))
+        (ax_metric).plot(x, train_metric['all_values'][i], "-g", label='train')
+        (ax_metric).plot(x, val_metric['all_values'][i], "-b", label='val')
+        (ax_metric).plot(x, test_metric['all_values'][i], "-r", label='test')
+        (ax_metric).legend()
         ax_loss.plot(x, train_loss['all_values'][i], "-g", label='train')
         ax_loss.plot(x, val_loss['all_values'][i], "-b", label='val')
         ax_loss.plot(x, test_loss['all_values'][i], "-r", label='test')
         ax_loss.legend()
         fig.savefig(train_plot_dir / f"{run_ids[i]}.png")
         plt.close(fig)
-        ax_acc.clear()
+        (ax_metric).clear()
         ax_loss.clear()
 
     cfg_plot_dir = single_plots_dir / "configs"
@@ -212,15 +218,15 @@ def save_single_plots(
     # filter results for lr < 1.3e-3
     # mask = [result["config"]["graphgym"]["optim"]["base_lr"] < 1.3e-3 for result in results]
     # results = [result for result, m in zip(results, mask) if m]
-    # val_max_acc = [v for v, m in zip(val_acc["max_values"], mask) if m]
-    # test_max_acc = [v for v, m in zip(test_acc["max_values"], mask) if m]
-    val_max_acc = val_acc["max_values"]
-    test_max_acc = test_acc["max_values"]
+    # val_max_metric = [v for v, m in zip(val_metric["max_values"], mask) if m]
+    # test_max_metric = [v for v, m in zip(test_metric["max_values"], mask) if m]
+    val_max_metric = val_metric["max_values"]
+    test_max_metric = test_metric["max_values"]
 
     for (conf, discrete, log) in configs_all_info:
         fig, ((ax_val), (ax_test)) = plt.subplots(nrows=2, ncols=1, figsize=(12, 8))
-        ax_val.set_title(f"max val accuracy / {conf}")
-        ax_test.set_title(f"max test accuracy / {conf}")
+        ax_val.set_title(f"max val {metric} / {conf}")
+        ax_test.set_title(f"max test {metric} / {conf}")
         x = []
         for result in results:
             v = result["config"]
@@ -249,18 +255,18 @@ def save_single_plots(
             val_dataset = []
             test_dataset = []
             for v in values:
-                val_dataset.append(np.array(val_max_acc)[x == v])
-                test_dataset.append(np.array(test_max_acc)[x == v])
+                val_dataset.append(np.array(val_max_metric)[x == v])
+                test_dataset.append(np.array(test_max_metric)[x == v])
             ax_val.violinplot(val_dataset, values, showmeans=True, showmedians=True)
             ax_test.violinplot(test_dataset, values, showmeans=True, showmedians=True)
             x = x + 0.5 * (np.random.rand(len(x)) - 0.5)
-            ax_val.scatter(x, val_max_acc, s=12, c="g")
-            ax_test.scatter(x, test_max_acc, s=12, c="g")
+            ax_val.scatter(x, val_max_metric, s=12, c="g")
+            ax_test.scatter(x, test_max_metric, s=12, c="g")
             ax_val.set_xticks(values, labels=tick_labels)
             ax_test.set_xticks(values, labels=tick_labels)
         else:
-            ax_val.scatter(x, val_max_acc)
-            ax_test.scatter(x, test_max_acc)
+            ax_val.scatter(x, val_max_metric)
+            ax_test.scatter(x, test_max_metric)
             if log:
                 ax_val.set_xscale('log')
                 ax_test.set_xscale('log')
@@ -337,13 +343,14 @@ def main(
     ) = get_collection_results(collection, model, filter_dict)
     configs = [c[0] for c in configs_all_info]
     (  # process results
+        metric,
         best_experiments,
         best_epochs,
-        best_val_with_test_acc,
-        best_test_acc_ind,
-        train_acc,
-        val_acc,
-        test_acc,
+        best_val_with_test_metric,
+        best_test_metric_ind,
+        train_metric,
+        val_metric,
+        test_metric,
         train_loss,
         val_loss,
         test_loss,
@@ -354,13 +361,14 @@ def main(
         result_log_file,
         results,
         configs,
+        metric,
         best_experiments,
         best_epochs,
-        best_val_with_test_acc,
-        best_test_acc_ind,
-        train_acc,
-        val_acc,
-        test_acc,
+        best_val_with_test_metric,
+        best_test_metric_ind,
+        train_metric,
+        val_metric,
+        test_metric,
         train_loss,
         val_loss,
         test_loss,
@@ -376,10 +384,11 @@ def main(
         save_single_plots(
             results,
             results_path,
+            metric,
             best_experiments,
-            train_acc,
-            val_acc,
-            test_acc,
+            train_metric,
+            val_metric,
+            test_metric,
             train_loss,
             val_loss,
             test_loss,
@@ -523,6 +532,7 @@ hyperparameters = {
         ("graphgym.gnn.layers_post_mp", True, False),
         ("graphgym.gnn.act", True, False),
         ("graphgym.gnn.dropout", False, False),
+        ("graphgym.gnn.agg", True, False),
         ("graphgym.train.homophily_regularization", False, False),
         ("graphgym.train.homophily_regularization_gt_weight", False, False),
     ],
