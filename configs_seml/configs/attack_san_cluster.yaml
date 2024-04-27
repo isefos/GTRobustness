@@ -47,9 +47,6 @@ fixed:
       post_layers: 0
       raw_norm_type: none
 
-    robustness_unit_test:
-      enable: false
-
     attack:
       enable: true
       num_attacked_graphs: 0
