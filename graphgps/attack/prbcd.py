@@ -10,7 +10,7 @@ from torch_geometric.utils import (
     coalesce,
     to_undirected,
 )
-from torch_geometric.data import Data, Batch
+from torch_geometric.data import Data
 from graphgps.attack.preprocessing import remove_isolated_components
 from graphgps.transform.lap_eig import get_lap_decomp_stats, get_repeated_eigenvalue_slices
 from torch_geometric.graphgym.loss import compute_loss

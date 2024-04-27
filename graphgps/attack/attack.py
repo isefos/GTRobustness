@@ -27,7 +27,7 @@ from graphgps.attack.postprocessing import (
 def prbcd_attack_dataset(model, loaders):
     """
     """
-    if cfg.dataset.task == "node" and (cfg.attack.enable_node_injection or cfg.attack.remove_isolated_components):
+    if cfg.dataset.task == "node" and (cfg.attack.node_injection.enable or cfg.attack.remove_isolated_components):
         raise NotImplementedError(
             "Need to handle the node mask (also to calculate attack success rate) "
             "with node injection or pruning away isolated components."
@@ -35,7 +35,7 @@ def prbcd_attack_dataset(model, loaders):
     logging.info("Start of attack:")
     model.eval()
     model.forward = forward_wrapper(model.forward)
-    if cfg.attack.enable_node_injection:
+    if cfg.attack.node_injection.enable:
         prbcd = PRBCDAttackNI(model)
     else:
         prbcd = PRBCDAttack(model)
@@ -44,14 +44,14 @@ def prbcd_attack_dataset(model, loaders):
     # PREPARE DATASETS
     dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
     total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = None, None, None
-    if cfg.attack.enable_node_injection:
+    if cfg.attack.node_injection.enable:
         # TODO: attach a global index to all possible nodes, that can later be used to trace which nodes where added
         # how many times
         total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = get_total_dataset_graphs(
             inject_nodes_from_attack_dataset=inject_nodes_from_attack_dataset,
             dataset_to_attack=dataset_to_attack,
             additional_injection_datasets=additional_injection_datasets,
-            include_root_nodes=cfg.attack.include_root_nodes_for_injection,
+            include_root_nodes=cfg.attack.node_injection.include_root_nodes,
         )
     clean_loader = get_attack_loader(dataset_to_attack)
     for i, clean_data in enumerate(clean_loader):
@@ -210,7 +210,7 @@ def get_attack_graph(
     """
     """
     num_edges = graph_data.edge_index.size(1)
-    if cfg.attack.enable_node_injection:
+    if cfg.attack.node_injection.enable:
         assert attack_dataset_slice is not None
         graph_data_augmented = get_augmented_graph(
             graph=graph_data.clone(),
@@ -226,7 +226,7 @@ def get_attack_graph(
 
 def attack_single_graph(
     attack_graph_data: Data,
-    model,
+    model: torch.nn.Module,
     attack: PRBCDAttack,
     global_budget: int,
     random_attack: bool = False,
@@ -328,12 +328,12 @@ def check_augmentation_correctness(model, loaders):
     """
     dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
     total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = None, None, None
-    if cfg.attack.enable_node_injection:
+    if cfg.attack.node_injection.enable:
         total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = get_total_dataset_graphs(
             inject_nodes_from_attack_dataset=inject_nodes_from_attack_dataset,
             dataset_to_attack=dataset_to_attack,
             additional_injection_datasets=additional_injection_datasets,
-            include_root_nodes=cfg.attack.include_root_nodes_for_injection,
+            include_root_nodes=cfg.attack.node_injection.include_root_nodes,
         )
     clean_loader = get_attack_loader(dataset_to_attack)
     for i, clean_data in enumerate(clean_loader):

@@ -38,6 +38,7 @@ def dataset_cfg(cfg):
     # bla
     cfg.attack.epochs_resampling = 100
 
+    # how many gradient step updates before new edges are sampled
     cfg.attack.resample_period = 1
 
     # bla
@@ -52,6 +53,7 @@ def dataset_cfg(cfg):
     # bla
     cfg.attack.eps = 1e-7
 
+    # Instead of initializing all new edges with eps, add some random variation
     cfg.attack.eps_init_noised = False
 
     # used for gradient clipping, to disable gradient clipping set to 0.0
@@ -81,47 +83,61 @@ def dataset_cfg(cfg):
     # None (set to same as loss), 'train', 'masked', 'margin', 'prob_margin', or 'tanh_margin' (or callable)
     cfg.attack.metric = None
 
-    # do we want to compute the node probability approximation or not (probably more important for node injection attacks)
+    # is important for node injection attacks, where graph is huge, but only some nodes get added, rest is disconnected
+    cfg.attack.remove_isolated_components = False
+
+    # None or int -> give an int (e.g. 0) to define that the root node of a graph will always be on the given index (used for removing isolated components)
+    cfg.attack.root_node_idx = None
+
+    # do we want to compute the node probability approximation or not (more important for node injection attacks)
     cfg.attack.node_prob_enable = True
 
     # how many iterations of the node probability approximation computation to do
-    cfg.attack.node_prob_iterations = 5
+    cfg.attack.node_prob_iterations = 3
 
     # compute the node probability approximation directly (faster) or in log space (better for numerical stability)
     cfg.attack.node_prob_log = True
 
-    # bla
-    cfg.attack.skip_incorrect_graph_classification = True
+    # will not attack a graph which is already incorrectly classified (faster, but if we want to transfer attack should keep False)
+    cfg.attack.skip_incorrect_graph_classification = False
+
+    # For node injection attacks (sampling all edges independently):
+    cfg.attack.node_injection = CN()
 
     # set True to do a node injection attack
-    cfg.attack.enable_node_injection = False
+    cfg.attack.node_injection.enable = False
 
     # when doing node injection attack, include nodes from train split to consider for injection
-    cfg.attack.node_injection_from_train = True
+    cfg.attack.node_injection.from_train = True
 
     # when doing node injection attack, include nodes from val split to consider for injection
-    cfg.attack.node_injection_from_val = True
+    cfg.attack.node_injection.from_val = True
 
     # when doing node injection attack, include nodes from test split to consider for injection
-    cfg.attack.node_injection_from_test = True
+    cfg.attack.node_injection.from_test = True
 
-    # bla
-    cfg.attack.existing_node_prob_multiplier = 1
+    # whether the existing graph edges can be changed, or only new edges added
+    cfg.attack.node_injection.allow_existing_graph_pert = True
 
-    # bla
-    cfg.attack.allow_existing_graph_pert = True
+    # sample only edges from existing nodes to new nodes, not from new to new
+    cfg.attack.node_injection.sample_only_connected = False
 
-    # bla
-    cfg.attack.remove_isolated_components = True
+    # when also sampling new-new edges (may be much more), can set a higher weight to sample edges from existing nodes (often minority, but more useful)
+    cfg.attack.node_injection.existing_node_prob_multiplier = 1
 
-    # None or int -> give an int (e.g. 0) to tell the execution that the root node of a graph will always be on the given index
-    cfg.attack.root_node_idx = None
+    # for some dataset (e.g. UPFD) the root nodes are special, and each graph should only have one, therefore shouldn't be included for injection
+    cfg.attack.node_injection.include_root_nodes = True
 
-    # bla
-    cfg.attack.include_root_nodes_for_injection = True
+    # for tree datasets, when we inject a new node, we need to make sure it still has a tree structure
+    cfg.attack.node_injection.sample_only_trees = False
 
-    # bla
-    cfg.attack.sample_only_connected = False
+    # node sampling, sample the nodes to inject first, then the edges to those nodes, more efficient in the sense that can sample more edges while adding less nodes
+    cfg.attack.node_injection.node_sampling = CN()
 
-    # bla
-    cfg.attack.sample_only_trees = False
+    cfg.attack.node_injection.node_sampling.enable = False
+
+    cfg.attack.node_injection.node_sampling.min_add_nodes = 100
+
+    cfg.attack.node_injection.node_sampling.min_total_nodes = 1000
+
+    cfg.attack.node_injection.node_sampling.max_block_size = 20_000

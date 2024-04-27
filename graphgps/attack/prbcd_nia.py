@@ -6,7 +6,7 @@ from torch_geometric.utils import (
     to_undirected,
     to_scipy_sparse_matrix,
 )
-from torch_geometric.data import Data, Batch
+from torch_geometric.data import Data
 from graphgps.attack.prbcd import PRBCDAttack
 from graphgps.attack.sampling import WeightedIndexSampler, get_connected_sampling_fun
 from graphgps.transform.lap_eig import get_lap_decomp_stats
@@ -25,24 +25,28 @@ class PRBCDAttackNI(PRBCDAttack):
         super().__init__(model)
 
         # settings different sampling startegies
-        self.existing_node_prob_multiplier = cfg.attack.existing_node_prob_multiplier
+        self.existing_node_prob_multiplier = cfg.attack.node_injection.existing_node_prob_multiplier
         self.included_weighted = not self.existing_node_prob_multiplier == 1
-        assert not (self.included_weighted and cfg.attack.sample_only_connected), (
+        assert not (self.included_weighted and cfg.attack.node_injection.sample_only_connected), (
             "Either sample only from connected edges, or weighted (with relative weight for connected edges)"
         )
-        self.sample_only_connected = cfg.attack.sample_only_connected
-        assert cfg.attack.allow_existing_graph_pert or self.sample_only_connected or self.included_weighted, (
+        self.sample_only_connected = cfg.attack.node_injection.sample_only_connected
+        assert (
+            cfg.attack.node_injection.allow_existing_graph_pert
+            or self.sample_only_connected
+            or self.included_weighted
+        ), (
             "not allowing existing graph perturbations is only supported for "
             "weighted sampling (using existing_node_prob_multiplier != 1) or "
             "sampling only 'connected' edges (using sample_only_connected=True)"
         )
-        self.allow_existing_graph_pert = cfg.attack.allow_existing_graph_pert
+        self.allow_existing_graph_pert = cfg.attack.node_injection.allow_existing_graph_pert
 
         # will make sure that perturbations remain trees
-        assert not (cfg.attack.sample_only_trees and not self.is_undirected), (
+        assert not (cfg.attack.node_injection.sample_only_trees and not self.is_undirected), (
             "Sampling only trees is only supported for undirected graphs"
         )
-        self.sample_only_trees = cfg.attack.sample_only_trees
+        self.sample_only_trees = cfg.attack.node_injection.sample_only_trees
 
     def _setup_sampling(self):
         num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
@@ -233,3 +237,17 @@ class PRBCDAttackNI(PRBCDAttack):
         if not is_undirected:
             edges = torch.cat((edges, edges[[1, 0], :]), dim=0)
         return edges
+
+
+class PRBCDAttackNISampling(PRBCDAttack):
+    def __init__(self, model: torch.nn.Module):
+        super(PRBCDAttackNI, self).__init__(model)
+        self.sample_only_trees = cfg.attack.node_injection.sample_only_trees
+        # will make sure that perturbations remain trees
+        assert not (self.sample_only_trees and not self.is_undirected), (
+            "Sampling only trees is only supported for undirected graphs"
+        )
+        
+    def _setup_sampling(self):
+        # TODO: sample the nodes first, then the edges to those nodes
+        return
