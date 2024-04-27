@@ -13,11 +13,11 @@ def get_attack_datasets(loaders):
     additional_injection_datasets = None
     inject_nodes_from_attack_dataset = False
 
-    if cfg.attack.enable_node_injection:
+    if cfg.attack.node_injection.enable:
         include_additional_datasets = [
-            cfg.attack.node_injection_from_train,
-            cfg.attack.node_injection_from_val,
-            cfg.attack.node_injection_from_test,
+            cfg.attack.node_injection.from_train,
+            cfg.attack.node_injection.from_val,
+            cfg.attack.node_injection.from_test,
         ]
         inject_nodes_from_attack_dataset = include_additional_datasets[split_to_attack_idx]
         include_additional_datasets[split_to_attack_idx] = False
