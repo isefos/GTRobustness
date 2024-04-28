@@ -142,16 +142,24 @@ def setup_run(graphgym, dims_per_head, dims_per_head_PE, seml_seed=None, jupyter
     if dims_per_head_PE > 0 and graphgym["posenc_WLapPE"]["dim_pe"] == 0:
         dim_pe = dims_per_head_PE * graphgym["posenc_WLapPE"]["n_heads"]
         graphgym["posenc_WLapPE"]["dim_pe"] = dim_pe
+
     # set defaults
     set_cfg(cfg)
+
     # find and set the paths
     if jupyter:
         graphgym["out_dir"] += "-jupyter"
-    run_type = "train"
+
+    pt = graphgym["pretrained"]
+    if pt.get("dir", "") and not pt.get("finetune", True):
+        run_type = "pretrained"
+    else: 
+        run_type = "train"
     if graphgym.get("robustness_unit_test", {}).get("enable", False):
-        run_type = "rut"
+        run_type += "-rut"
     elif graphgym.get("attack", {}).get("enable", False):
-        run_type = "attack"
+        run_type += "-attack"
+
     output_dir = os.path.join(
         graphgym["out_dir"],
         model_type,
@@ -160,18 +168,21 @@ def setup_run(graphgym, dims_per_head, dims_per_head_PE, seml_seed=None, jupyter
     )
     os.makedirs(output_dir, exist_ok=True)
     graphgym["out_dir"] = output_dir
+
     seed_graphgym = graphgym.get("seed", cfg.seed)
     run_identifier = f"s{seed_graphgym}-{datetime.datetime.now().strftime('d%Y%m%d-t%H%M%S%f')}"
     if seml_seed is not None:
         run_identifier += f"-{seml_seed}"
     run_dir = os.path.join(output_dir, run_identifier)
     os.makedirs(run_dir)
+
     # save the config and load using YACS
     graphgym_cfg_file = os.path.join(run_dir, "configs_from_seml.yaml")
     with open(graphgym_cfg_file, 'w') as f:
         yaml.dump(graphgym, f)
     args = Namespace(cfg_file=str(graphgym_cfg_file), opts=[])
     load_cfg(cfg, args)
+
     # set last configs and dump final
     cfg.run_dir = run_dir
     cfg.cfg_dest = f"{run_identifier}/config.yaml"
@@ -188,6 +199,6 @@ def setup_jupyter(cfg_path, exp_index: int = 0):
     _convert_numpy_to_float(g_cfg)
     dims_per_head = exp_cfgs[exp_index].get("dims_per_head", 0)
     dims_per_head_PE = exp_cfgs[exp_index].get("dims_per_head_PE", 0)
-    setup_run(g_cfg, dims_per_head, dims_per_head_PE, jupyter=False)
+    setup_run(g_cfg, dims_per_head, dims_per_head_PE, jupyter=True)
     loaders, loggers, model, optimizer, scheduler = initialize_run(cfg)
     return loaders, loggers, model, optimizer, scheduler

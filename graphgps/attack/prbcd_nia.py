@@ -48,7 +48,7 @@ class PRBCDAttackNI(PRBCDAttack):
         )
         self.sample_only_trees = cfg.attack.node_injection.sample_only_trees
 
-    def _setup_sampling(self):
+    def _setup_sampling(self, **kwargs):
         num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
 
         # 'Weighted' sampling
@@ -248,6 +248,6 @@ class PRBCDAttackNISampling(PRBCDAttack):
             "Sampling only trees is only supported for undirected graphs"
         )
         
-    def _setup_sampling(self):
+    def _setup_sampling(self, **kwargs):
         # TODO: sample the nodes first, then the edges to those nodes
         return

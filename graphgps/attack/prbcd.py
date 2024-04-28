@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor
+from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from torch_geometric.utils import (
     coalesce,
@@ -12,6 +13,7 @@ from torch_geometric.utils import (
 )
 from torch_geometric.data import Data
 from graphgps.attack.preprocessing import remove_isolated_components
+from graphgps.attack.sampling import WeightedIndexSampler2
 from graphgps.transform.lap_eig import get_lap_decomp_stats, get_repeated_eigenvalue_slices
 from torch_geometric.graphgym.loss import compute_loss
 import logging
@@ -113,11 +115,39 @@ class PRBCDAttack(torch.nn.Module):
         # gradient clipping
         self.max_edge_weight_update = cfg.attack.max_edge_weight_update
 
-    def _setup_sampling(self):
+    def _setup_sampling(self, x, **kwargs):
         assert self.num_nodes == self.num_connected_nodes, "structure attack should not include isolated nodes"
-        num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)        
-        # 'Normal' sampling (all possible edges)
-        self.sample_edge_indices = lambda n: torch.randint(num_possible_edges, (n, ), device=self.device)
+        num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
+        if cfg.attack.cluster_sampling:
+            # for the CLUSTER dataset, we don't allow modifying edges to the labeled nodes
+            assert self.is_undirected
+            label_nodes = torch.nonzero(x[:, 1:].sum(1)).flatten()
+            assert label_nodes.size(0) == 6
+            all_nodes = torch.arange(self.num_nodes, dtype=torch.long, device=self.device)
+            edges_to_label_nodes = torch.cat(
+                (
+                    label_nodes.repeat_interleave(self.num_nodes)[None, :],
+                    all_nodes.repeat(6)[None, :],
+                ),
+                dim=0,
+            )
+            # remove the 6 self loops
+            edges_to_label_nodes = edges_to_label_nodes[:, edges_to_label_nodes[0, :] != edges_to_label_nodes[1, :]]
+            # make sure row is smaller than col
+            edges_to_label_nodes = edges_to_label_nodes.sort(0)[0]
+            # unique to eliminate the few duplicates between labeled nodes
+            lin_idx = self._triu_to_linear_idx(self.num_nodes, edges_to_label_nodes).unique(sorted=True)
+            num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
+            self._weighted_sampler = WeightedIndexSampler2(
+                {0: lin_idx},
+                default_weight=1,
+                max_index=num_possible_edges-1,
+                output_device=self.device,
+            )
+            self.sample_edge_indices = lambda n: self._weighted_sampler.sample(n)
+        else:
+            # 'Normal' sampling (all possible edges)
+            self.sample_edge_indices = lambda n: torch.randint(num_possible_edges, (n, ), device=self.device)
 
     def _setup_clean_lap_eigen(self, edge_index):
         self.E_lap, self.U_lap, self.lap_edge_index, self.lap_edge_attr = get_lap_decomp_stats(
@@ -143,7 +173,7 @@ class PRBCDAttack(torch.nn.Module):
         self.connected_nodes: torch.Tensor = self.edge_index.unique(sorted=True)
         self.num_connected_nodes = self.connected_nodes.size(0)
         assert self.connected_nodes[-1] == self.num_connected_nodes - 1, "some nodes of the clean graph are isolated"
-        self._setup_sampling()
+        self._setup_sampling(x=x)
         # get the clean laplacian eigendecomposition
         if cfg.posenc_WLapPE.enable and not random_baseline:
             assert self.is_undirected
@@ -156,6 +186,7 @@ class PRBCDAttack(torch.nn.Module):
         labels: Tensor,
         budget: int,
         idx_attack: Optional[Tensor] = None,
+        tb_writer: None | SummaryWriter = None,
         **kwargs,
     ) -> Tuple[Tensor, Tensor]:
         """Attack the predictions for the provided model and graph.
@@ -190,9 +221,7 @@ class PRBCDAttack(torch.nn.Module):
         for step in tqdm(step_sequence, disable=not self.log, desc='Attack'):
             loss, gradient = self._forward_and_gradient(x, labels, idx_attack, **kwargs)
 
-            scalars = self._update(step, gradient, x, labels, budget, idx_attack, **kwargs)
-
-            scalars['loss'] = loss.item()
+            scalars = self._update(step, gradient, x, labels, budget, loss, idx_attack, tb_writer, **kwargs)
             self._append_statistics(scalars)
 
         perturbed_edge_index, flipped_edges = self._close(x, labels, budget, idx_attack, **kwargs)
@@ -210,6 +239,7 @@ class PRBCDAttack(torch.nn.Module):
         labels: Tensor,
         budget: int,
         idx_attack: Optional[Tensor] = None,
+        tb_writer: None | SummaryWriter = None,  # not used
         **kwargs,
     ) -> Tuple[Tensor, Tensor]:
         """Attack the predictions for the provided model and graph.
@@ -289,12 +319,15 @@ class PRBCDAttack(torch.nn.Module):
         x: Tensor,
         labels: Tensor,
         budget: int,
+        loss: Tensor,
         idx_attack: Optional[Tensor] = None,
+        tb_writer: None | SummaryWriter = None,
         **kwargs,
     ) -> Dict[str, float]:
         """Update edge weights given gradient."""
         # Gradient update step (Algorithm 1, line 7)
-        self.block_edge_weight = self._update_edge_weights(budget, self.block_edge_weight, epoch, gradient)
+        lr = self._get_learning_rate(budget, epoch)
+        self.block_edge_weight = self._update_edge_weights(self.block_edge_weight, gradient, lr)
 
         # For monitoring
         pmass_update = torch.clamp(self.block_edge_weight, 0, 1)
@@ -310,7 +343,12 @@ class PRBCDAttack(torch.nn.Module):
             prob_mass_after_projection_nonzero_weights=(self.block_edge_weight > self.coeffs['eps']).sum().item(),
             prob_mass_after_projection_max=self.block_edge_weight.max().item(),
         )
+        scalars['lr'] = lr
+        scalars['max_abs_grad'] = gradient.abs().max().item()
+        scalars['loss'] = loss.item()
+
         if not self.coeffs['with_early_stopping']:
+            self._write_scalars_to_tb(tb_writer, scalars, epoch)            
             return scalars
 
         # Calculate metric after the current epoch (overhead
@@ -322,6 +360,7 @@ class PRBCDAttack(torch.nn.Module):
         edge_index = self._get_discrete_sampled_graph(topk_block_edge_weight)[0]
         
         prediction = self._forward(x, edge_index, None, discrete=True, **kwargs)
+        loss = self.loss(prediction, labels, idx_attack)
         metric = self.metric(prediction, labels, idx_attack)
 
         # Save best epoch for early stopping
@@ -344,7 +383,45 @@ class PRBCDAttack(torch.nn.Module):
             self.block_edge_weight = block_edge_weight.to(self.device)
 
         scalars['metric'] = metric.item()
+        scalars['loss_discrete'] = loss.item()
+        self._write_scalars_to_tb(tb_writer, scalars, epoch)
         return scalars
+    
+    @staticmethod
+    def _write_scalars_to_tb(tb_writer, scalars, epoch):
+        if tb_writer is not None:
+            tb_writer.add_scalar('lr', scalars['lr'], epoch)
+            tb_writer.add_scalar('max_abs_grad', scalars['max_abs_grad'], epoch)
+            tb_writer.add_scalars(
+                'prob_mass',
+                {
+                    'after_update': scalars['prob_mass_after_update'],
+                    'after_projection': scalars['prob_mass_after_projection']
+                },
+                epoch,
+            )
+            tb_writer.add_scalars(
+                'prob_max',
+                {
+                    'after_update': scalars['prob_mass_after_update_max'],
+                    'after_projection': scalars['prob_mass_after_projection_max']
+                },
+                epoch,
+            )
+            tb_writer.add_scalar(
+                'num_nonzero_weight_after_projection',
+                scalars['prob_mass_after_projection_nonzero_weights'],
+                epoch,
+            )
+            if 'loss_discrete' not in scalars:
+                tb_writer.add_scalar('loss_continuous', scalars['loss'], epoch)
+            else:
+                tb_writer.add_scalar('metric_discrete', scalars['metric'], epoch)
+                tb_writer.add_scalars(
+                    'loss',
+                    {'continuous': scalars['loss'], 'discrete': scalars['loss_discrete']},
+                    epoch,
+                )
 
     @torch.no_grad()
     def _close(
@@ -598,19 +675,16 @@ class PRBCDAttack(torch.nn.Module):
         if best_num_removed_edges > 0:
             logging.info(f"Removed {num_removed_edges} edges to satisfy constraint.")
         return edge_index, flipped_edges
-
-    def _update_edge_weights(
-        self,
-        budget: int,
-        block_edge_weight: Tensor,
-        epoch: int,
-        gradient: Tensor
-    ) -> Tensor:
+    
+    def _get_learning_rate(self, budget: int, epoch: int) -> float:
         # The learning rate is refined heuristically, s.t. (1) it is
         # independent of the number of perturbations (assuming an undirected
         # adjacency matrix) and (2) to decay learning rate during fine-tuning
         # (i.e. fixed search space).
         lr = (budget / self.num_nodes * self.lr / np.sqrt(max(0, epoch - self.epochs_resampling) + 1))
+        return lr
+
+    def _update_edge_weights(self, block_edge_weight: Tensor, gradient: Tensor, lr: float) -> Tensor:
         if self.max_edge_weight_update > 0:
             max_gradient = self.max_edge_weight_update / lr
             gradient = torch.clamp(gradient, -max_gradient, max_gradient)

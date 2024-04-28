@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from itertools import compress
 
 
-def get_empty_accumulated_stats():
+def get_accumulated_stat_keys():
     keys = [
         "budget_used",
         "budget_used_rel",
@@ -35,9 +35,9 @@ def get_empty_accumulated_stats():
         keys.extend(asr_keys)
 
         if cfg.attack.prediction_level == "node":
-            key_prefixes = ["correct_acc", "margin", "margin_mean", "margin_median", "margin_min", "margin_max"]
+            key_prefixes = ["correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max"]
         else:
-            key_prefixes = ["probs", "logits", "correct", "margin"]
+            key_prefixes = ["correct", "margin"]  # "probs", "logits"
         
         keys.extend([k + "_clean" for k in key_prefixes])
         keys.extend([k + "_pert" for k in key_prefixes])
@@ -47,10 +47,7 @@ def get_empty_accumulated_stats():
     else:
         raise NotImplementedError
     
-    zero_budget_keys = keys.copy()
-    keys.append("perturbation")
-    
-    return {k: [] for k in sorted(keys)}, {k: [] for k in sorted(zero_budget_keys)}
+    return keys
 
 
 def get_output_stats(y_gt, model_output):

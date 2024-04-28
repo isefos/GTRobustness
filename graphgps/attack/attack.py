@@ -1,5 +1,8 @@
 import torch
 import logging
+import json
+from pathlib import Path
+from tensorboardX import SummaryWriter
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.loader import DataLoader
 from torch_geometric.data import Data, Batch
@@ -12,7 +15,7 @@ from graphgps.attack.dataset_attack import (
     get_attack_datasets,
 )
 from graphgps.attack.postprocessing import (
-    get_empty_accumulated_stats,
+    get_accumulated_stat_keys,
     accumulate_output_stats,
     accumulate_output_stats_pert,
     get_output_stats,
@@ -22,6 +25,11 @@ from graphgps.attack.postprocessing import (
     log_and_accumulate_num_stats,
     log_summary_stats,
 )
+
+
+def _neg_accuracy_metric(pred, y, mask):
+    # TODO: how to handle when no mask. enable when selected
+    return (pred.argmax(-1)[mask] == y[mask]).float().mean()
 
 
 def prbcd_attack_dataset(model, loaders):
@@ -39,8 +47,17 @@ def prbcd_attack_dataset(model, loaders):
         prbcd = PRBCDAttackNI(model)
     else:
         prbcd = PRBCDAttack(model)
-    attack_epoch_stats = []
-    all_stats, all_stats_zb = get_empty_accumulated_stats()
+    stat_keys = get_accumulated_stat_keys()
+    all_stats = {k: [] for k in sorted(stat_keys)}
+    all_stats_zb = None
+    if cfg.attack.minimum_budget < 1:
+        all_stats_zb = {k: [] for k in sorted(stat_keys)}
+    perturbations: dict[int, list[list[int]]] = {}
+
+    # create tensorboard directory
+    tb_logdir = Path(cfg.run_dir) / "tb_attack_stats"
+    tb_logdir.mkdir(parents=True)
+
     # PREPARE DATASETS
     dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
     total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = None, None, None
@@ -59,6 +76,7 @@ def prbcd_attack_dataset(model, loaders):
             break
         clean_data: Batch
         assert clean_data.num_graphs == 1
+        tb_writer = SummaryWriter(tb_logdir / f"graph_{i}")
         attack_or_skip_graph(
             i,
             model,
@@ -66,22 +84,32 @@ def prbcd_attack_dataset(model, loaders):
             clean_data.get_example(0),
             all_stats,
             all_stats_zb,
-            attack_epoch_stats,
+            perturbations,
             total_attack_dataset_graph,
             attack_dataset_slices,
             total_additional_datasets_graph,
+            tb_writer,
         )
-    summary_stats = log_summary_stats(all_stats)
-    summary_stats_zb = log_summary_stats(all_stats_zb, zb=True)
+        tb_writer.close()
     model.forward = model.forward.__wrapped__
     logging.info("End of attack.")
-    results = {
-        "avg": summary_stats,
-        "avg_including_zero_budget": summary_stats_zb,
-        "all": all_stats,
-        "all_including_zero_budget": all_stats_zb,
-        "attack_stats": attack_epoch_stats,
-    }
+
+    # save perturbations
+    pert_file = Path(cfg.run_dir) / "perturbations.json"
+    with open(pert_file, "w") as f:
+        json.dump(perturbations, f)
+
+    # summarize results
+    summary_stats = log_summary_stats(all_stats)
+    results = {"avg": summary_stats}
+    if not cfg.attack.only_return_avg:
+        results["all"] = all_stats
+
+    if all_stats_zb is not None and len(all_stats_zb["budget"]) > len(all_stats["budget"]):
+        summary_stats_zb = log_summary_stats(all_stats_zb, zb=True)
+        results["avg_including_zero_budget"] = summary_stats_zb
+        if not cfg.attack.only_return_avg:
+            results["all_including_zero_budget"] = all_stats_zb
     return results
 
 
@@ -91,11 +119,12 @@ def attack_or_skip_graph(
     prbcd: PRBCDAttack,
     clean_data: Data,
     all_stats: dict[str, list],
-    all_stats_zb: dict[str, list],
-    attack_epoch_stats: list,
+    all_stats_zb: None | dict[str, list],
+    perturbations: dict[int, list[list[int]]],
     total_attack_dataset_graph: Data | None,
     attack_dataset_slices: list[tuple[int, int]] | None,
     total_additional_datasets_graph: Data | None,
+    tb_writer: SummaryWriter,
 ):
     """
     """
@@ -119,7 +148,7 @@ def attack_or_skip_graph(
         and cfg.attack.skip_incorrect_graph_classification
         and not output_stats_clean.get("correct", True)
     ):
-        log_incorrect_graph_skip(all_stats, all_stats_zb, attack_epoch_stats)
+        log_incorrect_graph_skip(all_stats, all_stats_zb)
         return
 
     # BUDGET DEFINITION
@@ -134,14 +163,15 @@ def attack_or_skip_graph(
             budget_edges,
             output_stats_clean,
             all_stats_zb,
-            attack_epoch_stats,
         )
         return
 
     # GRAPH WAS NOT SKIPPED - ATTACK
-    logging.info(f"Attacking graph {i + 1}")
-    for d in [all_stats, all_stats_zb]:
-        accumulate_output_stats(d, output_stats_clean, mode="clean", random=False)
+    logging.info(f"Attacking graph {i}")
+    accumulate_output_stats(all_stats, output_stats_clean, mode="clean", random=False)
+    if all_stats_zb is not None:
+        accumulate_output_stats(all_stats_zb, output_stats_clean, mode="clean", random=False)
+        
 
     # AUGMENT GRAPH (ONLY WHEN NODE INJECTION)
     attack_graph_data = get_attack_graph(
@@ -160,12 +190,12 @@ def attack_or_skip_graph(
             global_budget=global_budget,
             random_attack=is_random_attack,
             node_mask=node_mask,
+            tb_writer=tb_writer,
             _model_forward_already_wrapped=True,
             _keep_forward_wrapped=True,
         )
         if not is_random_attack:
-            attack_epoch_stats.append(dict(prbcd.attack_statistics))
-            all_stats["perturbation"].append(perts.tolist())
+            perturbations[i] = perts.tolist()
         log_used_budget(all_stats, all_stats_zb, global_budget, perts, is_random_attack)
         
         # CHECK OUTPUT
@@ -176,9 +206,11 @@ def attack_or_skip_graph(
         output_stats_pert = get_output_stats(y_gt, output_pert)
         log_pert_output_stats(output_stats_pert, output_stats_clean=output_stats_clean, random=is_random_attack)
         stats, num_stats = basic_edge_and_node_stats(clean_data.edge_index, pert_edge_index, num_edges, num_nodes)
-        for (d, zb) in [(all_stats, False), (all_stats_zb, True)]:
-            accumulate_output_stats_pert(d, output_stats_pert, output_stats_clean, is_random_attack, zb)
-            log_and_accumulate_num_stats(d, num_stats, random=is_random_attack, zero_budget=zb)
+        accumulate_output_stats_pert(all_stats, output_stats_pert, output_stats_clean, is_random_attack)
+        log_and_accumulate_num_stats(all_stats, num_stats, random=is_random_attack)
+        if all_stats_zb is not None:
+            accumulate_output_stats_pert(all_stats_zb, output_stats_pert, output_stats_clean, is_random_attack, True)
+            log_and_accumulate_num_stats(all_stats_zb, num_stats, random=is_random_attack, zero_budget=True)
 
 
 def apply_node_mask(tensor_to_mask, mask):
@@ -189,7 +221,7 @@ def apply_node_mask(tensor_to_mask, mask):
 
 def get_budget(num_edges):
     # TODO: allow for other ways to define the budget
-    budget_edges = num_edges / 2 if cfg.attack.is_undirected else num_edges
+    budget_edges = num_edges // 2 if cfg.attack.is_undirected else num_edges
     global_budget = int(cfg.attack.e_budget * budget_edges)
     if cfg.attack.minimum_budget > global_budget:
         global_budget = cfg.attack.minimum_budget
@@ -231,6 +263,7 @@ def attack_single_graph(
     global_budget: int,
     random_attack: bool = False,
     node_mask: None | torch.Tensor = None,
+    tb_writer: None | SummaryWriter = None,
     _model_forward_already_wrapped: bool = False,
     _keep_forward_wrapped: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -247,6 +280,7 @@ def attack_single_graph(
         attack_graph_data.y.to(device=cfg.accelerator),
         budget=global_budget,
         idx_attack=node_mask,
+        tb_writer=tb_writer,
     )
 
     if not _keep_forward_wrapped:
@@ -268,15 +302,16 @@ def get_attack_loader(dataset_to_attack):
     return loader
 
 
-def log_incorrect_graph_skip(all_stats, all_stats_zb, attack_epoch_stats):
+def log_incorrect_graph_skip(all_stats, all_stats_zb):
     logging.info("Skipping graph attack because it is already incorrectly classified by model.")
-    attack_epoch_stats.append(None)
     # set correct_ to False (for the accuracy calculations)
     for k in all_stats:
         if k.startswith("correct"):
             all_stats[k].append(False)
         else:
             all_stats[k].append(None)
+    if all_stats_zb is None:
+        return
     for k in all_stats_zb:
         if k.startswith("correct"):
             all_stats_zb[k].append(False)
@@ -284,12 +319,12 @@ def log_incorrect_graph_skip(all_stats, all_stats_zb, attack_epoch_stats):
             all_stats_zb[k].append(None)
 
 
-def log_budget_skip(edge_index, E, N, budget_edges, output_stats_clean, all_stats_zb, attack_epoch_stats):
+def log_budget_skip(edge_index, E, N, budget_edges, output_stats_clean, all_stats_zb):
+    assert all_stats_zb is not None
     logging.info(
         f"Skipping graph attack because maximum budget is less than 1 "
         f"({cfg.attack.e_budget} of {budget_edges}), so cannot make perturbations."
     )
-    attack_epoch_stats.append(None)
     # In this case we only accumulate the stats for the clean graph in the zero budget dict
     all_stats_zb["budget"].append(0)
     for k in ["budget_used", "budget_used_rel"]:
@@ -305,14 +340,16 @@ def log_budget_skip(edge_index, E, N, budget_edges, output_stats_clean, all_stat
 
 def log_used_budget(all_stats, all_stats_zb, global_budget, perts, is_random_attack):
     all_stats["budget"].append(global_budget)
-    all_stats_zb["budget"].append(global_budget)
+    if all_stats_zb is not None:
+        all_stats_zb["budget"].append(global_budget)
     E_mod = perts.size(1)
     b_rel = E_mod / global_budget
     for key, value in zip(["budget_used", "budget_used_rel"], [E_mod, b_rel]):
         if is_random_attack:
             key += "_random"
         all_stats[key].append(value)
-        all_stats_zb[key].append(value)
+        if all_stats_zb is not None:
+            all_stats_zb[key].append(value)
     m = "Random perturbation" if is_random_attack else "Perturbation"
     logging.info(f"{m} uses {100 * b_rel:.1f}% [{E_mod}/{global_budget}] of the given attack budget.")
 

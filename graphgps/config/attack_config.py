@@ -26,6 +26,10 @@ def dataset_cfg(cfg):
     # show progress bar or not
     cfg.attack.log_progress = True
 
+    # whether to log all results (for each graph), or only the average in database observer
+    # (can easily re-run with the saved perturbations to get per-graph results again)
+    cfg.attack.only_return_avg = True
+
     # which split to attack, "train", "val", or "test"
     cfg.attack.split = "test"
 
@@ -80,7 +84,7 @@ def dataset_cfg(cfg):
     # 'train', 'masked', 'margin', 'prob_margin', or 'tanh_margin' (or callable)
     cfg.attack.loss = "train"
 
-    # None (set to same as loss), 'train', 'masked', 'margin', 'prob_margin', or 'tanh_margin' (or callable)
+    # None (set to same as loss), or 'neg_accuracy'
     cfg.attack.metric = None
 
     # is important for node injection attacks, where graph is huge, but only some nodes get added, rest is disconnected
@@ -100,6 +104,9 @@ def dataset_cfg(cfg):
 
     # will not attack a graph which is already incorrectly classified (faster, but if we want to transfer attack should keep False)
     cfg.attack.skip_incorrect_graph_classification = False
+
+    # specifically for the CLUSTER dataset, to not sample edges to labeled nodes
+    cfg.attack.cluster_sampling = False
 
     # For node injection attacks (sampling all edges independently):
     cfg.attack.node_injection = CN()

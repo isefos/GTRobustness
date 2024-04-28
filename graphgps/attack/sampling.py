@@ -74,7 +74,7 @@ class WeightedIndexSampler:
         r = torch.zeros_like(values, dtype=torch.int64) + self.max_index
         step_size = torch.ones_like(values, dtype=torch.int64)
 
-        max_steps = math.ceil(math.log2(self.n_total))
+        max_steps = math.ceil(math.log2(self.max_index))
         for _ in range(max_steps):
 
             c = l + ((r - l) // 2)
@@ -301,7 +301,7 @@ class WeightedIndexSampler2:
         r = torch.zeros_like(values, dtype=torch.int64) + self.max_index
         step_size_c = torch.ones_like(values, dtype=torch.int64) * self.w_def
 
-        max_steps = math.ceil(math.log2(self.n_transformed))
+        max_steps = math.ceil(math.log2(self.max_index))
         for _ in range(max_steps):
 
             c = l + ((r - l) // 2)
