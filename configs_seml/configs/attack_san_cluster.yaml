@@ -5,21 +5,31 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 1
+  experiments_per_job: 4
   sbatch_options:
-    partition: gpu_large
+    partition: gpu_all
     gres: gpu:1       # num GPUs
-    mem: 16G          # memory
+    mem: 64G          # memory
     cpus-per-task: 4  # num cores
-    time: 1-00:00     # max time, D-HH:MM
+    time: 4-00:00     # max time, D-HH:MM
 
-#grid:
+grid:
 
-#  graphgym.attack.e_budget:
-#    type: range
-#    min: 0.0075
-#    max: 0.151
-#    step: 0.0075
+  graphgym.attack.e_budget:
+    type: choice
+    options:
+      - 0.01
+      - 0.03
+      - 0.05
+      - 0.1
+      - 0.15
+      - 0.2
+      - 0.3
+      - 0.4
+      - 0.5
+      - 0.7
+      - 0.9
+      - 1.1
 
 # experiment fixed configs
 
@@ -75,6 +85,7 @@ fixed:
       node_prob_enable: false
       root_node_idx: null
       with_early_stopping: true
+      cluster_sampling: true  # don't modify edges to labeled nodes
       node_injection:
         enable: false
       

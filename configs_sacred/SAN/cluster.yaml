@@ -107,5 +107,6 @@ graphgym:
     node_prob_enable: false
     root_node_idx: null
     with_early_stopping: true
+    cluster_sampling: true  # don't modify edges to labeled nodes
     node_injection:
       enable: false
