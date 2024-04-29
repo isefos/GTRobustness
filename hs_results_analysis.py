@@ -220,8 +220,8 @@ def save_single_plots(
     # results = [result for result, m in zip(results, mask) if m]
     # val_max_metric = [v for v, m in zip(val_metric["max_values"], mask) if m]
     # test_max_metric = [v for v, m in zip(test_metric["max_values"], mask) if m]
-    val_max_metric = val_metric["max_values"]
-    test_max_metric = test_metric["max_values"]
+    val_max_metric = np.array(val_metric["max_values"])
+    test_max_metric = np.array(test_metric["max_values"])
 
     for (conf, discrete, log) in configs_all_info:
         fig, ((ax_val), (ax_test)) = plt.subplots(nrows=2, ncols=1, figsize=(12, 8))
@@ -235,11 +235,14 @@ def save_single_plots(
                 v = v.get(k, None)
                 if v is None:
                     break
-            if v is None:
-                continue
             x.append(v)
-        if not x:
+        missing_mask = [xi is not None for xi in x]
+        num_valid = sum(missing_mask)
+        if num_valid == 0:
             continue
+        x = [xi for xi in x if xi is not None]
+        vm = val_max_metric[missing_mask]
+        tm = test_max_metric[missing_mask]
         if discrete:
             try:
                 x = np.array(x)
@@ -255,18 +258,19 @@ def save_single_plots(
             val_dataset = []
             test_dataset = []
             for v in values:
-                val_dataset.append(np.array(val_max_metric)[x == v])
-                test_dataset.append(np.array(test_max_metric)[x == v])
+                mask = x == v
+                val_dataset.append(vm[mask])
+                test_dataset.append(tm[mask])
             ax_val.violinplot(val_dataset, values, showmeans=True, showmedians=True)
             ax_test.violinplot(test_dataset, values, showmeans=True, showmedians=True)
             x = x + 0.5 * (np.random.rand(len(x)) - 0.5)
-            ax_val.scatter(x, val_max_metric, s=12, c="g")
-            ax_test.scatter(x, test_max_metric, s=12, c="g")
+            ax_val.scatter(x, vm, s=12, c="g")
+            ax_test.scatter(x, tm, s=12, c="g")
             ax_val.set_xticks(values, labels=tick_labels)
             ax_test.set_xticks(values, labels=tick_labels)
         else:
-            ax_val.scatter(x, val_max_metric)
-            ax_test.scatter(x, test_max_metric)
+            ax_val.scatter(x, vm)
+            ax_test.scatter(x, tm)
             if log:
                 ax_val.set_xscale('log')
                 ax_test.set_xscale('log')
@@ -291,13 +295,14 @@ def get_collection_results(collection, model, filter_dict):
         keys_list = key.split(".")
         for r in results:
             for key_l in keys_list[:-1]:
-                r = r[key_l]
+                r = r.get(key_l, {})
             key_last = keys_list[-1]
-            v = r[key_last]
-            if key_last.endswith("bytes"):
-                v = f"{v * 1e-9:.1f} GB"
-            if key_last.endswith("time"):
-                v = f"{v / 3600:.2f} hours"
+            v = r.get(key_last, None)
+            if v is not None:
+                if key_last.endswith("bytes"):
+                    v = f"{v * 1e-9:.1f} GB"
+                if key_last.endswith("time"):
+                    v = f"{v / 3600:.2f} hours"
             values.append(v)
         extras[key] = values
     seeds_graphgym = [result["config"]["graphgym"]["seed"] for result in results]
