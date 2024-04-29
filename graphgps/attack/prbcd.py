@@ -121,9 +121,9 @@ class PRBCDAttack(torch.nn.Module):
         if cfg.attack.cluster_sampling:
             # for the CLUSTER dataset, we don't allow modifying edges to the labeled nodes
             assert self.is_undirected
-            label_nodes = torch.nonzero(x[:, 1:].sum(1)).flatten()
+            label_nodes = torch.nonzero(x[:, 1:].sum(1)).flatten().cpu()
             assert label_nodes.size(0) == 6
-            all_nodes = torch.arange(self.num_nodes, dtype=torch.long, device=self.device)
+            all_nodes = torch.arange(self.num_nodes, dtype=torch.long, device="cpu")
             edges_to_label_nodes = torch.cat(
                 (
                     label_nodes.repeat_interleave(self.num_nodes)[None, :],

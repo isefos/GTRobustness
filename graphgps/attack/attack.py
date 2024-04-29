@@ -95,7 +95,7 @@ def prbcd_attack_dataset(model, loaders):
     logging.info("End of attack.")
 
     # save perturbations
-    pert_file = Path(cfg.run_dir) / "perturbations.json"
+    pert_file = Path(cfg.run_dir) / f"perturbations_b{cfg.attack.e_budget}.json"
     with open(pert_file, "w") as f:
         json.dump(perturbations, f)
 

@@ -355,7 +355,10 @@ def prepare_weighted_idx(weighted_idx: dict[int, torch.Tensor], max_index: int):
     #  Then we would need to search for all range intersections,
     #  and create new ranges from those with the multiplied weights...
 
-    initial_weights = torch.cat([w * torch.ones_like(idx) for w, idx in weighted_idx.items()], dim=0)
+    initial_weights = torch.cat(
+        [w * torch.ones_like(idx) for w, idx in weighted_idx.items()],
+        dim=0,
+    )
 
     i_unique, idx_scatter = torch.cat(
         tuple(weighted_idx.values()),
@@ -364,7 +367,7 @@ def prepare_weighted_idx(weighted_idx: dict[int, torch.Tensor], max_index: int):
 
     assert i_unique.max() <= max_index
 
-    real_weights = torch.ones(i_unique.size(0), dtype=torch.int64)
+    real_weights = torch.ones(i_unique.size(0), dtype=torch.int64, device="cpu")
     real_weights.scatter_reduce_(dim=0, index=idx_scatter, src=initial_weights, reduce="prod", include_self=True)
 
     w_unique = real_weights.unique(sorted=False).tolist()
@@ -386,10 +389,10 @@ def prepare_weighted_idx(weighted_idx: dict[int, torch.Tensor], max_index: int):
             }
             continue
 
-        mins = torch.cat([torch.tensor([0], dtype=torch.long), non_consecutive + 1])
+        mins = torch.cat([torch.tensor([0], dtype=torch.long, device="cpu"), non_consecutive + 1])
         w_min = w_idx[mins]
 
-        maxs = torch.cat([non_consecutive, torch.tensor([-1], dtype=torch.long)])
+        maxs = torch.cat([non_consecutive, torch.tensor([-1], dtype=torch.long, device="cpu")])
         w_max = w_idx[maxs]
 
         range_sizes = w_max - w_min + 1
