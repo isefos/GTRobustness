@@ -7,7 +7,7 @@ import logging
 
 
 def compute_dense_eigh(L, max_freqs, need_full, driver="evr"):
-    if not need_full:
+    if (not need_full) and (max_freqs < L.shape[0]):
         E, U = eigh(L, subset_by_index=[0, max_freqs-1], driver=driver)
     else:
         # TODO: maybe only take the lowest and highest
@@ -58,9 +58,7 @@ def get_lap_decomp_stats(
 
 
     if not need_full:
-        assert E.size == max_freqs
-        #E = E[:max_freqs]
-        #U = U[:, :max_freqs]
+        assert E.size == max_freqs or E.size == num_nodes
 
     idx = E.argsort()
     E = E[idx]

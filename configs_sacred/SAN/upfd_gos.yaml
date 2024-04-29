@@ -1,0 +1,81 @@
+graphgym:
+
+  accelerator: auto
+  out_dir: configs_seml/results
+  metric_best: accuracy
+  tensorboard_each_run: false
+  seed: 42
+
+  dataset:
+    format: PyG-UPFD
+    name: politifact-bert
+    task: graph
+    task_type: classification_binary
+    transductive: false
+    split_mode: standard
+    node_encoder: true
+    node_encoder_name: WLapPE
+    node_encoder_bn: false
+    edge_encoder: true
+    edge_encoder_name: WeightedSANDummyEdge
+    edge_encoder_bn: false
+
+  posenc_WLapPE:
+    enable: true
+    eigen:
+      laplacian_norm: sym
+      eigvec_norm: L2
+      max_freqs: 10
+    n_heads: 2
+    layers: 1
+    dim_pe: 2  # determined by heads and dim per head
+    raw_norm_type: none
+    post_layers: 0
+    pass_as_var: false
+
+  train:
+    mode: custom
+    batch_size: 16
+    eval_period: 1
+
+  model:
+    type: WeightedSANTransformer
+    loss_fun: cross_entropy
+
+  gt:
+    dim_hidden: 6  # determined using num_heads and dims_per_head
+    full_graph: true
+    gamma: 0.01
+    gamma_learnable: false
+    layer_norm: false
+    batch_norm: true
+    residual: true
+    wsan_add_dummy_edges: true
+    dropout: 0.0
+    layers: 2
+    n_heads: 2
+    attn:
+      use_bias: false
+      clamp: 5.0
+
+  gnn:
+    layers_pre_mp: 0
+    layers_post_mp: 1
+    head: weighted_mean_pool_graph
+    dim_inner: 6  # determined using num_heads and dims_per_head
+  
+  optim:
+    optimizer: adam
+    max_epoch: 2
+    scheduler: reduce_on_plateau
+    base_lr: 1.0e-4
+    reduce_factor: 0.5
+    schedule_patience: 15
+    clip_grad_norm: false
+    early_stopping: true
+    early_stopping_patience: 30
+    early_stopping_delta_e: 0.01
+    early_stopping_warmup: 20
+
+  attack:
+    enable: false
