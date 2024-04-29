@@ -94,7 +94,7 @@ def dataset_cfg(cfg):
     cfg.attack.root_node_idx = None
 
     # do we want to compute the node probability approximation or not (more important for node injection attacks)
-    cfg.attack.node_prob_enable = True
+    cfg.attack.node_prob_enable = False
 
     # how many iterations of the node probability approximation computation to do
     cfg.attack.node_prob_iterations = 3

@@ -238,7 +238,6 @@ def get_attack_graph(
     """
     num_edges = graph_data.edge_index.size(1)
     if cfg.attack.node_injection.enable:
-        assert attack_dataset_slice is not None
         graph_data_augmented = get_augmented_graph(
             graph=graph_data.clone(),
             total_attack_dataset_graph=total_attack_dataset_graph,

@@ -315,6 +315,7 @@ class PRBCDAttack(torch.nn.Module):
             )
         # For early stopping (not explicitly covered by pseudo code)
         self.best_metric = float('-Inf')
+        self.best_loss = float('-Inf')
         # Sample initial search space (Algorithm 1, line 3-4)
         self._sample_random_block(budget)
         steps = range(self.epochs)
@@ -369,13 +370,14 @@ class PRBCDAttack(torch.nn.Module):
         edge_index = self._get_discrete_sampled_graph(topk_block_edge_weight)[0]
         
         prediction = self._forward(x, edge_index, None, discrete=True, **kwargs)
-        loss = self.loss(prediction, labels, idx_attack)
+        loss_discrete = self.loss(prediction, labels, idx_attack)
         metric = self.metric(prediction, labels, idx_attack)
 
         # Save best epoch for early stopping
         # (not explicitly covered by pseudo code)
-        if metric > self.best_metric:
+        if metric >= self.best_metric and loss_discrete > self.best_loss:
             self.best_metric = metric
+            self.best_loss = loss_discrete
             self.best_block = self.current_block.cpu().clone()
             self.best_edge_index = self.block_edge_index.cpu().clone()
             self.best_pert_edge_weight = self.block_edge_weight.cpu().clone()
@@ -392,7 +394,7 @@ class PRBCDAttack(torch.nn.Module):
             self.block_edge_weight = block_edge_weight.to(self.device)
 
         scalars['metric'] = metric.item()
-        scalars['loss_discrete'] = loss.item()
+        scalars['loss_discrete'] = loss_discrete.item()
         self._write_scalars_to_tb(tb_writer, scalars, epoch)
         return scalars
     
