@@ -103,9 +103,9 @@ random:
 
   graphgym.posenc_WLapPE.eigen.max_freqs:
     seed: 52157
-      type: randint
-      min: 8
-      max: 30
+    type: randint
+    min: 8
+    max: 30
 
 
 # experiment fixed configs
