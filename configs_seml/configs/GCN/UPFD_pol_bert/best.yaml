@@ -17,24 +17,7 @@ fixed:
   graphgym:  
     accelerator: cuda
     attack:
-      allow_existing_graph_pert: true
-      block_size: 2000
-      e_budget: 0.1
       enable: false
-      enable_node_injection: false
-      existing_node_prob_multiplier: 1
-      include_root_nodes_for_injection: true
-      is_undirected: true
-      load_best_model: true
-      loss: train
-      lr: 4000
-      node_injection_from_test: true
-      node_injection_from_train: true
-      node_injection_from_val: true
-      num_attacked_graphs: 0
-      remove_isolated_components: true
-      root_node_idx: null
-      split: test
     benchmark: false
     bn:
       eps: 1.0e-05
@@ -112,39 +95,6 @@ fixed:
       skip_every: 1
       stage_type: stack
     gpu_mem: false
-    graphormer:
-      attention_dropout: 0.0
-      dropout: 0.0
-      embed_dim: 80
-      input_dropout: 0.0
-      mlp_dropout: 0.0
-      num_heads: 4
-      num_layers: 6
-      use_graph_token: true
-    gt:
-      attn_dropout: 0.0
-      batch_norm: true
-      bigbird:
-        add_cross_attention: false
-        attention_type: block_sparse
-        block_size: 3
-        chunk_size_feed_forward: 0
-        hidden_act: relu
-        is_decoder: false
-        layer_norm_eps: 1.0e-06
-        max_position_embeddings: 128
-        num_random_blocks: 3
-        use_bias: false
-      dim_hidden: 64
-      dropout: 0.0
-      full_graph: true
-      gamma: 1.0e-05
-      layer_norm: false
-      layer_type: SANLayer
-      layers: 3
-      n_heads: 8
-      pna_degrees: []
-      residual: true
     mem:
       inplace: false
     metric_agg: argmax
@@ -183,92 +133,6 @@ fixed:
       - 60
       - 90
       weight_decay: 0.025931832281559417
-    posenc_ElstaticSE:
-      dim_pe: 16
-      enable: false
-      kernel:
-        times: []
-        times_func: range(10)
-      layers: 3
-      model: none
-      n_heads: 4
-      pass_as_var: false
-      post_layers: 0
-      raw_norm_type: none
-    posenc_EquivStableLapPE:
-      eigen:
-        eigvec_norm: L2
-        laplacian_norm: sym
-        max_freqs: 10
-      enable: false
-      raw_norm_type: none
-    posenc_GraphormerBias:
-      combinations_degree: false
-      dim_pe: 0
-      directed_graphs: true
-      enable: false
-      has_edge_attr: true
-      node_degrees_only: false
-      num_in_degrees: null
-      num_out_degrees: null
-      num_spatial_types: null
-      use_weighted_path_distance: false
-    posenc_HKdiagSE:
-      dim_pe: 16
-      enable: false
-      kernel:
-        times: []
-        times_func: ''
-      layers: 3
-      model: none
-      n_heads: 4
-      pass_as_var: false
-      post_layers: 0
-      raw_norm_type: none
-    posenc_LapPE:
-      dim_pe: 16
-      eigen:
-        eigvec_norm: L2
-        laplacian_norm: sym
-        max_freqs: 10
-      enable: false
-      layers: 3
-      model: none
-      n_heads: 4
-      pass_as_var: false
-      post_layers: 0
-      raw_norm_type: none
-    posenc_RWSE:
-      dim_pe: 16
-      enable: false
-      kernel:
-        times: []
-        times_func: ''
-      layers: 3
-      model: none
-      n_heads: 4
-      pass_as_var: false
-      post_layers: 0
-      raw_norm_type: none
-    posenc_SignNet:
-      dim_pe: 16
-      eigen:
-        eigvec_norm: L2
-        laplacian_norm: sym
-        max_freqs: 10
-      enable: false
-      layers: 3
-      model: none
-      n_heads: 4
-      pass_as_var: false
-      phi_hidden_dim: 64
-      phi_out_dim: 4
-      post_layers: 0
-      raw_norm_type: none
-    pretrained:
-      dir: ''
-      freeze_main: false
-      reset_prediction_head: true
     print: both
     round: 5
     run_multiple_splits: []
