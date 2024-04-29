@@ -122,9 +122,6 @@ fixed:
 
     train:
       mode: custom
-      eval_period: 1
-      # hyperparameter search, no need to save the models
-      enable_ckpt: false
       batch_size: 16
 
     model:
@@ -139,13 +136,13 @@ fixed:
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       optimizer: adamW
-      max_epoch: 300
+      max_epoch: 100
       scheduler: cosine_with_warmup
       num_warmup_epochs: 5
       early_stopping: true
       early_stopping_patience: 30
-      early_stopping_delta_e: 0.04
-      early_stopping_warmup: 30
+      early_stopping_delta_e: 0.01
+      early_stopping_warmup: 15
 
     attack:
       enable: false
