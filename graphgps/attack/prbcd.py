@@ -20,10 +20,6 @@ import logging
 from torch_geometric.graphgym.config import cfg
 
 
-# (predictions, labels, ids/mask) -> Tensor with one element
-LOSS_TYPE = Callable[[Tensor, Tensor, Optional[Tensor]], Tensor]
-
-
 class PRBCDAttack(torch.nn.Module):
     r"""The Projected Randomized Block Coordinate Descent (PRBCD) adversarial
     attack from the `Robustness of Graph Neural Networks at Scale
@@ -77,30 +73,25 @@ class PRBCDAttack(torch.nn.Module):
         self.block_size = cfg.attack.block_size
         self.epochs = cfg.attack.epochs
 
-        loss: Optional[Union[str, LOSS_TYPE]] = cfg.attack.loss
+        loss = cfg.attack.loss
         if isinstance(loss, str):
-            if loss == 'masked':
-                self.loss = self._masked_cross_entropy
-            elif loss == 'margin':
-                self.loss = partial(self._margin_loss, reduce='mean')
-            elif loss == 'prob_margin':
-                self.loss = self._probability_margin_loss
-            elif loss == 'tanh_margin':
-                self.loss = self._tanh_margin_loss
-            elif loss == 'train':
-                self.loss = self._train_loss
-            elif loss == 'raw_prediction':
-                self.loss = self._raw_prediction_loss
-            elif loss == 'reflected_cross_entropy':
-                self.loss = self._reflected_cross_entropy_loss
-            else:
-                raise ValueError(f'Unknown loss `{loss}`')
+            self.loss = self._get_loss(loss)
         else:
-            self.loss = loss
+            raise ValueError(f'Unknown loss `{loss}`')
 
         self.is_undirected = cfg.attack.is_undirected
         self.log = cfg.attack.log_progress
-        self.metric = cfg.attack.metric or self.loss
+
+        metric = cfg.attack.metric
+        if metric is None:
+            self.metric = self.loss
+        elif isinstance(metric, str):
+            if metric == 'neg_accuracy':
+                self.metric = self._neg_accuracy_metric
+            else:
+                self.metric = self._get_loss(metric, "metric")
+        else:
+            raise ValueError(f'Unknown metric `{loss}`')
 
         self.epochs_resampling = cfg.attack.epochs_resampling
         self.lr = cfg.attack.lr
@@ -114,6 +105,24 @@ class PRBCDAttack(torch.nn.Module):
 
         # gradient clipping
         self.max_edge_weight_update = cfg.attack.max_edge_weight_update
+
+    def _get_loss(self, loss: str, name: str = "loss"):
+        if loss == 'masked':
+            return self._masked_cross_entropy
+        elif loss == 'margin':
+            return partial(self._margin_loss, reduce='mean')
+        elif loss == 'prob_margin':
+            return self._probability_margin_loss
+        elif loss == 'tanh_margin':
+            return self._tanh_margin_loss
+        elif loss == 'train':
+            return self._train_loss
+        elif loss == 'raw_prediction':
+            return self._raw_prediction_loss
+        elif loss == 'reflected_cross_entropy':
+            return self._reflected_cross_entropy_loss
+        else:
+            raise ValueError(f'Unknown {name} `{loss}`')
 
     def _setup_sampling(self, x, **kwargs):
         assert self.num_nodes == self.num_connected_nodes, "structure attack should not include isolated nodes"
@@ -993,6 +1002,13 @@ class PRBCDAttack(torch.nn.Module):
         else:
             raise NotImplementedError        
         return loss
+    
+    @staticmethod
+    def _neg_accuracy_metric(prediction, labels, idx_mask):
+        if idx_mask is not None:
+            prediction = prediction[idx_mask]
+            labels = labels[idx_mask]
+        return -(prediction.argmax(-1) == labels).float().mean()
 
     def _append_statistics(self, mapping: Dict[str, Any]):
         for key, value in mapping.items():
@@ -1047,7 +1063,7 @@ class GRBCDAttack(PRBCDAttack):
         model: torch.nn.Module,
         block_size: int,
         epochs: int = 125,
-        loss: Optional[Union[str, LOSS_TYPE]] = 'masked',
+        loss = 'masked',
         is_undirected: bool = True,
         log: bool = True,
         **kwargs,

@@ -62,10 +62,10 @@ fixed:
       eps_init_noised: false  # TODO: test
       is_undirected: true
       loss: tanh_margin  # TODO: test
+      metric: neg_accuracy
       lr: 4000  # TODO: test
       max_edge_weight_update: 0.0  # TODO: test
       max_trials_sampling: 20
-      metric: null  # TODO: add accuracy
       minimum_budget: 1
       node_prob_enable: false
       root_node_idx: null

@@ -27,11 +27,6 @@ from graphgps.attack.postprocessing import (
 )
 
 
-def _neg_accuracy_metric(pred, y, mask):
-    # TODO: how to handle when no mask. enable when selected
-    return (pred.argmax(-1)[mask] == y[mask]).float().mean()
-
-
 def prbcd_attack_dataset(model, loaders):
     """
     """
