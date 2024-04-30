@@ -47,7 +47,7 @@ fixed:
       log_progress: false
       load_best_model: false
       split: test
-      prediction_level: node
+      prediction_level: graph
       remove_isolated_components: true
       run_random_baseline: true
       block_size: 1_000  # TODO: test
