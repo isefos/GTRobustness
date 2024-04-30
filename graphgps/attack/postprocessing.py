@@ -183,7 +183,7 @@ def accumulate_output_stats_pert(
             pert_c = list(compress(output_stats_pert["correct"], output_stats_clean["correct"]))
             asr = 1 - (sum(pert_c) / len(pert_c))
             accumulated_stats[asr_key].append(asr)
-        if not no_asr_log:
+        if not no_asr_log and asr is not None:
             logging.info(f"Attack success rate: {asr:.3f}")
     
 
