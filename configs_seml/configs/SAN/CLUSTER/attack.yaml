@@ -15,6 +15,14 @@ slurm:
 
 grid:
 
+  graphgym.seed:
+    type: choice
+    options:
+      - 42
+      - 670
+      - 7813
+      - 9537
+
   graphgym.attack.e_budget:
     type: choice
     options:
@@ -349,7 +357,6 @@ fixed:
       load_best_model: true
     round: 5
     run_multiple_splits: []
-    seed: 42
     share:
       dim_in: 1
       dim_out: 1
