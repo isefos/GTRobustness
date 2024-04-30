@@ -10,17 +10,92 @@ slurm:
     partition: gpu_all
     gres: gpu:1       # num GPUs
     mem: 16G          # memory
-    cpus-per-task: 1  # num cores
+    cpus-per-task: 4  # num cores
     time: 1-00:00     # max time, D-HH:MM
+
+
+grid:
+
+  graphgym.attack.e_budget:
+    type: choice
+    options:
+      - 0.02
+      - 0.05
+      - 0.1
+      - 0.15
+      - 0.25
+      - 0.45
+      - 0.65
+      - 1.0
+
+# experiment fixed configs
 
 fixed:
 
   graphgym:
 
-    accelerator: cuda
+    out_dir: configs_seml/results
+
+    pretrained:
+      dir: '/ceph/hdd/students/foth/models/Graphormer/UPFD_gos_bert/0'
+      finetune: false
+
+    posenc_GraphormerBias:
+      combinations_degree: false
+      dim_pe: 0
+      directed_graphs: false
+      enable: true
+      has_edge_attr: false
+      node_degrees_only: false
+      num_in_degrees: 31
+      num_out_degrees: 31
+      num_spatial_types: 10
+      use_weighted_path_distance: true
+
     attack:
-      enable: false
+      enable: true
+      num_attacked_graphs: 50
+      skip_incorrect_graph_classification: false
+      log_progress: false
+      load_best_model: false
+      split: test
+      prediction_level: graph
+      remove_isolated_components: true
+      run_random_baseline: true
+      block_size: 1_000  # TODO: test
+      epochs: 125  # TODO: test
+      epochs_resampling: 100
+      resample_period: 1  # TODO: test
+      max_final_samples: 20  # TODO: test
+      eps: 1.0e-07  # TODO: test
+      eps_init_noised: false  # TODO: test
+      is_undirected: true
+      loss: raw_prediction  # TODO: test
+      metric: null
+      lr: 4000  # TODO: test
+      max_edge_weight_update: 0.0  # TODO: test
+      max_trials_sampling: 20
+      minimum_budget: 1
+      node_prob_enable: true
+      node_prob_iterations: 3
+      node_prob_log: true
+      root_node_idx: 0
+      with_early_stopping: true
+      node_injection:
+        enable: true
+        from_train: true
+        from_val: true
+        from_test: true
+        allow_existing_graph_pert: false
+        sample_only_connected: true
+        include_root_nodes: false
+        sample_only_trees: true
+
+    # copied from pre-trained model
+
+    accelerator: cuda
     benchmark: false
+    best_by_loss: false
     bn:
       eps: 1.0e-05
       mom: 0.1
@@ -42,7 +117,7 @@ fixed:
       encoder_dim: 128
       encoder_name: db
       format: PyG-UPFD
-      infer_link_label: None
+      infer_link_label: null
       label_column: none
       label_table: none
       location: local
@@ -51,6 +126,7 @@ fixed:
       node_encoder_bn: false
       node_encoder_name: LinearNode+WeightedGraphormerBias
       node_encoder_num_types: 0
+      pe_transform_on_the_fly: false
       remove_feature: false
       resample_disjoint: false
       resample_negative: false
@@ -81,7 +157,7 @@ fixed:
       att_heads: 1
       batchnorm: true
       clear_feature: true
-      dim_inner: 40
+      dim_inner: 25
       dropout: 0.0
       head: graphormer_graph
       keep_edge: 0.5
@@ -98,15 +174,24 @@ fixed:
       stage_type: stack
     gpu_mem: false
     graphormer:
-      attention_dropout: 0.0
+      attention_dropout: 0.3505713679995346
       dropout: 0.0
-      embed_dim: 40
-      input_dropout: 0.0
-      mlp_dropout: 0.0
-      num_heads: 8
+      embed_dim: 25
+      input_dropout: 0.1
+      mlp_dropout: 0.05
+      num_heads: 5
       num_layers: 6
       use_graph_token: true
     gt:
+      attn:
+        O_e: true
+        act: relu
+        clamp: 5.0
+        deg_scaler: true
+        edge_enhance: true
+        full_attn: true
+        norm_e: true
+        use_bias: false
       attn_dropout: 0.0
       batch_norm: true
       bigbird:
@@ -120,16 +205,21 @@ fixed:
         max_position_embeddings: 128
         num_random_blocks: 3
         use_bias: false
+      bn_momentum: 0.1
+      bn_no_runner: false
       dim_hidden: 64
       dropout: 0.0
       full_graph: true
       gamma: 1.0e-05
+      gamma_learnable: false
       layer_norm: false
       layer_type: SANLayer
       layers: 3
       n_heads: 8
       pna_degrees: []
       residual: true
+      update_e: true
+      wsan_add_dummy_edges: false
     mem:
       inplace: false
     metric_agg: argmax
@@ -146,16 +236,16 @@ fixed:
     num_threads: 6
     num_workers: 0
     optim:
-      base_lr: 0.0001291431389395534
+      base_lr: 0.0009878809603816906
       batch_accumulation: 1
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       early_stopping: true
-      early_stopping_delta_e: 0.05
+      early_stopping_delta_e: 0.01
       early_stopping_patience: 30
-      early_stopping_warmup: 30
+      early_stopping_warmup: 15
       lr_decay: 0.1
-      max_epoch: 300
+      max_epoch: 100
       min_lr: 0.0
       momentum: 0.9
       num_warmup_epochs: 5
@@ -167,7 +257,7 @@ fixed:
       - 30
       - 60
       - 90
-      weight_decay: 0.0067022017097888706
+      weight_decay: 2.3000332477410756e-05
     posenc_ElstaticSE:
       dim_pe: 16
       enable: false
@@ -187,17 +277,6 @@ fixed:
         max_freqs: 10
       enable: false
       raw_norm_type: none
-    posenc_GraphormerBias:
-      combinations_degree: false
-      dim_pe: 0
-      directed_graphs: false
-      enable: true
-      has_edge_attr: false
-      node_degrees_only: false
-      num_in_degrees: 37
-      num_out_degrees: 37
-      num_spatial_types: 10
-      use_weighted_path_distance: false
     posenc_HKdiagSE:
       dim_pe: 16
       enable: false
@@ -223,6 +302,10 @@ fixed:
       pass_as_var: false
       post_layers: 0
       raw_norm_type: none
+    posenc_RRWP:
+      enable: false
+      ksteps: 21
+      w_add_dummy_edge: false
     posenc_RWSE:
       dim_pe: 16
       enable: false
@@ -250,14 +333,28 @@ fixed:
       phi_out_dim: 4
       post_layers: 0
       raw_norm_type: none
-    pretrained:
-      dir: ''
-      freeze_main: false
-      reset_prediction_head: true
+    posenc_WLapPE:
+      dim_pe: 16
+      eigen:
+        eigvec_norm: L2
+        eps_repeated_eigenvalue: 1.0e-06
+        laplacian_norm: sym
+        max_freqs: 10
+        nia_pert: half_weight
+      enable: false
+      layers: 3
+      model: none
+      n_heads: 4
+      pass_as_var: false
+      post_layers: 0
+      raw_norm_type: none
     print: both
+    robustness_unit_test:
+      enable: false
+      load_best_model: true
     round: 5
     run_multiple_splits: []
-    seed: 1982
+    seed: 3005
     share:
       dim_in: 1
       dim_out: 1
@@ -272,7 +369,9 @@ fixed:
       ckpt_period: 100
       enable_ckpt: true
       epoch_resume: -1
-      eval_period: 1
+      eval_period: 10
+      homophily_regularization: 0.0
+      homophily_regularization_gt_weight: 1.0
       iter_per_epoch: 32
       mode: custom
       neighbor_sizes:
