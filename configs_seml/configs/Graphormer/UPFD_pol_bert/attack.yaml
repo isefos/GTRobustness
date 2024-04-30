@@ -16,6 +16,14 @@ slurm:
 
 grid:
 
+  graphgym.seed:
+    type: choice
+    options:
+      - 15
+      - 843
+      - 1094
+      - 1982
+
   graphgym.attack.e_budget:
     type: choice
     options:
