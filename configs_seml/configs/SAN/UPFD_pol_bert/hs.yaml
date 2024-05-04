@@ -50,7 +50,7 @@ fixed:
 
     train:
       mode: custom
-      batch_size: 16
+      batch_size: 32
       eval_period: 1
 
     model:
@@ -74,15 +74,15 @@ fixed:
     
     optim:
       optimizer: adam
-      max_epoch: 150
+      max_epoch: 250
       scheduler: reduce_on_plateau
       reduce_factor: 0.5
-      schedule_patience: 15
+      schedule_patience: 20
       clip_grad_norm: false
       early_stopping: true
-      early_stopping_patience: 30
+      early_stopping_patience: 40
       early_stopping_delta_e: 0.05
-      early_stopping_warmup: 30
+      early_stopping_warmup: 40
 
     attack:
       enable: false
@@ -90,8 +90,8 @@ fixed:
 # experiment random configs
 
 random:
-  samples: 300
-  seed: 18785
+  samples: 30
+  seed: 1785
 
   graphgym.seed:
     seed: 786
@@ -140,7 +140,7 @@ random:
     seed: 751
     type: uniform
     min: 0.01
-    max: 0.2
+    max: 0.15
 
   graphgym.gt.wsan_add_dummy_edges:
     seed: 3265
@@ -166,7 +166,7 @@ random:
     seed: 52157
     type: randint
     min: 5
-    max: 30
+    max: 40
 
   graphgym.posenc_WLapPE.layers:
     seed: 82
