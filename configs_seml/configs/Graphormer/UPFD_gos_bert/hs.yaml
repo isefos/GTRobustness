@@ -17,11 +17,11 @@ slurm:
 # experiment random configs
 
 random:
-  samples: 30
-  seed: 1971
+  samples: 60
+  seed: 199
 
   graphgym.seed:
-    seed: 786
+    seed: 78654
     type: randint
     min: 0
     max: 10000
@@ -29,64 +29,62 @@ random:
   graphgym.optim.base_lr:
     seed: 2264
     type: loguniform
-    min: 5.0e-4
-    max: 5.0e-2
+    min: 8.0e-5
+    max: 8.0e-3
 
   graphgym.optim.weight_decay:
     seed: 89
     type: loguniform
-    min: 1.0e-6
+    min: 1.0e-7
     max: 1.0e-4
 
   dims_per_head:
     seed: 13094
     type: randint
     min: 2
-    max: 10
+    max: 13
 
   graphgym.graphormer.num_layers:
     seed: 357
     type: randint
-    min: 6
-    max: 17
+    min: 2
+    max: 13
 
   graphgym.graphormer.dropout:
     seed: 961
     type: uniform
-    min: 0.05
-    max: 0.2
+    min: 0.0
+    max: 0.1
   
   graphgym.graphormer.attention_dropout:
     seed: 661
     type: uniform
-    min: 0.4
-    max: 0.55
+    min: 0.35
+    max: 0.5
 
   graphgym.graphormer.mlp_dropout:
     seed: 241
     type: uniform
-    min: 0.01
-    max: 0.12
+    min: 0.0
+    max: 0.06
 
   graphgym.graphormer.input_dropout:
     seed: 1153
     type: uniform
-    min: 0.05
-    max: 0.2
-
-  graphgym.gnn.layers_post_mp: 
-    seed: 121
-    type: choice
-    options:
-      - 1
-      - 2
-      - 3
+    min: 0.0
+    max: 0.13
 
   graphgym.posenc_GraphormerBias.num_in_degrees:
     seed: 647
     type: randint
-    min: 30
-    max: 80
+    min: 10
+    max: 35
+
+  graphgym.posenc_GraphormerBias.num_spatial_types:
+    seed: 5113
+    type: randint
+    min: 4
+    max: 12
 
 
 # experiment fixed configs 
@@ -117,7 +115,6 @@ fixed:
       node_degrees_only: false
       directed_graphs: false
       has_edge_attr: false
-      num_spatial_types: 10
       num_out_degrees: ${config.graphgym.posenc_GraphormerBias.num_in_degrees}
       # next 2 only matter for attack, set to fixed false
       combinations_degree: false
@@ -125,7 +122,7 @@ fixed:
 
     train:
       mode: custom
-      batch_size: 16
+      batch_size: 32
       eval_period: 1
       enable_ckpt: true
 
@@ -135,11 +132,12 @@ fixed:
       graph_pooling: graph_token
 
     graphormer:
-      num_heads: 5
+      num_heads: 8
       embed_dim: 0  # determined using num_heads and dims_per_head
 
     gnn:
       layers_pre_mp: 0
+      layers_post_mp: 1
       head: graphormer_graph
       dim_inner: 0 # determined using num_heads and dims_per_head
 
@@ -147,13 +145,13 @@ fixed:
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       optimizer: adamW
-      max_epoch: 150
+      max_epoch: 250
       scheduler: cosine_with_warmup
-      num_warmup_epochs: 5
+      num_warmup_epochs: 10
       early_stopping: true
-      early_stopping_patience: 25
-      early_stopping_delta_e: 0.01
-      early_stopping_warmup: 15
+      early_stopping_patience: 50
+      early_stopping_delta_e: 0.03
+      early_stopping_warmup: 50
 
     attack:
       enable: false
