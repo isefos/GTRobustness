@@ -17,7 +17,7 @@ slurm:
 # experiment random configs
 
 random:
-  samples: 60
+  samples: 30
   seed: 199
 
   graphgym.seed:
@@ -43,6 +43,12 @@ random:
     type: randint
     min: 2
     max: 13
+
+  graphgym.graphormer.num_heads:
+    seed: 772
+    type: randint
+    min: 2
+    max: 9
 
   graphgym.graphormer.num_layers:
     seed: 357
@@ -78,7 +84,7 @@ random:
     seed: 647
     type: randint
     min: 10
-    max: 35
+    max: 93
 
   graphgym.posenc_GraphormerBias.num_spatial_types:
     seed: 5113
@@ -101,7 +107,7 @@ fixed:
 
     dataset:
       format: PyG-UPFD
-      name: politifact-bert
+      name: gossipcop-bert
       task: graph
       task_type: classification_binary
       transductive: false
@@ -122,7 +128,7 @@ fixed:
 
     train:
       mode: custom
-      batch_size: 32
+      batch_size: 16
       eval_period: 1
       enable_ckpt: true
 
@@ -132,7 +138,6 @@ fixed:
       graph_pooling: graph_token
 
     graphormer:
-      num_heads: 8
       embed_dim: 0  # determined using num_heads and dims_per_head
 
     gnn:
@@ -145,13 +150,13 @@ fixed:
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       optimizer: adamW
-      max_epoch: 250
+      max_epoch: 100
       scheduler: cosine_with_warmup
-      num_warmup_epochs: 10
+      num_warmup_epochs: 5
       early_stopping: true
-      early_stopping_patience: 50
-      early_stopping_delta_e: 0.03
-      early_stopping_warmup: 50
+      early_stopping_patience: 30
+      early_stopping_delta_e: 0.01
+      early_stopping_warmup: 30
 
     attack:
       enable: false

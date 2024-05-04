@@ -81,6 +81,9 @@ def transfer_unit_test(model, clean_test_loader):
             r["attack_success_rate"].append(asr)
             logging.info(f"Attack success rate: {asr:.3f}")
         results[transfer_model] = r
+
+    # TODO: add other perturbations: random, chain, ...
+
     return results
 
 
