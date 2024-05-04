@@ -32,7 +32,7 @@ random:
     min: 5.0e-4
     max: 2.0e-2
 
-    graphgym.gt.n_heads:
+  graphgym.gt.n_heads:
     seed: 8135
     type: randint
     min: 2
