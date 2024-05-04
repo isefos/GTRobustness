@@ -94,14 +94,6 @@ random:
     min: 12
     max: 40
 
-  graphgym.gnn.layers_post_mp:
-    seed: 774
-    type: choice
-    options:
-      - 1
-      - 2
-      - 3
-
   graphgym.gnn.head:
     seed: 82
     type: choice
