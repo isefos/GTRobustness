@@ -591,7 +591,7 @@ parser.add_argument("-s", "--single-plots", action="store_true")
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    results_path = f"hs_results/{args.dataset}/{args.model}/{args.collection}"
+    results_path = f"results_hs/{args.dataset}/{args.model}/{args.collection}"
     filter_dict = None  # not implemented for argparse... but can manually change here
     app = main(
         collection=args.collection,
