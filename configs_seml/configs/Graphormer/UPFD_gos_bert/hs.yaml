@@ -18,7 +18,7 @@ slurm:
 
 random:
   samples: 30
-  seed: 187
+  seed: 1971
 
   graphgym.seed:
     seed: 786
@@ -30,7 +30,7 @@ random:
     seed: 2264
     type: loguniform
     min: 5.0e-4
-    max: 1.0e-2
+    max: 5.0e-2
 
   graphgym.optim.weight_decay:
     seed: 89
@@ -53,20 +53,20 @@ random:
   graphgym.graphormer.dropout:
     seed: 961
     type: uniform
-    min: 0.0
-    max: 0.1
+    min: 0.05
+    max: 0.2
   
   graphgym.graphormer.attention_dropout:
     seed: 661
     type: uniform
-    min: 0.3
-    max: 0.6
+    min: 0.4
+    max: 0.55
 
   graphgym.graphormer.mlp_dropout:
     seed: 241
     type: uniform
-    min: 0.0
-    max: 0.15
+    min: 0.01
+    max: 0.12
 
   graphgym.graphormer.input_dropout:
     seed: 1153
@@ -125,7 +125,9 @@ fixed:
 
     train:
       mode: custom
-      batch_size: 32
+      batch_size: 16
+      eval_period: 1
+      enable_ckpt: true
 
     model:
       type: Graphormer

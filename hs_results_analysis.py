@@ -133,7 +133,7 @@ def write_results_into_file(
     num_params,
 ):
     with open(result_log_file, "w") as f:
-        f.write(f"\nHighest val {metric}:")
+        f.write(f"Highest val {metric}:")
         for (v_a, t_a, i) in best_val_with_test_metric:
             f.write(f"\n\tval {metric}: {v_a}, with {t_a} test {metric}, by experiment: {run_ids[i]}")
         f.write(f"\nHighest test {metric}:")
@@ -592,7 +592,7 @@ parser.add_argument("-s", "--single-plots", action="store_true")
 if __name__ == "__main__":
     args = parser.parse_args()
     results_path = f"results_hs/{args.dataset}/{args.model}/{args.collection}"
-    filter_dict = None  # not implemented for argparse... but can manually change here
+    filter_dict = {'slurm.array_id': 8919896}  # None  # not implemented for argparse... but can manually change here
     app = main(
         collection=args.collection,
         configs_all_info=hyperparameters[args.model],
