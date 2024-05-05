@@ -8,6 +8,7 @@ import pandas as pd
 import argparse
 import shutil
 from collections import defaultdict
+from .hs_results_analysis import datasets
 
 
 attack_cols_graph = {
@@ -200,6 +201,7 @@ def main(
     collection: str,
     results_path: str,
     filter_dict,
+    dataset,
 ):
     (
         results,
@@ -211,6 +213,11 @@ def main(
         num_params,
         budgets,
     ) = get_collection_results(collection, filter_dict)
+
+    for res in results:
+        c = res["config"]["graphgym"]["dataset"]
+        assert datasets[dataset]["format"] == c["format"]
+        assert datasets[dataset]["name"] == c["name"]
 
     pred_level = results[0]["config"]["graphgym"]["attack"]["prediction_level"]
     for r in results:
@@ -255,6 +262,7 @@ parser.add_argument("-m", "--model")
 
 if __name__ == "__main__":
     args = parser.parse_args()
+    assert args.dataset in datasets
     results_path = f"results_a/{args.dataset}/{args.model}/{args.collection}"
     filter_dict = {"config.graphgym.attack.cluster_sampling": False}
     # None  # not implemented for argparse... but can manually change here
@@ -262,4 +270,5 @@ if __name__ == "__main__":
         collection=args.collection,
         results_path=results_path,
         filter_dict=filter_dict,
+        dataset=args.dataset,
     )

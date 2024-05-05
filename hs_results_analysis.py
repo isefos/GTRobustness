@@ -331,6 +331,7 @@ def get_collection_results(collection, model, filter_dict):
 def main(
     collection: str,
     configs_all_info: list[tuple[str, bool, bool]],
+    dataset: str,
     k: int,
     results_path: str,
     filter_dict,
@@ -346,6 +347,12 @@ def main(
         run_dirs,
         num_params,
     ) = get_collection_results(collection, model, filter_dict)
+
+    for res in results:
+        c = res["config"]["graphgym"]["dataset"]
+        assert datasets[dataset]["format"] == c["format"]
+        assert datasets[dataset]["name"] == c["name"]
+
     configs = [c[0] for c in configs_all_info]
     (  # process results
         metric,
@@ -562,7 +569,7 @@ hyperparameters = {
         ("graphgym.train.homophily_regularization", False, False),
         ("graphgym.train.homophily_regularization_gt_weight", False, False),
     ],
-    "WeightedSANTransformer": [
+    "SAN": [
         ("graphgym.optim.base_lr", False, True),
         ("graphgym.optim.weight_decay", False, True),
         ("graphgym.gnn.dim_inner", False, False),
@@ -584,6 +591,14 @@ hyperparameters = {
     ],
 }
 
+datasets = {
+    "CLUSTER": {"format":"PyG-GNNBenchmarkDataset", "name": "CLUSTER"},
+    "CoraML-RUT": {"format": "PyG-RobustnessUnitTest", "name": "cora_ml"},
+    "Citeseer-RUT": {"format": "PyG-RobustnessUnitTest", "name": "citeseer"},
+    "UPFD_gos": {"format": "PyG-UPFD", "name": "gossipcop-bert"},
+    "UPFD_pol": {"format": "PyG-UPFD", "name": "politifact-bert"},
+}
+
 
 parser = argparse.ArgumentParser(description='Processes the results of hyperparameter search.')
 parser.add_argument("-c", "--collection")
@@ -600,6 +615,7 @@ if __name__ == "__main__":
     app = main(
         collection=args.collection,
         configs_all_info=hyperparameters[args.model],
+        dataset=args.dataset,
         k=int(args.k_best),
         results_path=results_path,
         filter_dict=filter_dict,
