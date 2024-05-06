@@ -2,8 +2,10 @@ import torch
 import logging
 import json
 from pathlib import Path
+from yacs.config import CfgNode as CN
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.data import Data, Batch
+from torch_geometric.utils import to_undirected, coalesce
 from graphgps.attack.preprocessing import forward_wrapper, remove_isolated_components
 from graphgps.attack.dataset_attack import (
     get_total_dataset_graphs,
@@ -29,12 +31,24 @@ from graphgps.attack.attack import (
 def transfer_attack_dataset(model, loaders, perturbation_path):
     """
     """
+    perturbation_path = Path(perturbation_path)
+    with open(perturbation_path / "attack_configs.yaml", "r") as f:
+        attack_configs = CN.load_cfg(f)
+    check_equal_configs(attack_configs, cfg)
 
-    # TODO: save the attack config with the perturbations, then check if compatible
-    # (only some are important, e.g. the attack dataset options)
-
-    # TODO: extract perturbations from perturbation path
-    perturbations = None
+    # extract perturbations from perturbation path
+    perturbations, seeds, budgets = [], [], []
+    for child in perturbation_path.iterdir():
+        if not child.is_dir():
+            continue
+        seed = int(child.name[1:])
+        for pert_file in child.iterdir():
+            budget = float(pert_file.name[15:-5])
+            with open(pert_file, "r") as f:
+                perturbations.append(json.load(f))
+            seeds.append(seed)
+            budgets.append(budget)
+    num_perturbations = len(perturbations)
      
     if cfg.dataset.task == "node" and (cfg.attack.node_injection.enable or cfg.attack.remove_isolated_components):
         raise NotImplementedError(
@@ -45,7 +59,7 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
     model.eval()
     model.forward = forward_wrapper(model.forward)
     stat_keys = get_accumulated_stat_keys()
-    all_stats = {k: [] for k in sorted(stat_keys)}
+    all_stats = [{k: [] for k in sorted(stat_keys)} for _ in range(num_perturbations)]
 
     # PREPARE DATASETS
     dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
@@ -61,36 +75,48 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
     for i, clean_data in enumerate(clean_loader):
         clean_data: Batch
         assert clean_data.num_graphs == 1
-        perturbation = perturbations.get(i, None)
-        if perturbation is None:
-            logging.info(f"Skipping graph {i} attack because no perturbation for it is available.")
-            continue
-        attack_or_skip_graph(
-            i,
-            model,
-            clean_data.get_example(0),
-            all_stats,
-            perturbation,
-            total_attack_dataset_graph,
-            attack_dataset_slices,
-            total_additional_datasets_graph,
-        )
+        for p, stats in zip(perturbations, all_stats):
+            perturbation = p.get(str(i), None)
+            if perturbation is None:
+                continue
+            transfer_attack_graph(
+                i,
+                model,
+                clean_data.get_example(0),
+                stats,
+                perturbation,
+                total_attack_dataset_graph,
+                attack_dataset_slices,
+                total_additional_datasets_graph,
+            )
     model.forward = model.forward.__wrapped__
     logging.info("End of transfer attack.")
 
     # summarize results
-    summary_stats = log_summary_stats(all_stats)
+    summary_stats = []
+    for stats in all_stats:
+        summary_stats.append(log_summary_stats(stats))
     results = {"avg": summary_stats}
     if not cfg.attack.only_return_avg:
         results["all"] = all_stats
+    results["seeds"] = seeds
+    results["budgets"] = budgets
     return results
 
 
-def attack_or_skip_graph(
+def check_equal_configs(configs_given: CN, currect_configs: CN) -> None:
+    for k, v in configs_given.items():
+        if isinstance(v, CN):
+            check_equal_configs(v, currect_configs[k])
+        else:
+            assert v == currect_configs[k], "The transfer attack configs are not compatible with the current ones."
+
+
+def transfer_attack_graph(
     i: int,
     model,
     clean_data: Data,
-    all_stats: dict[str, list],
+    stats: dict[str, list],
     perturbation: list[list[int]],
     total_attack_dataset_graph: Data | None,
     attack_dataset_slices: list[tuple[int, int]] | None,
@@ -111,7 +137,7 @@ def attack_or_skip_graph(
     output_clean = apply_node_mask(output_clean, node_mask)
     y_gt = apply_node_mask(clean_data.y.to(device=cfg.accelerator), node_mask)
     output_stats_clean = get_output_stats(y_gt, output_clean)
-    accumulate_output_stats(all_stats, output_stats_clean, mode="clean", random=False)
+    accumulate_output_stats(stats, output_stats_clean, mode="clean", random=False)
 
     # AUGMENT GRAPH (ONLY WHEN NODE INJECTION)
     attack_graph_data = get_attack_graph(
@@ -122,16 +148,33 @@ def attack_or_skip_graph(
     )
 
     # APPLY TRANSFER ATTACK
-    # TODO: get from perturbation
-    pert_edge_index = None
-    
-    # CHECK OUTPUT
-    data = Data(x=attack_graph_data.x.clone(), edge_index=pert_edge_index.cpu().clone())
+    pert_edge_index = get_perturbed_edge_index(attack_graph_data, perturbation)
+    data = Data(x=attack_graph_data.x.clone(), edge_index=pert_edge_index.clone())
     data, _ = remove_isolated_components(data)
     output_pert = model(data.to(device=cfg.accelerator), unmodified=True)
     output_pert = apply_node_mask(output_pert, node_mask)
     output_stats_pert = get_output_stats(y_gt, output_pert)
     log_pert_output_stats(output_stats_pert, output_stats_clean=output_stats_clean, random=False)
-    stats, num_stats = basic_edge_and_node_stats(clean_data.edge_index, pert_edge_index, num_edges, num_nodes)
-    accumulate_output_stats_pert(all_stats, output_stats_pert, output_stats_clean, False)
-    log_and_accumulate_num_stats(all_stats, num_stats, random=False)
+    _, num_stats = basic_edge_and_node_stats(clean_data.edge_index, pert_edge_index, num_edges, num_nodes)
+    accumulate_output_stats_pert(stats, output_stats_pert, output_stats_clean, False)
+    log_and_accumulate_num_stats(stats, num_stats, random=False)
+
+
+def get_perturbed_edge_index(data: Data, perturbation):
+    N = data.x.size(0)
+    E_clean = data.edge_index.size(1)
+    pert_edge_index = torch.tensor(perturbation, dtype=torch.long, device=data.x.device)
+    if cfg.attack.is_undirected:
+        pert_edge_index = to_undirected(pert_edge_index, num_nodes=N)
+    E_pert = pert_edge_index.size(1)
+    modified_edge_index = torch.cat((data.edge_index, pert_edge_index), dim=-1)
+    modified_edge_weight = torch.ones(E_clean + E_pert)
+    modified_edge_index, modified_edge_weight = coalesce(
+        modified_edge_index,
+        modified_edge_weight,
+        num_nodes=N,
+        reduce='sum',
+    )
+    removed_edges_mask = ~(modified_edge_weight == 2)
+    modified_edge_index = modified_edge_index[:, removed_edges_mask]
+    return modified_edge_index

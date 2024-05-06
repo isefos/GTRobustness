@@ -8,7 +8,22 @@ import pandas as pd
 import argparse
 import shutil
 from collections import defaultdict
-from .hs_results_analysis import datasets, models
+
+
+datasets = {
+    "CLUSTER": {"format":"PyG-GNNBenchmarkDataset", "name": "CLUSTER"},
+    "CoraML-RUT": {"format": "PyG-RobustnessUnitTest", "name": "cora_ml"},
+    "Citeseer-RUT": {"format": "PyG-RobustnessUnitTest", "name": "citeseer"},
+    "UPFD_gos_bert": {"format": "PyG-UPFD", "name": "gossipcop-bert"},
+    "UPFD_pol_bert": {"format": "PyG-UPFD", "name": "politifact-bert"},
+}
+models = {
+    "Graphormer": {"type": set(["Graphormer"]), "gnn_layer_type": None},
+    "SAN": {"type": set(["SANTransformer", "WeightedSANTransformer"]), "gnn_layer_type": None},
+    "GRIT": {"type": set(["GritTransformer"]), "gnn_layer_type": None},
+    "GCN": {"type": set(["gnn"]), "gnn_layer_type": set(["gcnconvweighted", "gcnconv"])},
+    "GAT": {"type": set(["gnn"]), "gnn_layer_type": set(["gatconvweighted", "gatconv"])},
+}
 
 
 attack_cols_graph = {
@@ -276,8 +291,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     assert args.dataset in datasets
     results_path = f"results_a/{args.dataset}/{args.model}/{args.collection}"
-    filter_dict = {"config.graphgym.attack.cluster_sampling": False}
-    # None  # not implemented for argparse... but can manually change here
+    # not implemented for argparse... but can manually change here
+    filter_dict = {"config.graphgym.attack.cluster_sampling": True}
     main(
         collection=args.collection,
         results_path=results_path,

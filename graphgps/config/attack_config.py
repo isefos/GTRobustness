@@ -148,3 +148,8 @@ def dataset_cfg(cfg):
     cfg.attack.node_injection.node_sampling.min_total_nodes = 1000
 
     cfg.attack.node_injection.node_sampling.max_block_size = 20_000
+
+    # for transfer attack
+    cfg.attack.transfer = CN()
+    cfg.attack.transfer.enable = False
+    cfg.attack.transfer.perturbation_path = ""

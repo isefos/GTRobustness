@@ -275,12 +275,10 @@ fixed:
     posenc_WLapPE:
       dim_pe: 16
       eigen:
-        correct_pert_eigvec_sign: false
+        max_freqs: 10
         eigvec_norm: L2
         laplacian_norm: sym
-        max_freqs: 10
-        straight_through_estimator: false
-        use_gradient: false
+        eps_repeated_eigenvalue: 3.0e-5  # TODO: test
       enable: true
       layers: 2
       model: none

@@ -10,6 +10,7 @@ from seml.experiment import Experiment
 from torch_geometric.graphgym.config import cfg, set_cfg
 from torch_geometric.graphgym.register import train_dict
 from graphgps.attack.attack import prbcd_attack_dataset
+from graphgps.attack.transfer import transfer_attack_dataset
 from graphgps.attack.transfer_unit_test import transfer_unit_test
 from graphgps.loader.dataset.robust_unittest import RobustnessUnitTest
 from graphgps.run_utils import (
@@ -48,7 +49,10 @@ def main_function(cfg):
     if cfg.attack.enable:
         if cfg.attack.load_best_model:
             model = load_best_val_model(model, training_results)
-        attack_results = prbcd_attack_dataset(model, loaders)
+        if cfg.attack.get("transfer", {}).get("enable", False):
+            attack_results = transfer_attack_dataset(model, loaders, cfg.attack.transfer.perturbation_path)
+        else:
+            attack_results = prbcd_attack_dataset(model, loaders)
 
     logging.info(f"[*] Finished now: {datetime.datetime.now()}")
     results = {"training": training_results, "attack": attack_results, "robustness_unit_test": rut_results}
