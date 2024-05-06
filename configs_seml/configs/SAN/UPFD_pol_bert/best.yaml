@@ -308,7 +308,7 @@ fixed:
       ckpt_best: true
       ckpt_clean: true
       ckpt_period: 100
-      enable_ckpt: false
+      enable_ckpt: true
       epoch_resume: -1
       eval_period: 1
       iter_per_epoch: 32
