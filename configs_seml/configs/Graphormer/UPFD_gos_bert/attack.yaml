@@ -42,6 +42,8 @@ fixed:
 
   graphgym:
 
+    accelerator: auto
+
     out_dir: configs_seml/results
 
     pretrained:
@@ -55,9 +57,9 @@ fixed:
       enable: true
       has_edge_attr: false
       node_degrees_only: false
-      num_in_degrees: 31
-      num_out_degrees: 31
-      num_spatial_types: 10
+      num_in_degrees: 21
+      num_out_degrees: 21
+      num_spatial_types: 8
       use_weighted_path_distance: true
 
     attack:
@@ -101,7 +103,6 @@ fixed:
 
     # copied from pre-trained model
 
-    accelerator: cuda
     benchmark: false
     best_by_loss: false
     bn:
@@ -129,7 +130,7 @@ fixed:
       label_column: none
       label_table: none
       location: local
-      name: politifact-bert
+      name: gossipcop-bert
       node_encoder: true
       node_encoder_bn: false
       node_encoder_name: LinearNode+WeightedGraphormerBias
@@ -165,7 +166,7 @@ fixed:
       att_heads: 1
       batchnorm: true
       clear_feature: true
-      dim_inner: 25
+      dim_inner: 30
       dropout: 0.0
       head: graphormer_graph
       keep_edge: 0.5
@@ -182,13 +183,13 @@ fixed:
       stage_type: stack
     gpu_mem: false
     graphormer:
-      attention_dropout: 0.3505713679995346
-      dropout: 0.0
-      embed_dim: 25
-      input_dropout: 0.1
-      mlp_dropout: 0.05
-      num_heads: 5
-      num_layers: 6
+      attention_dropout: 0.3821419034723292
+      dropout: 0.06887303117315342
+      embed_dim: 30
+      input_dropout: 0.008648277863293575
+      mlp_dropout: 0.05367421263138533
+      num_heads: 3
+      num_layers: 8
       use_graph_token: true
     gt:
       attn:
@@ -244,14 +245,14 @@ fixed:
     num_threads: 6
     num_workers: 0
     optim:
-      base_lr: 0.0009878809603816906
+      base_lr: 0.00037486491123483095
       batch_accumulation: 1
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       early_stopping: true
       early_stopping_delta_e: 0.01
       early_stopping_patience: 30
-      early_stopping_warmup: 15
+      early_stopping_warmup: 30
       lr_decay: 0.1
       max_epoch: 100
       min_lr: 0.0
@@ -265,7 +266,7 @@ fixed:
       - 30
       - 60
       - 90
-      weight_decay: 2.3000332477410756e-05
+      weight_decay: 1.3734889554522809e-05
     posenc_ElstaticSE:
       dim_pe: 16
       enable: false
@@ -376,7 +377,7 @@ fixed:
       ckpt_period: 100
       enable_ckpt: true
       epoch_resume: -1
-      eval_period: 10
+      eval_period: 1
       homophily_regularization: 0.0
       homophily_regularization_gt_weight: 1.0
       iter_per_epoch: 32
