@@ -29,13 +29,12 @@ def get_split_metric_results(training_results, split: str, metric: str, agg: str
         agg_fun = min
     else:
         raise NotImplementedError(f"agg={agg} is not implemented")
-    if old_logging:
-        # "old"
-        split_results = [r[split] for r in training_results]
-        all_values = [[e[metric] for e in r] for r in split_results]
-    else:
-        # "new"
-        all_values = [r[split][metric] for r in training_results]
+    all_values = []
+    for r, ol in zip(training_results, old_logging):
+        if ol:
+            all_values.append([e[metric] for e in r[split]])
+        else:
+            all_values.append(r[split][metric])
     agg_values = [agg_fun(m) for m in all_values]
     epochs_of_agg_values = [np.arange(len(m))[np.array(m) == max_m].tolist() for m, max_m in zip(all_values, agg_values)]
     agg_value = max(agg_values)
@@ -60,11 +59,15 @@ def get_ranked_results(results, k):
     metric = results[0]["config"]["graphgym"]["metric_best"]
     for result in results:
         assert result["config"]["graphgym"]["metric_best"] == metric, "Not all metrics are the same"
-    old_logging = "train" in results[0]["result"]
-    if old_logging:
-        training_results = [result["result"]["train"] for result in results]
-    else:
-        training_results = [result["result"]["training"] for result in results]
+    training_results = []
+    old_logging = []
+    for result in results:
+        ol = "train" in result["result"]
+        old_logging.append(ol)
+        if ol:
+            training_results.append(result["result"]["train"])
+        else:
+            training_results.append(result["result"]["training"])
     train_metric = get_split_metric_results(training_results, "train", metric, "max", old_logging)
     train_loss = get_split_metric_results(training_results, "train", "loss", "min", old_logging)
     # val:
@@ -278,7 +281,7 @@ def save_single_plots(
         plt.close(fig)
 
 
-def get_collection_results(collection, model, filter_dict):
+def get_collection_results(collection, filter_dict):
     extra_fields = [
         'slurm.array_id', 'slurm.experiments_per_job', 'slurm.task_id', 'stats.real_time',
         'stats.pytorch.gpu_max_memory_bytes', 'stats.self.max_memory_bytes',
@@ -310,12 +313,13 @@ def get_collection_results(collection, model, filter_dict):
     run_dirs = [result["result"].get("run_dir") for result in results]
     num_params = [result["result"].get("num_params") for result in results]
     for result in results:
+        model = result["config"]["graphgym"]["model"]["type"]
         d_per_head = result["config"]["dims_per_head"]
         d_hidden = result["config"]["graphgym"]["gnn"]["dim_inner"]
         if d_per_head > 0 and d_hidden == 0:
             if model == "Graphormer":
                 n_heads = result["config"]["graphgym"]["graphormer"]["num_heads"]
-            elif model in ["GRIT", "WeightedSANTransformer", "SANTransformer"]:
+            elif model in ["GritTransformer", "WeightedSANTransformer", "SANTransformer"]:
                 n_heads = result["config"]["graphgym"]["gt"]["n_heads"]
             else:
                 raise NotImplementedError(f"model={model} is not implemented")
@@ -332,10 +336,10 @@ def main(
     collection: str,
     configs_all_info: list[tuple[str, bool, bool]],
     dataset: str,
+    model: str,
     k: int,
     results_path: str,
     filter_dict,
-    model: str,
     old_plotting: bool = False,
 ):
     (
@@ -346,12 +350,23 @@ def main(
         seeds_seml,
         run_dirs,
         num_params,
-    ) = get_collection_results(collection, model, filter_dict)
+    ) = get_collection_results(collection, filter_dict)
 
     for res in results:
-        c = res["config"]["graphgym"]["dataset"]
-        assert datasets[dataset]["format"] == c["format"]
-        assert datasets[dataset]["name"] == c["name"]
+        df = res["config"]["graphgym"]["dataset"]["format"]
+        dfg = datasets[dataset]["format"]
+        dn = res["config"]["graphgym"]["dataset"]["name"]
+        dng = datasets[dataset]["name"]
+        assert df == dfg, (f"Dataset format was given to be `{dfg}`, but encountered `{df}`.")
+        assert dn == dng, (f"Dataset name was given to be `{dng}`, but encountered `{dn}`.")
+        
+        mt = res["config"]["graphgym"]["model"]["type"]
+        mtg = models[model]["type"]
+        assert mt in mtg, (f"Model was given to be in {mtg}, but encountered `{mt}`.")
+        mlg = models[model]["gnn_layer_type"]
+        if mlg is not None:
+            ml = res["config"]["graphgym"]["gnn"]["layer_type"]
+            assert ml in mlg, (f"Model layer was given to be in {mlg}, but encountered `{ml}`.")
 
     configs = [c[0] for c in configs_all_info]
     (  # process results
@@ -595,8 +610,16 @@ datasets = {
     "CLUSTER": {"format":"PyG-GNNBenchmarkDataset", "name": "CLUSTER"},
     "CoraML-RUT": {"format": "PyG-RobustnessUnitTest", "name": "cora_ml"},
     "Citeseer-RUT": {"format": "PyG-RobustnessUnitTest", "name": "citeseer"},
-    "UPFD_gos": {"format": "PyG-UPFD", "name": "gossipcop-bert"},
-    "UPFD_pol": {"format": "PyG-UPFD", "name": "politifact-bert"},
+    "UPFD_gos_bert": {"format": "PyG-UPFD", "name": "gossipcop-bert"},
+    "UPFD_pol_bert": {"format": "PyG-UPFD", "name": "politifact-bert"},
+}
+
+models = {
+    "Graphormer": {"type": set(["Graphormer"]), "gnn_layer_type": None},
+    "SAN": {"type": set(["SANTransformer", "WeightedSANTransformer"]), "gnn_layer_type": None},
+    "GRIT": {"type": set(["GritTransformer"]), "gnn_layer_type": None},
+    "GCN": {"type": set(["gnn"]), "gnn_layer_type": set(["gcnconvweighted", "gcnconv"])},
+    "GAT": {"type": set(["gnn"]), "gnn_layer_type": set(["gatconvweighted", "gatconv"])},
 }
 
 
@@ -616,10 +639,10 @@ if __name__ == "__main__":
         collection=args.collection,
         configs_all_info=hyperparameters[args.model],
         dataset=args.dataset,
+        model=args.model,
         k=int(args.k_best),
         results_path=results_path,
         filter_dict=filter_dict,
-        model=args.model,
         old_plotting=args.single_plots,
     )
     if app is not None:

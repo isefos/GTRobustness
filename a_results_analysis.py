@@ -8,7 +8,7 @@ import pandas as pd
 import argparse
 import shutil
 from collections import defaultdict
-from .hs_results_analysis import datasets
+from .hs_results_analysis import datasets, models
 
 
 attack_cols_graph = {
@@ -201,7 +201,8 @@ def main(
     collection: str,
     results_path: str,
     filter_dict,
-    dataset,
+    dataset: str,
+    model: str,
 ):
     (
         results,
@@ -215,9 +216,20 @@ def main(
     ) = get_collection_results(collection, filter_dict)
 
     for res in results:
-        c = res["config"]["graphgym"]["dataset"]
-        assert datasets[dataset]["format"] == c["format"]
-        assert datasets[dataset]["name"] == c["name"]
+        df = res["config"]["graphgym"]["dataset"]["format"]
+        dfg = datasets[dataset]["format"]
+        dn = res["config"]["graphgym"]["dataset"]["name"]
+        dng = datasets[dataset]["name"]
+        assert df == dfg, (f"Dataset format was given to be `{dfg}`, but encountered `{df}`.")
+        assert dn == dng, (f"Dataset name was given to be `{dng}`, but encountered `{dn}`.")
+        
+        mt = res["config"]["graphgym"]["model"]["type"]
+        mtg = models[model]["type"]
+        assert mt in mtg, (f"Model was given to be in {mtg}, but encountered `{mt}`.")
+        mlg = models[model]["gnn_layer_type"]
+        if mlg is not None:
+            ml = res["config"]["graphgym"]["gnn"]["layer_type"]
+            assert ml in mlg, (f"Model layer was given to be in {mlg}, but encountered `{ml}`.")
 
     pred_level = results[0]["config"]["graphgym"]["attack"]["prediction_level"]
     for r in results:
@@ -271,4 +283,5 @@ if __name__ == "__main__":
         results_path=results_path,
         filter_dict=filter_dict,
         dataset=args.dataset,
+        model=args.model,
     )
