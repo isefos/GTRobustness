@@ -50,7 +50,7 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/PyG-GNNBenchmarkDataset-CLUSTER-GRIT/0'
+      dir: '/ceph/hdd/students/foth/models/GRIT/CLUSTER/0'
       finetune: false
 
     attack:

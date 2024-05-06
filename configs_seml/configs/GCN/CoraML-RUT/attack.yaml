@@ -30,7 +30,7 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/PyG-RobustnessUnitTest-cora_ml-GCN/0'
+      dir: '/ceph/hdd/students/foth/models/GCN/CoraML-RUT/0'
       finetune: false
 
     robustness_unit_test:

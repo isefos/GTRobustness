@@ -50,7 +50,7 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/PyG-GNNBenchmarkDataset-CLUSTER-SAN/0'
+      dir: '/ceph/hdd/students/foth/models/SAN/CLUSTER/0'
       finetune: false
 
     posenc_WLapPE:
