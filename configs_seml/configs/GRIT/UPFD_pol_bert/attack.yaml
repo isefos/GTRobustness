@@ -339,14 +339,9 @@ fixed:
       phi_out_dim: 4
       post_layers: 0
       raw_norm_type: none
-    pretrained:
-      dir: ''
-      freeze_main: false
-      reset_prediction_head: true
     print: both
     round: 5
     run_multiple_splits: []
-    seed: 1086
     share:
       dim_in: 1
       dim_out: 1
