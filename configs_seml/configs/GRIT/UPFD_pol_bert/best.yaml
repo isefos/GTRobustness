@@ -83,7 +83,7 @@ fixed:
       att_heads: 1
       batchnorm: true
       clear_feature: true
-      dim_inner: 35
+      dim_inner: 9
       dropout: 0.0
       head: weighted_mean_pool_graph
       keep_edge: 0.5
@@ -118,7 +118,7 @@ fixed:
         full_attn: true
         norm_e: true
         use_bias: false
-      attn_dropout: 0.4105043242271129
+      attn_dropout: 0.49043390029112205
       batch_norm: true
       bigbird:
         add_cross_attention: false
@@ -133,14 +133,14 @@ fixed:
         use_bias: false
       bn_momentum: 0.1
       bn_no_runner: false
-      dim_hidden: 35
-      dropout: 0.1
+      dim_hidden: 9
+      dropout: 0.0
       full_graph: true
       gamma: 1.0e-05
       layer_norm: false
       layer_type: SANLayer
-      layers: 5
-      n_heads: 7
+      layers: 2
+      n_heads: 3
       pna_degrees: []
       residual: true
       update_e: true
@@ -160,7 +160,7 @@ fixed:
     num_threads: 6
     num_workers: 0
     optim:
-      base_lr: 0.01485726895750164
+      base_lr: 0.0005613502210584832
       batch_accumulation: 1
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
@@ -172,7 +172,7 @@ fixed:
       max_epoch: 200
       min_lr: 0.0
       momentum: 0.9
-      num_warmup_epochs: 18
+      num_warmup_epochs: 8
       optimizer: adamW
       reduce_factor: 0.1
       schedule_patience: 10
@@ -181,7 +181,7 @@ fixed:
       - 30
       - 60
       - 90
-      weight_decay: 0.00024073214211632962
+      weight_decay: 0.029739191336970547
     posenc_ElstaticSE:
       dim_pe: 16
       enable: false
@@ -239,8 +239,8 @@ fixed:
       raw_norm_type: none
     posenc_RRWP:
       enable: true
-      ksteps: 7
-      w_add_dummy_edge: false
+      ksteps: 9
+      w_add_dummy_edge: true
     posenc_RWSE:
       dim_pe: 16
       enable: false
@@ -275,7 +275,7 @@ fixed:
     print: both
     round: 5
     run_multiple_splits: []
-    seed: 1086
+    seed: 5730
     share:
       dim_in: 1
       dim_out: 1
