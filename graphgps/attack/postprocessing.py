@@ -8,7 +8,9 @@ import torch.nn.functional as F
 from itertools import compress
 
 
-def get_accumulated_stat_keys():
+def get_accumulated_stat_keys(with_random: None | bool = None):
+    if with_random is None:
+        with_random = cfg.attack.run_random_baseline
     keys = [
         "budget_used",
         "budget_used_rel",
@@ -22,7 +24,7 @@ def get_accumulated_stat_keys():
             "num_edges_added_connected",
             "num_nodes_added_connected",
         ])
-    if cfg.attack.run_random_baseline:
+    if with_random:
         keys.extend([k + "_random" for k in keys])
 
     keys.extend(["budget", "num_edges_clean", "num_nodes_clean"])
@@ -30,7 +32,7 @@ def get_accumulated_stat_keys():
     if cfg.dataset.task_type.startswith("classification"):
         asr = "attack_success_rate"
         asr_keys = [asr]
-        if cfg.attack.run_random_baseline:
+        if with_random:
             asr_keys.append(asr + "_random")
         keys.extend(asr_keys)
 
@@ -41,7 +43,7 @@ def get_accumulated_stat_keys():
         
         keys.extend([k + "_clean" for k in key_prefixes])
         keys.extend([k + "_pert" for k in key_prefixes])
-        if cfg.attack.run_random_baseline:
+        if with_random:
             keys.extend([k + "_pert_random" for k in key_prefixes])
 
     else:

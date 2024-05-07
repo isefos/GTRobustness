@@ -58,7 +58,7 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
     logging.info("Start of transfer attack:")
     model.eval()
     model.forward = forward_wrapper(model.forward)
-    stat_keys = get_accumulated_stat_keys()
+    stat_keys = get_accumulated_stat_keys(with_random=False)
     all_stats = [{k: [] for k in sorted(stat_keys)} for _ in range(num_perturbations)]
 
     # PREPARE DATASETS
@@ -105,11 +105,16 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
 
 
 def check_equal_configs(configs_given: CN, currect_configs: CN) -> None:
-    for k, v in configs_given.items():
-        if isinstance(v, CN):
-            check_equal_configs(v, currect_configs[k])
+    for k, value_given in configs_given.items():
+        if isinstance(value_given, CN):
+            check_equal_configs(value_given, currect_configs[k])
         else:
-            assert v == currect_configs[k], "The transfer attack configs are not compatible with the current ones."
+            value = currect_configs[k]
+            if k == "name" and configs_given.get("format", "") == "PyG-UPFD":
+                # for UPFD only the dataset politifact / gossipcop has to match, the features don't matter
+                value = value.split("-")[0]
+                value_given = value_given.split("-")[0]
+            assert value == value_given, "The transfer attack configs are not compatible with the current ones."
 
 
 def transfer_attack_graph(

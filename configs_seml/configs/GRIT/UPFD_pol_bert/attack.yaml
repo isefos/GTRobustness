@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 2
+  experiments_per_job: 4
   sbatch_options:
     partition: gpu_large
     gres: gpu:1       # num GPUs
@@ -51,8 +51,8 @@ fixed:
 
     posenc_RRWP:
       enable: true
-      ksteps: 7
-      w_add_dummy_edge: false    
+      ksteps: 9
+      w_add_dummy_edge: true
 
     attack:
       enable: true
@@ -158,7 +158,7 @@ fixed:
       att_heads: 1
       batchnorm: true
       clear_feature: true
-      dim_inner: 35
+      dim_inner: 9
       dropout: 0.0
       head: weighted_mean_pool_graph
       keep_edge: 0.5
@@ -193,7 +193,7 @@ fixed:
         full_attn: true
         norm_e: true
         use_bias: false
-      attn_dropout: 0.4105043242271129
+      attn_dropout: 0.49043390029112205
       batch_norm: true
       bigbird:
         add_cross_attention: false
@@ -208,17 +208,19 @@ fixed:
         use_bias: false
       bn_momentum: 0.1
       bn_no_runner: false
-      dim_hidden: 35
-      dropout: 0.1
+      dim_hidden: 9
+      dropout: 0.0
       full_graph: true
       gamma: 1.0e-05
+      gamma_learnable: false
       layer_norm: false
       layer_type: SANLayer
-      layers: 5
-      n_heads: 7
+      layers: 2
+      n_heads: 3
       pna_degrees: []
       residual: true
       update_e: true
+      wsan_add_dummy_edges: false
     mem:
       inplace: false
     metric_agg: argmax
@@ -235,7 +237,7 @@ fixed:
     num_threads: 6
     num_workers: 0
     optim:
-      base_lr: 0.01485726895750164
+      base_lr: 0.0005613502210584832
       batch_accumulation: 1
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
@@ -247,7 +249,7 @@ fixed:
       max_epoch: 200
       min_lr: 0.0
       momentum: 0.9
-      num_warmup_epochs: 18
+      num_warmup_epochs: 8
       optimizer: adamW
       reduce_factor: 0.1
       schedule_patience: 10
@@ -256,7 +258,7 @@ fixed:
       - 30
       - 60
       - 90
-      weight_decay: 0.00024073214211632962
+      weight_decay: 0.029739191336970547
     posenc_ElstaticSE:
       dim_pe: 16
       enable: false
@@ -339,7 +341,25 @@ fixed:
       phi_out_dim: 4
       post_layers: 0
       raw_norm_type: none
+    posenc_WLapPE:
+      dim_pe: 16
+      eigen:
+        eigvec_norm: L2
+        eps_repeated_eigenvalue: 1.0e-06
+        laplacian_norm: sym
+        max_freqs: 10
+        nia_pert: half_weight
+      enable: false
+      layers: 3
+      model: none
+      n_heads: 4
+      pass_as_var: false
+      post_layers: 0
+      raw_norm_type: none
     print: both
+    robustness_unit_test:
+      enable: false
+      load_best_model: true
     round: 5
     run_multiple_splits: []
     share:
@@ -354,9 +374,11 @@ fixed:
       ckpt_best: true
       ckpt_clean: true
       ckpt_period: 100
-      enable_ckpt: false
+      enable_ckpt: true
       epoch_resume: -1
       eval_period: 1
+      homophily_regularization: 0.0
+      homophily_regularization_gt_weight: 1.0
       iter_per_epoch: 32
       mode: custom
       neighbor_sizes:
