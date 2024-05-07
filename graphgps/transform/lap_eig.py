@@ -57,7 +57,7 @@ def get_lap_decomp_stats(
             E = None
     if E is None:
         # do dense calculation
-        get_dense_eigh(L.toarray(), max_freqs, need_full)
+        E, U = get_dense_eigh(L.toarray(), max_freqs, need_full)
 
 
     if not need_full:
