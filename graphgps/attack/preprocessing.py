@@ -410,9 +410,9 @@ if __name__ == "__main__":
     assert torch.all(node_logprob_1 == node_logprob_2)
 
     print("\nLogprob 1 and 2:")
-    for logprob_1, logprob_2 in zip(node_logprob_1.numpy(), node_logprob_2.numpy()):
+    for logprob_1, logprob_2 in zip(node_logprob_1.cpu().numpy(), node_logprob_2.cpu().numpy()):
         print(f"{repr(logprob_1):>20} {repr(logprob_2):>20}")
 
     print("\nProb 1 and 2:")
-    for prob_1, prob_2 in zip(node_logprob_1.exp().numpy(), node_logprob_2.exp().numpy()):
+    for prob_1, prob_2 in zip(node_logprob_1.exp().cpu().numpy(), node_logprob_2.exp().cpu().numpy()):
         print(f"{repr(prob_1):>20} {repr(prob_2):>20}")

@@ -5,8 +5,13 @@ from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.register import register_node_encoder
 from torch_geometric.utils import get_laplacian, coalesce
 from torch_sparse import spmm
-from graphgps.transform.lap_eig import get_lap_decomp_stats, eigvec_normalizer, invert_wrong_signs
-from torch.linalg import eigh
+from graphgps.transform.lap_eig import (
+    get_dense_eigh,
+    get_lap_decomp_stats,
+    eigvec_normalizer,
+    invert_wrong_signs,
+)
+import numpy as np
 
 
 @register_node_encoder("WLapPE")
@@ -237,8 +242,11 @@ def basis_transform_repeated_eigenvectors_(
         start, end = slices_min[i].item(), slices_max[i].item()
         U_block = U[:, start:end]  # n x m
         # project L_delta into U basis -- m x m <- ((m x n) x (n x n) x (n x m))
+        L_delta_block_p: torch.Tensor
         L_delta_block_p = U_block.T @ spmm(delta_lap_edge_index, delta_lap_edge_attr, num_nodes, num_nodes, U_block)
-        _, U_p = eigh(L_delta_block_p)
+        # do the eigendecomposition in scipy
+        _, U_p = get_dense_eigh(L_delta_block_p.cpu().numpy().astype(np.float64), need_full=True)
+        U_p = torch.from_numpy(U_p).float().to(U.device)
         # set the block in U to be equal to the eigenvectors of L_delta_block_p projected back
         U[:, start:end] = U_block @ U_p
         # set the entries in P_inv to zero

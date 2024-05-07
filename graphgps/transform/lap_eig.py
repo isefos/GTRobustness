@@ -4,14 +4,27 @@ from torch_geometric.utils import get_laplacian, to_scipy_sparse_matrix
 from scipy.sparse.linalg import eigsh
 from scipy.linalg import eigh
 import logging
+from numpy.typing import NDArray
 
 
-def compute_dense_eigh(L, max_freqs, need_full, driver="evr"):
-    if (not need_full) and (max_freqs < L.shape[0]):
-        E, U = eigh(L, subset_by_index=[0, max_freqs-1], driver=driver)
+def _compute_dense_eigh(A: NDArray, max_freqs: int, need_full: bool, driver: str = "evr"):
+    if (not need_full) and (max_freqs < A.shape[0]):
+        E, U = eigh(A, subset_by_index=[0, max_freqs-1], driver=driver)
     else:
-        # TODO: maybe only take the lowest and highest
-        E, U = eigh(L, driver=driver)
+        # TODO: add option to get only subset of lowest and highest
+        E, U = eigh(A, driver=driver)
+    return E, U
+
+
+def get_dense_eigh(A: NDArray, max_freqs: int = 10, need_full: bool = True):
+    try:
+        try:
+            E, U = _compute_dense_eigh(A, max_freqs, need_full, driver="evr")
+        except:
+            E, U = _compute_dense_eigh(A, max_freqs, need_full, driver="evd")
+    except Exception as e:
+        logging.error(f"Could not resolve error during eigendecomposition of the matrix:\n{A.tolist()}")
+        raise e
     return E, U
 
 
@@ -37,24 +50,14 @@ def get_lap_decomp_stats(
     L = to_scipy_sparse_matrix(L_edge_index, L_edge_attr, num_nodes)
 
     E, U = None, None
-    try:
-        if not need_full and (4 * max_freqs) < num_nodes:
-            try:
-                E, U = eigsh(L, k=max_freqs, which='SM', return_eigenvectors=True)
-            except:
-                E = None
-        if E is None:
-            # do dense calculation
-            L = L.toarray()
-            try:
-                E, U = compute_dense_eigh(L, max_freqs, need_full)
-            except:
-                E, U = compute_dense_eigh(L, max_freqs, need_full, driver="evd")
-    except Exception as e:
-        logging.error(e)
-        logging.info(f"Laplacian edge index: {L_edge_index}")
-        logging.info(f"Laplacian edge attr: {L_edge_attr}")
-        raise Exception("Could not resolve error during laplacian eigendecomposition")
+    if not need_full and (4 * max_freqs) < num_nodes:
+        try:
+            E, U = eigsh(L, k=max_freqs, which='SM', return_eigenvectors=True)
+        except:
+            E = None
+    if E is None:
+        # do dense calculation
+        get_dense_eigh(L.toarray(), max_freqs, need_full)
 
 
     if not need_full:
