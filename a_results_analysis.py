@@ -292,7 +292,7 @@ if __name__ == "__main__":
     assert args.dataset in datasets
     results_path = f"results_a/{args.dataset}/{args.model}/{args.collection}"
     # not implemented for argparse... but can manually change here
-    filter_dict = {"config.graphgym.attack.cluster_sampling": True}
+    filter_dict = None  # {"config.graphgym.attack.cluster_sampling": True}
     main(
         collection=args.collection,
         results_path=results_path,

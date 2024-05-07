@@ -7,9 +7,9 @@ seml:
 slurm:
   experiments_per_job: 3
   sbatch_options:
-    partition: gpu_large
+    partition: gpu_all
     gres: gpu:1       # num GPUs
-    mem: 32G          # memory
+    mem: 16G          # memory
     cpus-per-task: 4  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
@@ -18,10 +18,25 @@ grid:
   graphgym.seed:
     type: choice
     options:
+      - 1982
+      - 1982
+      - 1982
+      - 1982
+      - 1982
+      - 1982
+      - 1982
+      - 1982
+      - 15
       - 15
       - 843
+      - 843
       - 1094
-      - 1982
+      - 1094
+      #- 15
+      #- 843
+      #- 1094
+      #- 1982
+    zip_id: run_missing
 
   graphgym.attack.e_budget:
     type: choice
@@ -34,6 +49,21 @@ grid:
       - 0.45
       - 0.65
       - 1.0
+      - 0.1
+      - 1.0
+      - 0.05
+      - 1.0
+      - 0.15
+      - 0.45
+      #- 0.02
+      #- 0.05
+      #- 0.1
+      #- 0.15
+      #- 0.25
+      #- 0.45
+      #- 0.65
+      #- 1.0
+    zip_id: run_missing
 
 # experiment fixed configs
 
