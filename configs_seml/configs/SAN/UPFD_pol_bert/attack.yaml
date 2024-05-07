@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 2
+  experiments_per_job: 1
   sbatch_options:
     partition: gpu_large
     gres: gpu:1       # num GPUs
@@ -356,6 +356,9 @@ fixed:
       post_layers: 0
       raw_norm_type: none
     print: both
+    robustness_unit_test:
+      enable: false
+      load_best_model: true
     round: 5
     run_multiple_splits: []
     share:
@@ -370,9 +373,11 @@ fixed:
       ckpt_best: true
       ckpt_clean: true
       ckpt_period: 100
-      enable_ckpt: false
+      enable_ckpt: true
       epoch_resume: -1
       eval_period: 1
+      homophily_regularization: 0.0
+      homophily_regularization_gt_weight: 1.0
       iter_per_epoch: 32
       mode: custom
       neighbor_sizes:
