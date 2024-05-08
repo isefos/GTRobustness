@@ -19,6 +19,7 @@ grid:
     type: choice
     options:
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/GRIT'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/SAN'
 
 # experiment fixed configs
 
@@ -60,6 +61,7 @@ fixed:
       run_random_baseline: false
       is_undirected: true
       root_node_idx: null
+      cluster_sampling: true
       node_injection:
         enable: false
       transfer:

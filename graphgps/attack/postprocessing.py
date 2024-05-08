@@ -37,9 +37,13 @@ def get_accumulated_stat_keys(with_random: None | bool = None):
         keys.extend(asr_keys)
 
         if cfg.attack.prediction_level == "node":
-            key_prefixes = ["correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max"]
+            key_prefixes = [
+                "correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max",
+                "margin_correct_mean", "margin_correct_median", "margin_correct_min", "margin_correct_max",
+                "margin_wrong_mean", "margin_wrong_median", "margin_wrong_min", "margin_wrong_max",
+            ]
         else:
-            key_prefixes = ["correct", "margin"]  # "probs", "logits"
+            key_prefixes = ["correct", "margin", "margin_correct", "margin_wrong"]
         
         keys.extend([k + "_clean" for k in key_prefixes])
         keys.extend([k + "_pert" for k in key_prefixes])
@@ -81,22 +85,28 @@ def get_node_output_stats(y_gt, logits):
         y_correct_mask = F.one_hot(y_gt, num_classes).to(dtype=torch.bool)
         assert probs.shape == y_correct_mask.shape
         margin = probs[y_correct_mask] - probs[~y_correct_mask].reshape(-1, num_classes-1).max(dim=1)[0]
-        margin_mean = margin.mean().item()
-        margin_median = margin.median().item()
-        margin_min = margin.min().item()
-        margin_max = margin.max().item()
         correct = class_idx_pred == y_gt
         acc = correct.float().mean().item()
+        margin_correct = margin[correct]
+        margin_wrong = margin[~correct]
         output_stats = {
             "probs": probs.tolist(),
             "logits": logits.tolist(),
             "correct": correct.tolist(),
             "correct_acc": acc,
             "margin": margin.tolist(),
-            "margin_mean": margin_mean,
-            "margin_median": margin_median,
-            "margin_min": margin_min,
-            "margin_max": margin_max,
+            "margin_mean": margin.mean().item(),
+            "margin_median": margin.median().item(),
+            "margin_min": margin.min().item(),
+            "margin_max": margin.max().item(),
+            "margin_correct_mean": margin_correct.mean().item(),
+            "margin_correct_median": margin_correct.median().item(),
+            "margin_correct_min": margin_correct.min().item(),
+            "margin_correct_max": margin_correct.max().item(),
+            "margin_wrong_mean": margin_wrong.mean().item(),
+            "margin_wrong_median": margin_wrong.median().item(),
+            "margin_wrong_min": margin_wrong.min().item(),
+            "margin_wrong_max": margin_wrong.max().item(),
         }
         return output_stats
 
@@ -131,6 +141,8 @@ def get_graph_output_stats(y_gt, model_output):
             "logits": logits.tolist(),
             "correct": correct,
             "margin": margin,
+            "margin_correct": margin if correct else None,
+            "margin_wrong": margin if not correct else None,
         }
         return output_stats
 
