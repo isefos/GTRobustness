@@ -158,7 +158,10 @@ def setup_run(graphgym, dims_per_head, dims_per_head_PE, seml_seed=None, jupyter
     if graphgym.get("robustness_unit_test", {}).get("enable", False):
         run_type += "-rut"
     elif graphgym.get("attack", {}).get("enable", False):
-        run_type += "-attack"
+        if graphgym["attack"].get("transfer", {}).get("enable", False):
+            run_type += "-transferattack"
+        else:
+            run_type += "-attack"
 
     output_dir = os.path.join(
         graphgym["out_dir"],

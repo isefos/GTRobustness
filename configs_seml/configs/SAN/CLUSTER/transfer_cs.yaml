@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 1
+  experiments_per_job: 2
   sbatch_options:
     partition: gpu_all
     gres: gpu:1       # num GPUs
@@ -13,13 +13,15 @@ slurm:
     cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
+# "cs": cluster sampling, so attacking the labeled nodes is NOT allowed -> attack.cluster_sampling: true
+
 grid:
 
   graphgym.attack.transfer.perturbation_path:
     type: choice
     options:
-      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GRIT'
-      - '/ceph/hdd/students/foth/perturbations/CLUSTER/SAN'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GRIT_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/SAN_cs'
 
 # experiment fixed configs
 
