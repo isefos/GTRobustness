@@ -90,15 +90,14 @@ def write_results(
 
     run_seed_dataframes = {}
 
-    for i, result in enumerate(results):
-        transfer_model = result["transfer_model"]
-        run_name = f"{transfer_model}_{i}"
+    for result in results:
+        run_name = result["transfer_model"]
 
         seeds = result["result"]["attack"]["seeds"]
         budgets = result["result"]["attack"]["budgets"]
 
         seed_results = {}
-        for j, (seed, budget, avg_results) in enumerate(zip(seeds, budgets, result["result"]["attack"]["avg"])):
+        for seed, budget, avg_results in zip(seeds, budgets, result["result"]["attack"]["avg"]):
             if seed not in seed_results:
                 seed_results[seed] = defaultdict(list)
             seed_results[seed]["budget"].append(budget)
@@ -193,7 +192,7 @@ def save_plots(
                 ax.plot(x, y, label=label)
                 ax.fill_between(x, y-std, y+std, alpha=0.2)
 
-                all_agg_results[title][run_name][col] = {"x": x, "y": y, "std": std, "label": label}
+                all_agg_results[title][run_name][col] = {"x": x, "y": y, "std": std}
 
             ax.set_xlabel("budget")
             ax.set_ylabel(title)
@@ -202,7 +201,6 @@ def save_plots(
             ax.clear()
             plt.close(fig)
 
-    # now plot all transfer aggregates together
     plots_dir_all_runs = plots_dir / "all_runs_agg"
     plots_dir_all_runs.mkdir()
 
@@ -212,10 +210,15 @@ def save_plots(
         ax.set_title(model)
         for run_name, agg_res in run_stats.items():
             for col, res in agg_res.items():
+                if "clean" in col:
+                    continue
                 x = res["x"]
                 y = res["y"]
                 std = res["std"]
-                label = f"{run_name}: {res['label']}"
+                if run_name == model:
+                    label = f"adaptive"
+                else:
+                    label = f"transfer from {run_name}"
                 ax.plot(x, y, label=label)
                 ax.fill_between(x, y-std, y+std, alpha=0.2)
         ax.set_xlabel("budget")
