@@ -80,8 +80,6 @@ fixed:
 
   graphgym:
 
-    seed: 42
-
     accelerator: cuda
     out_dir: configs_seml/results
     metric_best: accuracy-SBM
