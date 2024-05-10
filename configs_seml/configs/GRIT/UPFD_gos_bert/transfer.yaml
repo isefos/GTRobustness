@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 4
+  experiments_per_job: 2
   sbatch_options:
     partition: gpu_all
     gres: gpu:1       # num GPUs
@@ -101,7 +101,7 @@ fixed:
       node_encoder_bn: false
       node_encoder_name: LinearNode+WeightedRRWPLinear
       node_encoder_num_types: 0
-      pe_transform_on_the_fly: false
+      pe_transform_on_the_fly: true
       remove_feature: false
       resample_disjoint: false
       resample_negative: false
