@@ -20,8 +20,8 @@ grid:
     options:
       - '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/GRIT'
       - '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/SAN'
-      - '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/GCN_diffseed'  # TODO: change to correct when run
-      - '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/Graphormer_diffseed'  # TODO: change to correct when run
+      - '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/GCN'
+      - '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/Graphormer'
 
 # experiment fixed configs
 
