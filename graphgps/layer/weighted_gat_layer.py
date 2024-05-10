@@ -6,6 +6,8 @@ from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.models.layer import LayerConfig
 from torch_geometric.graphgym.register import register_layer
 from torch_geometric.utils import softmax
+from torch_geometric.typing import OptTensor
+from typing import Optional
 
 
 class WeightedGATConvLayer(pyg_nn.GATConv):
@@ -28,7 +30,7 @@ class WeightedGATConvLayer(pyg_nn.GATConv):
             edge_attr = edge_attr.view(-1, 1)
             # `alpha` unchanged if edge_attr == 1 and -Inf if edge_attr == 0;
             # We choose log to counteract underflow in subsequent exp/softmax
-            alpha = alpha + torch.log2(edge_attr)
+            alpha = alpha + torch.log(edge_attr)
         alpha = softmax(alpha, index, ptr, size_i)
         alpha = F.dropout(alpha, p=self.dropout, training=self.training)
         return alpha
@@ -37,7 +39,7 @@ class WeightedGATConvLayer(pyg_nn.GATConv):
 @register_layer('gatconvweighted')
 class WeightedGATConvGraphGymLayer(nn.Module):
     """
-    Graph Attention Network (GAT) layer
+    Graph Attention Network (GAT) layer, with probabilistic edges
     """
     def __init__(self, layer_config: LayerConfig, **kwargs):
         super().__init__()
@@ -49,6 +51,54 @@ class WeightedGATConvGraphGymLayer(nn.Module):
                 f"attention heads ({heads}). Hidden channel size was set to {per_head_dim_out * heads}."
             )
         self.model = WeightedGATConvLayer(
+            layer_config.dim_in,
+            per_head_dim_out,
+            bias=layer_config.has_bias,
+            heads=heads,
+        )
+
+    def forward(self, batch):
+        batch.x = self.model(batch.x, batch.edge_index, batch.edge_attr)
+        return batch
+
+
+class WeightedGATv2ConvLayer(pyg_nn.GATv2Conv):
+    """Extended GATv2 to allow for weighted edges."""
+    def message(self, x_j: torch.Tensor, x_i: torch.Tensor, edge_attr: OptTensor,
+                index: torch.Tensor, ptr: OptTensor,
+                size_i: Optional[int]) -> torch.Tensor:
+        x = x_i + x_j
+        x = F.leaky_relu(x, self.negative_slope)
+        alpha = (x * self.att).sum(dim=-1)
+
+        if edge_attr is not None:
+            assert edge_attr.dim() == 1, 'Only scalar edge weights supported'
+            edge_attr = edge_attr.view(-1, 1)
+            # `alpha` unchanged if edge_attr == 1 and -Inf if edge_attr == 0;
+            # We choose log to counteract underflow in subsequent exp/softmax
+            alpha = alpha + torch.log(edge_attr)
+
+        alpha = softmax(alpha, index, ptr, size_i)
+        self._alpha = alpha
+        alpha = F.dropout(alpha, p=self.dropout, training=self.training)
+        return x_j * alpha.unsqueeze(-1)
+
+
+@register_layer('gatv2convweighted')
+class WeightedGATConvGraphGymLayer(nn.Module):
+    """
+    Graph Attention Network (GATv2) layer, with probabilistic edges
+    """
+    def __init__(self, layer_config: LayerConfig, **kwargs):
+        super().__init__()
+        heads = cfg.gnn.att_heads
+        per_head_dim_out = layer_config.dim_out // heads
+        if (heads * per_head_dim_out) != layer_config.dim_out:
+            raise ValueError(
+                f"The given hidden channel size ({layer_config.dim_out}) is not divisible by the number of "
+                f"attention heads ({heads}). Hidden channel size was set to {per_head_dim_out * heads}."
+            )
+        self.model = WeightedGATv2ConvLayer(
             layer_config.dim_in,
             per_head_dim_out,
             bias=layer_config.has_bias,

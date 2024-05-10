@@ -5,60 +5,21 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 10
+  experiments_per_job: 1
   sbatch_options:
     partition: gpu_all
     gres: gpu:1       # num GPUs
-    mem: 32G          # memory
+    mem: 12G          # memory
     cpus-per-task: 4  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
-# hyperparameter search
-
-random:
-  samples: 100
-  seed: 187
-
-  graphgym.seed:
-    seed: 786
-    type: randint
-    min: 0
-    max: 10000
-
-  graphgym.optim.base_lr:
-    seed: 2264
-    type: loguniform
-    min: 4.0e-3
-    max: 2.0e-2
-
-  graphgym.gnn.dim_inner:
-    seed: 4275
-    type: randint
-    min: 150
-    max: 350
-
-  graphgym.gnn.layers_mp:
-    seed: 357
-    type: choice
-    options:
-      - 2
-      - 3
-      - 4
-  
-  graphgym.gnn.layers_post_mp:
-    seed: 96624
-    type: choice
-    options:
-      - 1
-      - 2
-      - 3
-
-
-# experiment fixed configs 
+# experiment fixed configs - from benchmarking paper
 
 fixed:
 
   graphgym:
+
+    seed: 42
 
     accelerator: cuda
     out_dir: configs_seml/results
@@ -91,21 +52,30 @@ fixed:
       layer_type: gcnconvweighted
       stage_type: skipsum
       head: inductive_node
+      dim_inner: 172
       act: relu
-      agg: add
+      agg: mean
       dropout: 0.0
       layers_pre_mp: 0
+      layers_mp: 16
+      layers_post_mp: 2
       batchnorm: true
       normalize_adj: false
 
     optim:
-      clip_grad_norm: false
       optimizer: adam
-      max_epoch: 100
+      weight_decay: 0.0
+      base_lr: 0.001
+      max_epoch: 150
+      scheduler: reduce_on_plateau
+      reduce_factor: 0.5
+      schedule_patience: 5
+      min_lr: 1.0e-5
+      clip_grad_norm: false
       early_stopping: true
-      early_stopping_patience: 30
-      early_stopping_delta_e: 0.02
-      early_stopping_warmup: 30
+      early_stopping_patience: 25
+      early_stopping_delta_e: 0.01
+      early_stopping_warmup: 40
 
     attack:
       enable: false

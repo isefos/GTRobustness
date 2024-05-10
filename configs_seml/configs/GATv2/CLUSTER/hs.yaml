@@ -49,7 +49,7 @@ fixed:
       loss_fun: weighted_cross_entropy
 
     gnn:
-      layer_type: gatconvweighted
+      layer_type: gatv2convweighted
       stage_type: skipsum
       head: inductive_node
       agg: mean
@@ -60,7 +60,7 @@ fixed:
       att_heads: 8
       batchnorm: true
       normalize_adj: false
-      dim_inner: 176
+      dim_inner: 120
 
     optim:
       optimizer: adam
