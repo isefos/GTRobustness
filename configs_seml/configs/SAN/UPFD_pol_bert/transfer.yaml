@@ -5,12 +5,12 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 4
+  experiments_per_job: 1
   sbatch_options:
     partition: gpu_all
     gres: gpu:1       # num GPUs
     mem: 16G          # memory
-    cpus-per-task: 8  # num cores
+    cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
 grid:
