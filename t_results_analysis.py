@@ -50,6 +50,25 @@ attack_cols_node = {
 }
 
 
+budget_measures = {
+    "budget": {
+        "key": "budget",
+        "label": r"Budget (% edge modifications allowed)",
+        "mul": 100,
+    },
+    "budget_used": {
+        "key": "bu",
+        "label": r"Average edges modified (%)",
+        "mul": 100,
+    },
+    "num_modifications": {
+        "key": "m",
+        "label": r"Average num. edges modified",
+        "mul": 1,
+    },
+}
+
+
 def clean_path(results_path: str):
     results_path = Path(results_path)
     if results_path.exists():
@@ -94,13 +113,31 @@ def write_results(
         run_name = result["transfer_model"]
 
         seeds = result["result"]["attack"]["seeds"]
-        budgets = result["result"]["attack"]["budgets"]
+        budgets_allowed = result["result"]["attack"]["budgets"]
+
+        avg_num_edges_modified = [
+            r.get("avg_num_edges_added_connected", r["avg_num_edges_added"]) + r["avg_num_edges_removed"]
+            for r in result["result"]["attack"]["avg"]
+        ]
+        avg_num_edges_clean = [
+            r["avg_num_edges_clean"]
+            for r in result["result"]["attack"]["avg"]
+        ]
+        avg_budget_used = [m / c for m, c in zip(avg_num_edges_modified, avg_num_edges_clean)]
+        budgets = [
+            {"budget": b, "bu": bu, "m": m} for b, bu, m in zip(
+                budgets_allowed,
+                avg_budget_used,
+                avg_num_edges_modified,
+            )
+        ]
 
         seed_results = {}
         for seed, budget, avg_results in zip(seeds, budgets, result["result"]["attack"]["avg"]):
             if seed not in seed_results:
                 seed_results[seed] = defaultdict(list)
-            seed_results[seed]["budget"].append(budget)
+            for budget_measure, budget in budget.items():
+                seed_results[seed][budget_measure].append(budget)
             for col in cols:
                 seed_results[seed][col].append(avg_results[col])
 
@@ -117,116 +154,94 @@ def write_results(
 
 def save_plots(
     model,
+    dataset,
     run_seed_dfs,
     results_path,
     attack_cols,
 ):
     plots_dir = results_path / "plots"
-
-    plots_dir_runs = plots_dir / "runs"
+    plots_dir_runs = plots_dir / "individual"
 
     all_agg_results = {}
 
     for run_name, seed_dfs in run_seed_dfs.items():
 
         plots_dir_run = plots_dir_runs / run_name
-
-        seed_plot_dir = plots_dir_run / "seeds"
-        seed_plot_dir.mkdir(parents=True)
-
-        for seed, df in seed_dfs.items():
-            cur_plot_dir = seed_plot_dir / f"seed_{seed}"
-            cur_plot_dir.mkdir()
-
-            for title, col_group in attack_cols.items():
-
-                fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
-                ax.set_title(model)
-
-                if "clean" in col_group:
-                    c = col_group["clean"]
-                    zb_val = df[c][0]
-                else:
-                    zb_val = 0.0
-
-                for label, col in col_group.items():
-                    x = np.concatenate((np.array([0.0]), np.array(df["budget"])))
-                    y = np.concatenate((np.array([zb_val]), np.array(df[col])))
-                    ax.plot(x, y, label=label)
-
-                ax.set_xlabel("budget")
-                ax.set_ylabel(title)
-                ax.legend()
-                fig.savefig(cur_plot_dir / f"{title}.png")
-                ax.clear()
-                plt.close(fig)
-
-        agg_plot_dir = plots_dir_run / "agg"
-        agg_plot_dir.mkdir(parents=True)
+        plots_dir_run.mkdir(parents=True)
         
         # aggregate seeds, mean and error std
         df_agg = pd.concat(list(seed_dfs.values()))
-        df_agg_mean = df_agg.groupby("budget").mean()
-        df_agg_std = df_agg.groupby("budget").std()
+        df_agg_mean = df_agg.groupby("budget", as_index=False).mean()
+        df_agg_std = df_agg.groupby("budget", as_index=False).std()
 
         # plot aggregate
         for title, col_group in attack_cols.items():
 
-            fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
-            ax.set_title(model)
+            for budget_measure, budget_dict in budget_measures.items():
 
-            if "clean" in col_group:
-                c = col_group["clean"]
-                zb_val = df[c][0]
-            else:
-                zb_val = 0.0
+                fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
+                ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
 
-            if title not in all_agg_results:
-                all_agg_results[title] = {}
-            all_agg_results[title][run_name] = {}
+                if "clean" in col_group:
+                    zb_val = df_agg_mean[col_group["clean"]][0]
+                else:
+                    zb_val = 0.0
 
-            for label, col in col_group.items():
-                x = np.concatenate((np.array([0.0]), np.array(df_agg_mean.index)))
-                y = np.concatenate((np.array([zb_val]), np.array(df_agg_mean[col])))
-                std = np.concatenate((np.array([0.0]), np.array(df_agg_std[col])))
-                ax.plot(x, y, label=label)
-                ax.fill_between(x, y-std, y+std, alpha=0.2)
+                if title not in all_agg_results:
+                    all_agg_results[title] = {budget_measure: {run_name: {}}}
+                elif budget_measure not in all_agg_results[title]:
+                    all_agg_results[title][budget_measure] = {run_name: {}}
+                else:
+                    all_agg_results[title][budget_measure][run_name] = {}
 
-                all_agg_results[title][run_name][col] = {"x": x, "y": y, "std": std}
+                for label, col in col_group.items():
+                    if label == "clean":
+                        continue  #  don't plot the clean (is equal to first step anyway)
+                    x = np.concatenate((np.array([0.0]), np.array(df_agg_mean.index)))
+                    x = np.concatenate(
+                        (np.array([0.0]), np.array(df_agg_mean[budget_dict["key"]]))
+                    ) * budget_dict["mul"]
+                    y = np.concatenate((np.array([zb_val]), np.array(df_agg_mean[col])))
+                    std = np.concatenate((np.array([0.0]), np.array(df_agg_std[col])))
+                    ax.plot(x, y, label=label)
+                    ax.fill_between(x, y-std, y+std, alpha=0.2)
 
-            ax.set_xlabel("budget")
-            ax.set_ylabel(title)
-            ax.legend()
-            fig.savefig(agg_plot_dir / f"{title}.png")
-            ax.clear()
-            plt.close(fig)
+                    all_agg_results[title][budget_measure][run_name][col] = {"x": x, "y": y, "std": std}
 
-    plots_dir_all_runs = plots_dir / "all_runs_agg"
+                ax.set_xlabel(budget_dict["label"])
+                ax.set_ylabel(title)
+                ax.legend()
+                fig.savefig(plots_dir_run / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
+                ax.clear()
+                plt.close(fig)
+
+    plots_dir_all_runs = plots_dir / "all"
     plots_dir_all_runs.mkdir()
 
-    for title, run_stats in all_agg_results.items():
+    for title, run_stats_b in all_agg_results.items():
 
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
-        ax.set_title(model)
-        for run_name, agg_res in run_stats.items():
-            for col, res in agg_res.items():
-                if "clean" in col:
-                    continue
-                x = res["x"]
-                y = res["y"]
-                std = res["std"]
-                if run_name == model:
-                    label = f"adaptive"
-                else:
-                    label = f"transfer from {run_name}"
-                ax.plot(x, y, label=label)
-                ax.fill_between(x, y-std, y+std, alpha=0.2)
-        ax.set_xlabel("budget")
-        ax.set_ylabel(title)
-        ax.legend()
-        fig.savefig(plots_dir_all_runs / f"{title}.png")
-        ax.clear()
-        plt.close(fig)
+        for budget_measure, budget_dict in budget_measures.items():
+
+            run_stats = run_stats_b[budget_measure]
+            fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
+            ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
+            for run_name, agg_res in run_stats.items():
+                for col, res in agg_res.items():
+                    x = res["x"]
+                    y = res["y"]
+                    std = res["std"]
+                    if run_name == model:
+                        label = f"adaptive"
+                    else:
+                        label = f"transfer from {run_name}"
+                    ax.plot(x, y, label=label)
+                    ax.fill_between(x, y-std, y+std, alpha=0.2)
+            ax.set_xlabel(budget_dict["label"])
+            ax.set_ylabel(title)
+            ax.legend()
+            fig.savefig(plots_dir_all_runs / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
+            ax.clear()
+            plt.close(fig)
 
 
 def get_collection_results(collection, filter_dict):
@@ -328,6 +343,7 @@ def main(
     # plots
     save_plots(
         model,
+        dataset,
         run_seed_dataframes,
         results_path,
         attack_cols,

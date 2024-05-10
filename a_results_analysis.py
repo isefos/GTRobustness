@@ -50,6 +50,25 @@ attack_cols_node = {
 }
 
 
+budget_measures = {
+    "budget": {
+        "keys": {"adaptive": "budget", "random": "budget"},
+        "label": r"Budget (% edge modifications allowed)",
+        "mul": 100,
+    },
+    "budget_used": {
+        "keys": {"adaptive": "bu", "random": "bur"},
+        "label": r"Average edges modified (%)",
+        "mul": 100,
+    },
+    "num_modifications": {
+        "keys": {"adaptive": "m", "random": "mr"},
+        "label": r"Average num. edges modified",
+        "mul": 1,
+    },
+}
+
+
 def clean_path(results_path: str):
     results_path = Path(results_path)
     if results_path.exists():
@@ -98,7 +117,8 @@ def write_results(
         if seed not in seed_results:
             seed_results[seed] = defaultdict(list)
         seed_results[seed]["run_ids"].append(run_ids[i])
-        seed_results[seed]["budget"].append(budgets[i])
+        for budget_measure, budget in budgets[i].items():
+            seed_results[seed][budget_measure].append(budget)
         for col in cols:
             seed_results[seed][col].append(results[i]["result"]["attack"]["avg"][col])
     seed_dataframes = {}
@@ -111,6 +131,7 @@ def write_results(
 
 def save_plots(
     model,
+    dataset,
     seed_dfs,
     results_path,
     attack_cols,
@@ -125,8 +146,49 @@ def save_plots(
 
         for title, col_group in attack_cols.items():
 
+            for budget_measure, budget_dict in budget_measures.items():
+
+                fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
+                ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
+
+                if "clean" in col_group:
+                    c = col_group["clean"]
+                    zb_val = df[c][0]
+                else:
+                    zb_val = 0.0
+
+                for label, col in col_group.items():
+                    if label == "clean":
+                        continue  #  don't plot the clean (is equal to first step anyway)
+                    x = np.concatenate(
+                        (np.array([0.0]), np.array(df[budget_dict["keys"][label]]))
+                    ) * budget_dict["mul"]
+                    y = np.concatenate((np.array([zb_val]), np.array(df[col])))
+                    ax.plot(x, y, label=label)
+
+                ax.set_xlabel(budget_dict["label"])
+                ax.set_ylabel(title)
+                ax.legend()
+                fig.savefig(cur_plot_dir / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
+                ax.clear()
+                plt.close(fig)
+
+    agg_plot_dir = plots_dir / "agg"
+    agg_plot_dir.mkdir(parents=True)
+    
+    # aggregate seeds, mean and error std
+    df_agg = pd.concat(list(seed_dfs.values()))
+    df_agg = df_agg.drop("run_ids", axis=1)
+    df_agg_mean = df_agg.groupby("budget", as_index=False).mean()
+    df_agg_std = df_agg.groupby("budget", as_index=False).std()
+
+    # plot aggregate
+    for title, col_group in attack_cols.items():
+
+        for budget_measure, budget_dict in budget_measures.items():
+
             fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
-            ax.set_title(model)
+            ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
 
             if "clean" in col_group:
                 c = col_group["clean"]
@@ -135,51 +197,22 @@ def save_plots(
                 zb_val = 0.0
 
             for label, col in col_group.items():
-                x = np.concatenate((np.array([0.0]), np.array(df["budget"])))
-                y = np.concatenate((np.array([zb_val]), np.array(df[col])))
+                if label == "clean":
+                        continue  #  don't plot the clean (is equal to first step anyway)
+                x = np.concatenate(
+                    (np.array([0.0]), np.array(df_agg_mean[budget_dict["keys"][label]]))
+                ) * budget_dict["mul"]
+                y = np.concatenate((np.array([zb_val]), np.array(df_agg_mean[col])))
+                std = np.concatenate((np.array([0.0]), np.array(df_agg_std[col])))
                 ax.plot(x, y, label=label)
+                ax.fill_between(x, y-std, y+std, alpha=0.2)
 
-            ax.set_xlabel("budget")
+            ax.set_xlabel(budget_dict["label"])
             ax.set_ylabel(title)
             ax.legend()
-            fig.savefig(cur_plot_dir / f"{title}.png")
+            fig.savefig(agg_plot_dir / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
             ax.clear()
             plt.close(fig)
-
-    agg_plot_dir = plots_dir / "agg"
-    agg_plot_dir.mkdir(parents=True)
-    
-    # aggregate seeds, mean and error std
-    df_agg = pd.concat(list(seed_dfs.values()))
-    df_agg = df_agg.drop("run_ids", axis=1)
-    df_agg_mean = df_agg.groupby("budget").mean()
-    df_agg_std = df_agg.groupby("budget").std()
-
-    # plot aggregate
-    for title, col_group in attack_cols.items():
-
-        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
-        ax.set_title(model)
-
-        if "clean" in col_group:
-            c = col_group["clean"]
-            zb_val = df[c][0]
-        else:
-            zb_val = 0.0
-
-        for label, col in col_group.items():
-            x = np.concatenate((np.array([0.0]), np.array(df_agg_mean.index)))
-            y = np.concatenate((np.array([zb_val]), np.array(df_agg_mean[col])))
-            std = np.concatenate((np.array([0.0]), np.array(df_agg_std[col])))
-            ax.plot(x, y, label=label)
-            ax.fill_between(x, y-std, y+std, alpha=0.2)
-
-        ax.set_xlabel("budget")
-        ax.set_ylabel(title)
-        ax.legend()
-        fig.savefig(agg_plot_dir / f"{title}.png")
-        ax.clear()
-        plt.close(fig)
 
 
 def get_collection_results(collection, filter_dict):
@@ -213,7 +246,21 @@ def get_collection_results(collection, filter_dict):
     seeds_seml = [result["config"]["seed"] for result in results]
     run_dirs = [result["result"].get("run_dir") for result in results]
     num_params = [result["result"].get("num_params") for result in results]
-    budgets = [result["config"]["graphgym"]["attack"]["e_budget"] for result in results]
+    budgets_allowed = [result["config"]["graphgym"]["attack"]["e_budget"] for result in results]
+    avg_num_edges_modified = [r["result"]["attack"]["avg"]["avg_budget_used"] for r in results]
+    avg_num_edges_modified_random = [r["result"]["attack"]["avg"]["avg_budget_used_random"] for r in results]
+    avg_num_edges_clean = [r["result"]["attack"]["avg"]["avg_num_edges_clean"] for r in results]
+    avg_budget_used = [m / c for m, c in zip(avg_num_edges_modified, avg_num_edges_clean)]
+    avg_budget_used_random = [m / c for m, c in zip(avg_num_edges_modified_random, avg_num_edges_clean)]
+    budgets = [
+        {"budget": b, "bu": bu, "bur": bur, "m": m, "mr": mr} for b, bu, bur, m, mr in zip(
+            budgets_allowed,
+            avg_budget_used,
+            avg_budget_used_random,
+            avg_num_edges_modified,
+            avg_num_edges_modified_random,
+        )
+    ]
     return results, run_ids, extras, seeds_graphgym, seeds_seml, run_dirs, num_params, budgets
 
 
@@ -281,6 +328,7 @@ def main(
     # plots
     save_plots(
         model,
+        dataset,
         seed_dataframes,
         results_path,
         attack_cols,
