@@ -44,11 +44,11 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/GAT/CLUSTER/0'
+      dir: '/ceph/hdd/students/foth/models/GATv2/CLUSTER/0'
       finetune: false
 
     attack:
-      cluster_sampling: true
+      cluster_sampling: false
       enable: true
       num_attacked_graphs: 50
       skip_incorrect_graph_classification: false
@@ -144,12 +144,12 @@ fixed:
       att_heads: 8
       batchnorm: true
       clear_feature: true
-      dim_inner: 176
+      dim_inner: 120
       dropout: 0.0
       head: inductive_node
       keep_edge: 0.5
       l2norm: true
-      layer_type: gatconvweighted
+      layer_type: gatv2convweighted
       layers_mp: 16
       layers_post_mp: 2
       layers_pre_mp: 0
@@ -360,7 +360,7 @@ fixed:
     tensorboard_each_run: false
     train:
       auto_resume: false
-      batch_size: 128
+      batch_size: 64
       ckpt_best: true
       ckpt_clean: true
       ckpt_period: 100
