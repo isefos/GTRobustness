@@ -1,0 +1,41 @@
+seml:
+  executable: main.py
+  output_dir: configs_seml/logs
+  project_root_dir: ../../../..
+  conda_environment: gtr
+
+slurm:
+  experiments_per_job: 5
+  sbatch_options:
+    partition: gpu_all
+    gres: gpu:1       # num GPUs
+    mem: 16G          # memory
+    cpus-per-task: 4  # num cores
+    time: 1-00:00     # max time, D-HH:MM
+
+grid:
+
+  graphgym.dataset.split_index:
+    type: choice
+    options:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+
+fixed:
+
+  graphgym:
+
+    out_dir: configs_seml/results
+
+    pretrained:
+      dir: '/ceph/hdd/students/foth/models/GCN/CoraML-RUT/${graphgym.dataset.split_index}'  # TODO: check if this works
+      finetune: false
+
+    robustness_unit_test:
+      enable: true
+      load_best_model: false
+
+    # copied from config of model that gets loaded  # TODO: get the correct cfgs

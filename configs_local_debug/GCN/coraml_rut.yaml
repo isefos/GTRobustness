@@ -12,6 +12,7 @@ graphgym:
     task: node
     task_type: classification
     transductive: true
+    split_index: 1
 
   train:
     batch_size: 1
@@ -29,58 +30,22 @@ graphgym:
     layers_pre_mp: 1
     layers_mp: 2
     layers_post_mp: 1
-    dim_inner: 256
+    dim_inner: 120
     layer_type: gcnconvweighted
     stage_type: stack
     batchnorm: true
     act: prelu  # relu is a bit more robust (or harder to attack)
     dropout: 0.0
-    agg: add
+    agg: mean
     normalize_adj: false
 
   optim:
     optimizer: adam
     base_lr: 0.005
-    max_epoch: 30
+    max_epoch: 5
 
   robustness_unit_test:
     enable: true
 
   attack:
-    enable: true
-    log_progress: true
-    load_best_model: true
-    split: test
-    num_attacked_graphs: 0  # 0 means attack all
-    skip_incorrect_graph_classification: true
-    run_random_baseline: true
-    epochs: 125
-    epochs_resampling: 100
-    max_edge_weight_update: 0.0  # 0.0 means no gradient clipping
-    lr: 4_000
-    block_size: 10_000
-    e_budget: 0.05
-    minimum_budget: 0
-    eps: 1.0e-7
-    is_undirected: false
-    prediction_level: node
-    loss: tanh_margin
-    metric: null
-    max_final_samples: 20
-    max_trials_sampling: 20
-    with_early_stopping: true
-    node_prob_enable: false
-    node_prob_iterations: 5
-    node_prob_log: true
-    enable_node_injection: false
-    node_injection_from_train: false
-    node_injection_from_val: false
-    node_injection_from_test: false
-    remove_isolated_components: false
-    root_node_idx: null
-    include_root_nodes_for_injection: true
-    existing_node_prob_multiplier: 1  # 1_000
-    sample_only_connected: false
-    sample_only_trees: false
-    allow_existing_graph_pert: true
-
+    enable: false

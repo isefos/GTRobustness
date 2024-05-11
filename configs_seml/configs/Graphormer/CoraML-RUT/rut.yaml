@@ -13,7 +13,16 @@ slurm:
     cpus-per-task: 4  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
-# experiment fixed configs
+grid:
+
+  graphgym.dataset.split_index:
+    type: choice
+    options:
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
 
 fixed:
 
@@ -22,7 +31,7 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/PyG-RobustnessUnitTest-cora_ml-Graphormer/0'
+      dir: '/ceph/hdd/students/foth/models/Graphormer/CoraML-RUT/${graphgym.dataset.split_index}'
       finetune: false
 
     robustness_unit_test:
@@ -115,7 +124,6 @@ fixed:
       - 0.1
       - 0.1
       split_dir: ./splits
-      split_index: 0
       split_mode: standard
       task: node
       task_type: classification

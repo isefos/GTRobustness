@@ -41,7 +41,7 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/GCN/CoraML-RUT/${graphgym.dataset.split_index}'  # TODO: test if this works
+      dir: '/ceph/hdd/students/foth/models/GCN/CoraML-RUT/hom${graphgym.dataset.split_index}'  # TODO: test if this works
       finetune: false
 
     robustness_unit_test:

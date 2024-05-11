@@ -8,10 +8,11 @@ from scipy.sparse import csgraph
 from graphgps.loader.master_loader import load_dataset_master, log_loaded_dataset
 import logging
 from torch_geometric.graphgym.loader import set_dataset_info
+from torch_geometric.utils import mask_to_index
 
 
 logging.basicConfig(level=logging.INFO)
-config_file = "./configs_local_debug/GCN/cluster.yaml"
+config_file = "./configs_local_debug/GCN/coraml_rut.yaml"
 with open(config_file, "r") as f:
     cfg_file = CN._load_cfg_from_file(f)
 cfg_file = cfg_file.graphgym
@@ -53,6 +54,14 @@ for dataset, split in zip(datasets, splits):
 
     for i in range(num_graphs):
         graph = dataset[i]
+
+        train_mask = graph.get("train_mask")
+        if train_mask is not None:
+            train_nodes = mask_to_index(train_mask)
+            print(f"train nodes: {train_nodes}")
+            print(f"val nodes: {mask_to_index(graph.get('val_mask'))}")
+            # print(f"test nodes: {mask_to_index(graph.get('test_mask'))}")
+
         n = graph.x.size(0)
         num_nodes_per_graph.append(n)
         node_degrees = torch.zeros(n, dtype=torch.long).scatter_(value=1, index=graph.edge_index[1, :], dim=0, reduce="add")
