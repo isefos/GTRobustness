@@ -41,7 +41,7 @@ fixed:
 
     train:
       mode: custom
-      batch_size: 128
+      batch_size: 16
       eval_period: 1
 
     model:
@@ -56,11 +56,11 @@ fixed:
       dropout: 0.0
       layers_pre_mp: 0
       layers_mp: 16
-      layers_post_mp: 2
+      layers_post_mp: 1
       att_heads: 8
       batchnorm: true
       normalize_adj: false
-      dim_inner: 120
+      dim_inner: 88
 
     optim:
       optimizer: adam

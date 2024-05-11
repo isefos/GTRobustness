@@ -11,7 +11,7 @@ from torch_geometric.graphgym.loader import set_dataset_info
 
 
 logging.basicConfig(level=logging.INFO)
-config_file = "./configs_sacred/GCN/upfd_gos.yaml"
+config_file = "./configs_local_debug/GCN/cluster.yaml"
 with open(config_file, "r") as f:
     cfg_file = CN._load_cfg_from_file(f)
 cfg_file = cfg_file.graphgym
