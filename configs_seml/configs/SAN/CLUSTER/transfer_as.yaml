@@ -5,12 +5,12 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 2
+  experiments_per_job: 6
   sbatch_options:
     partition: gpu_all
     gres: gpu:1       # num GPUs
-    mem: 16G          # memory
-    cpus-per-task: 2  # num cores
+    mem: 32G          # memory
+    cpus-per-task: 6  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
 # "as": any sampling, so attacking the labeled nodes is allowed -> attack.cluster_sampling: false
@@ -22,6 +22,10 @@ grid:
     options:
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/GRIT_as'
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/SAN_as'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GCN_as'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GAT_as'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GATv2_as'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/Graphormer_as'
 
 # experiment fixed configs
 
