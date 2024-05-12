@@ -95,7 +95,7 @@ fixed:
       node_encoder_bn: false
       node_encoder_name: LinearNode+WeightedRRWPLinear
       node_encoder_num_types: 0
-      pe_transform_on_the_fly: false
+      pe_transform_on_the_fly: true
       remove_feature: false
       resample_disjoint: false
       resample_negative: false
