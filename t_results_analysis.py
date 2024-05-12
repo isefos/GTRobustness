@@ -23,6 +23,7 @@ models = {
     "GRIT": {"type": set(["GritTransformer"]), "gnn_layer_type": None},
     "GCN": {"type": set(["gnn"]), "gnn_layer_type": set(["gcnconvweighted", "gcnconv"])},
     "GAT": {"type": set(["gnn"]), "gnn_layer_type": set(["gatconvweighted", "gatconv"])},
+    "GATv2": {"type": set(["gnn"]), "gnn_layer_type": set(["gatv2convweighted", "gatv2conv"])},
 }
 
 
