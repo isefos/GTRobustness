@@ -24,11 +24,3 @@ def set_cfg_gt(cfg):
     cfg.posenc_GraphormerBias.num_out_degrees = None
     cfg.posenc_GraphormerBias.directed_graphs = False
     cfg.posenc_GraphormerBias.has_edge_attr = True
-    cfg.posenc_GraphormerBias.use_weighted_degrees = True
-    cfg.posenc_GraphormerBias.combinations_degree = False
-    # use reciprocal edge weight to find the shortest paths, if False, will ignore `sp_use_weighted` and `sp_use_gradient`
-    cfg.posenc_GraphormerBias.sp_find_weighted = True
-    # use the weighted distances for the found paths (if False will use the hop distance, and will ignore `sp_use_gradient`)
-    cfg.posenc_GraphormerBias.sp_use_weighted = True
-    # use the gradient of the weighted shortest path distances
-    cfg.posenc_GraphormerBias.sp_use_gradient = True

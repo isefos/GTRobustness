@@ -1,15 +1,23 @@
 import torch
 from torch_geometric.data import Data
 from torch_sparse import SparseTensor
+from torch_geometric.graphgym.config import cfg
 
 
 def add_full_rrwp(data: Data, walk_length: int):
     num_nodes = data.num_nodes
-    edge_index, edge_weight = data.edge_index, data.edge_weight
+    edge_index = data.edge_index
+    device = edge_index.device
+    edge_weight_rrwp = data.edge_weight
+
+    if not cfg.attack.GRIT.cont_RRWP:
+        edge_weight_rrwp = None
+    elif not cfg.attack.GRIT.grad_RRWP and edge_weight_rrwp is not None:
+        edge_weight_rrwp = edge_weight_rrwp.detach()
 
     adj = SparseTensor.from_edge_index(
         edge_index,
-        edge_weight,
+        edge_weight_rrwp,
         sparse_sizes=(num_nodes, num_nodes),
     )
 
@@ -22,7 +30,7 @@ def add_full_rrwp(data: Data, walk_length: int):
     adj = adj.to_dense()
 
     pe_list = [
-        torch.eye(num_nodes, dtype=torch.float, device=edge_index.device),
+        torch.eye(num_nodes, dtype=torch.float, device=device),
         adj,
     ]
 
@@ -42,6 +50,26 @@ def add_full_rrwp(data: Data, walk_length: int):
     data.rrwp = abs_pe
     data.rrwp_index = rel_pe_idx
     data.rrwp_val = rel_pe_val
-    data.log_deg = torch.log1p(deg)
+
+    # recompute degrees, because they may have different cont. / grad. settings than the rrwp
+    if data.edge_weight is None or (not cfg.attack.GRIT.cont_degree):
+        degrees = torch.zeros(num_nodes, dtype=torch.long, device=device).scatter_(
+            value=1,
+            index=edge_index[1, :],
+            dim=0,
+            reduce="add",
+        )
+    else:
+        edge_weight_deg = data.edge_attr
+        if not cfg.attack.GRIT.grad_degree:
+            edge_weight_deg = edge_weight_deg.detach()
+        degrees = torch.scatter_add(
+            input=torch.zeros(num_nodes, device=device),
+            src=edge_weight_deg,
+            index=edge_index[1, :],
+            dim=0,
+        )
+
+    data.log_deg = torch.log1p(degrees)
 
     return data

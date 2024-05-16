@@ -188,7 +188,7 @@ fixed:
       enable: false
       raw_norm_type: none
     posenc_GraphormerBias:
-      combinations_degree: false
+       
       dim_pe: 0
       directed_graphs: false
       enable: true
@@ -197,7 +197,7 @@ fixed:
       num_in_degrees: 37
       num_out_degrees: 37
       num_spatial_types: 10
-      use_weighted_path_distance: false
+ 
     posenc_HKdiagSE:
       dim_pe: 16
       enable: false

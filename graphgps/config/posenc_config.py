@@ -67,15 +67,6 @@ def set_cfg_posenc(cfg):
         # Maximum number of top smallest frequencies & eigenvectors to use
         pecfg.eigen.max_freqs = 10
 
-    # enable or disable the gradient using matrix perturbation approximation
-    cfg.posenc_WLapPE.eigen.enable_pert_grad = True
-
-    # Use gradient-based eigen-decomposition for adversarial attacks
-    cfg.posenc_WLapPE.eigen.eps_repeated_eigenvalue = 1e-6
-
-    # Node Injection Attack with LapPE -> how to define the approximation perturbation
-    cfg.posenc_WLapPE.eigen.nia_pert = "half_weight"  # or half_eps
-
     # Config for SignNet-specific options.
     cfg.posenc_SignNet.phi_out_dim = 4
     cfg.posenc_SignNet.phi_hidden_dim = 64
@@ -100,5 +91,8 @@ def set_cfg_posenc(cfg):
 
     # RRWP (GRIT)
     cfg.posenc_RRWP.enable = False
-    cfg.posenc_RRWP.ksteps = 21
-    cfg.posenc_RRWP.w_add_dummy_edge = False
+    cfg.posenc_RRWP.ksteps = 10
+    cfg.posenc_RRWP.w_add_dummy_edge = True
+
+    # weighted SAN
+    cfg.posenc_WLapPE.w_add_dummy_edge = True

@@ -19,8 +19,8 @@ posenc_GraphormerBias:
   num_out_degrees: 32
   directed_graphs: False
   has_edge_attr: False
-  combinations_degree: False
-  use_weighted_path_distance: False
+   
+ 
 train:
   mode: custom
   batch_size: 16

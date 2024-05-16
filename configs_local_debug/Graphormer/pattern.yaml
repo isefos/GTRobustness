@@ -26,8 +26,8 @@ graphgym:
     node_degrees_only: false
     directed_graphs: false
     has_edge_attr: false
-    combinations_degree: false
-    use_weighted_path_distance: true
+     
+ 
 
   train:
     mode: custom

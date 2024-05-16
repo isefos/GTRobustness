@@ -104,14 +104,14 @@ class PRBCDAttackNI(PRBCDAttack):
     def _get_forward_data(self, x, edge_index, edge_weight, discrete):
         # when node injection and laplacian eigen PE, get an off-perturbation
         edge_weight_off = None
-        if not discrete and cfg.posenc_WLapPE.enable:
-            node_inj_pert = cfg.posenc_WLapPE.eigen.nia_pert
+        if not discrete and cfg.posenc_WLapPE.enable and cfg.attack.SAN.enable_pert_grad:
+            node_inj_pert = cfg.attack.SAN.nia_pert
             if node_inj_pert == "half_weight":
                 block_weights_off = self.block_edge_weight.detach() / 2
             elif node_inj_pert == "half_eps":
                 block_weights_off = self.block_edge_weight.detach() - (self.coeffs['eps'] / 2)
             else:
-                raise ValueError(f"cfg.posenc_WLapPE.eigen.nia_pert = {node_inj_pert} is not valid")
+                raise ValueError(f"cfg.attack.SAN.nia_pert = {node_inj_pert} is not valid")
 
             _, edge_weight_off = self._get_modified_adj(
                 self.edge_index,
@@ -130,8 +130,9 @@ class PRBCDAttackNI(PRBCDAttack):
             data.lap_clean_edge_index = self.lap_edge_index
             data.lap_clean_edge_attr = self.lap_edge_attr
             data.E_clean = self.E_lap
-            data.U_clean = self.U_lap
+            data.U_clean = self.U_lap.clone()
         else:
+            # TODO: add option where we add 1 eigenvalue with unit eigenvector for new disconnected nodes
             assert num_nodes_added > 0, "Shouldn't be possible to have less during non-discrete"
             # compute the laplcaian eigendecomposition of a slightly off-perturbed adjacency
             data.E_clean, data.U_clean, data.lap_clean_edge_index, data.lap_clean_edge_attr = get_lap_decomp_stats(

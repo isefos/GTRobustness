@@ -42,7 +42,6 @@ fixed:
       finetune: false
 
     posenc_GraphormerBias:
-      combinations_degree: false
       directed_graphs: false
       enable: true
       has_edge_attr: false
@@ -50,7 +49,6 @@ fixed:
       num_in_degrees: 70
       num_out_degrees: 70
       num_spatial_types: 4
-      use_weighted_path_distance: true
 
     attack:
       enable: true
@@ -198,7 +196,6 @@ fixed:
       pna_degrees: []
       residual: true
       update_e: true
-      wsan_add_dummy_edges: false
     mem:
       inplace: false
     metric_agg: argmax
@@ -316,10 +313,8 @@ fixed:
       dim_pe: 16
       eigen:
         eigvec_norm: L2
-        eps_repeated_eigenvalue: 1.0e-06
         laplacian_norm: sym
         max_freqs: 10
-        nia_pert: half_weight
       enable: false
       layers: 3
       model: none

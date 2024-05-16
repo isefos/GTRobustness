@@ -34,6 +34,7 @@ graphgym:
     raw_norm_type: none
     post_layers: 0
     pass_as_var: false
+    w_add_dummy_edge: true
 
   train:
     mode: custom
@@ -57,7 +58,6 @@ graphgym:
     layer_norm: false
     batch_norm: true
     residual: true
-    wsan_add_dummy_edges: true
     attn:
       use_bias: false
       clamp: null

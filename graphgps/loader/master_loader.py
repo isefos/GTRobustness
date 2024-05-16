@@ -317,7 +317,7 @@ def preformat_GNNBenchmarkDataset(dataset_dir, name):
 
     if name in ['MNIST', 'CIFAR10', 'PATTERN', 'CLUSTER']:
         dataset = join_dataset_splits(
-            [GNNBenchmarkDataset(root=dataset_dir, name=name, split=split)
+            [GNNBenchmarkDataset(root=dataset_dir, name=name, split=split)[:50]
             for split in ['train', 'val', 'test']]
         )
         pre_transform_in_memory(dataset, T.Compose(tf_list))

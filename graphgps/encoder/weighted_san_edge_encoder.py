@@ -9,13 +9,13 @@ from torch_geometric.graphgym.config import cfg
 class WeightedSANDummyEdgeEncoder(torch.nn.Module):
     def __init__(self, emb_dim):
         super().__init__()
-        if cfg.gt.wsan_add_dummy_edges:
+        if cfg.posenc_WLapPE.w_add_dummy_edge:
             self.real_encoder = torch.nn.Embedding(num_embeddings=1, embedding_dim=emb_dim)
             if cfg.gt.full_graph:
                 self.fake_encoder = torch.nn.Embedding(num_embeddings=1, embedding_dim=emb_dim)
 
     def forward(self, batch):
-        if cfg.gt.wsan_add_dummy_edges:
+        if cfg.posenc_WLapPE.w_add_dummy_edge:
             batch.edge_attr_dummy = self.real_encoder(batch.edge_index.new_zeros((1, )))
             if cfg.gt.full_graph:
                 batch.edge_attr_dummy_fake = self.fake_encoder(batch.edge_index.new_zeros((1, )))
@@ -23,7 +23,7 @@ class WeightedSANDummyEdgeEncoder(torch.nn.Module):
         # same for "fake" edges
         fake_edge_index = negate_edge_index(batch.edge_index, batch.batch)
 
-        if batch.get("attack_mode", False) and cfg.gt.wsan_add_partially_fake:
+        if batch.get("attack_mode", False) and cfg.attack.SAN.wsan_add_partially_fake:
             # for attack with weighted edges, edge probability in batch.edge_attr
             batch.edge_logprob = batch.edge_attr.log()
             # find the edges with weight less than one, add to fake_edge_index as partially fake edges

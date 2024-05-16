@@ -184,7 +184,7 @@ class PRBCDAttack(torch.nn.Module):
         assert self.connected_nodes[-1] == self.num_connected_nodes - 1, "some nodes of the clean graph are isolated"
         self._setup_sampling(x=x)
         # get the clean laplacian eigendecomposition
-        if cfg.posenc_WLapPE.enable and cfg.posenc_WLapPE.eigen.enable_pert_grad and not random_baseline:
+        if cfg.posenc_WLapPE.enable and cfg.attack.SAN.enable_pert_grad and not random_baseline:
             assert self.is_undirected
             self._setup_clean_lap_eigen(edge_index)
 
@@ -466,11 +466,11 @@ class PRBCDAttack(torch.nn.Module):
         # remove isolated components (if specified in cfg), important for efficient node injection
         data, root_node = remove_isolated_components(data)
         # add the "clean" laplacian info, from which will be perturbed
-        if not discrete and cfg.posenc_WLapPE.enable:
+        if not discrete and cfg.posenc_WLapPE.enable and cfg.attack.SAN.enable_pert_grad:
             self._add_laplacian_info(data)
             # check for repeated eigenvalues:
             data.E_rep_slices_min, data.E_rep_slices_max = get_repeated_eigenvalue_slices(
-                data.E_clean, cfg.posenc_WLapPE.eigen.eps_repeated_eigenvalue,
+                data.E_clean, cfg.attack.SAN.eps_repeated_eigenvalue,
             )
         return self.model(data, unmodified=discrete, root_node=root_node, **kwargs)
     

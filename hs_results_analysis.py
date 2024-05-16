@@ -623,7 +623,7 @@ hyperparameters = {
         ("graphgym.gt.n_heads", True, False),
         ("graphgym.gt.layers", True, False),
         ("graphgym.gt.dropout", False, False),
-        ("graphgym.gt.wsan_add_dummy_edges", True, False),
+        ("graphgym.posenc_WLapPE.w_add_dummy_edge", True, False),
         ("graphgym.gt.gamma", False, True),
         ("graphgym.gt.attn.clamp", True, False),
         ("graphgym.posenc_WLapPE.n_heads", True, False),

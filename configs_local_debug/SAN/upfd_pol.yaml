@@ -23,18 +23,16 @@ graphgym:
   posenc_WLapPE:
     enable: true
     eigen:
-      enable_pert_grad: false
       laplacian_norm: sym
       eigvec_norm: L2
       max_freqs: 10
-      eps_repeated_eigenvalue: 1e-5
-      nia_pert: half_weight
     dim_pe: 4
     layers: 1
     n_heads: 1
     raw_norm_type: none
     post_layers: 0
     pass_as_var: false
+    w_add_dummy_edge: true
 
   train:
     mode: custom
@@ -58,8 +56,6 @@ graphgym:
     layer_norm: false
     batch_norm: true
     residual: true
-    wsan_add_dummy_edges: true
-    wsan_add_partially_fake: false
     attn:
       use_bias: false
       clamp: null
@@ -122,3 +118,6 @@ graphgym:
       sample_only_connected: true
       include_root_nodes: false
       sample_only_trees: true
+    SAN:
+      wsan_add_partially_fake: false
+      enable_pert_grad: false

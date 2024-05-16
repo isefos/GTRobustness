@@ -54,7 +54,8 @@ class WeightedRRWPLinearEncoder(torch.nn.Module):
         if self.add_dummy_edge_attr:
             dummy_attr = edge_index.new_zeros(edge_index.size(1))
             edge_attr = self.dummy_edge_encoder(dummy_attr)
-            if attack_mode and batch.edge_weight is not None:  # for attack, weighted dummy features
+            if attack_mode and batch.edge_weight is not None and cfg.attack.GRIT.dummy_edge_weighting:
+                # for attack, weighted dummy features
                 edge_attr = edge_attr * batch.edge_weight[:, None]
         else:
             edge_attr = edge_index.new_zeros(edge_index.size(1), rrwp_val.size(1))

@@ -26,14 +26,13 @@ graphgym:
       laplacian_norm: sym
       eigvec_norm: L2
       max_freqs: 10
-      eps_repeated_eigenvalue: 1e-5
-      nia_pert: half_eps
     dim_pe: 16
     layers: 3
     n_heads: 4
     raw_norm_type: none
     post_layers: 0
     pass_as_var: false
+    w_add_dummy_edge: true
   
   train:
     mode: custom
@@ -55,7 +54,6 @@ graphgym:
     layer_norm: false
     batch_norm: true
     residual: true
-    wsan_add_dummy_edges: true
     attn:
       use_bias: false
       clamp: 5.0

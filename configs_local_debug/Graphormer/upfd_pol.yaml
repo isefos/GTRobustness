@@ -25,11 +25,6 @@ graphgym:
     node_degrees_only: false
     directed_graphs: false
     has_edge_attr: false
-    use_weighted_degrees: true
-    combinations_degree: false
-    sp_find_weighted: false
-    sp_use_weighted: false
-    sp_use_gradient: false
 
   train:
     mode: custom

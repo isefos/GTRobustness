@@ -21,17 +21,13 @@ BATCH_HEAD_NODE_NODE = (0, 3, 1, 2)
 INSERT_GRAPH_TOKEN = (1, 0, 1, 0)
 
 
-def weighted_graphormer_pre_processing(data):
+def weighted_graphormer_pre_processing(data, attack_mode):
     """
     """
     distance: int = cfg.posenc_GraphormerBias.num_spatial_types
     directed_graphs: bool = cfg.posenc_GraphormerBias.directed_graphs
-    combinations_degree: bool = cfg.posenc_GraphormerBias.combinations_degree
     num_in_degrees: int = cfg.posenc_GraphormerBias.num_in_degrees
     num_out_degrees: int = cfg.posenc_GraphormerBias.num_out_degrees
-    find_weighted_sp: bool = cfg.posenc_GraphormerBias.sp_find_weighted
-    use_weighted_path_distance: bool = cfg.posenc_GraphormerBias.sp_use_weighted
-    use_weighted_distance_gradient: bool = cfg.posenc_GraphormerBias.sp_use_gradient
     node_degrees_only: bool = cfg.posenc_GraphormerBias.node_degrees_only            
 
     n = data.x.size(0)
@@ -40,7 +36,7 @@ def weighted_graphormer_pre_processing(data):
     if data.edge_attr is None:
         data.edge_attr = torch.ones((data.edge_index.size(1), ), device=device)
 
-    if not cfg.posenc_GraphormerBias.use_weighted_degrees:
+    if not attack_mode or not cfg.attack.Graphormer.use_weighted_degrees:
         in_degrees, out_degrees = get_discrete_degrees(data.edge_index, n)
     
         if out_degrees is None:
@@ -49,75 +45,31 @@ def weighted_graphormer_pre_processing(data):
             data.in_degrees = in_degrees
             data.out_degrees = out_degrees
 
+    elif cfg.attack.Graphormer.combinations_degree:
+        #in_degrees_max = torch.scatter(
+        #    input=torch.zeros(n),
+        #    value=1,
+        #    index=data.edge_index[1, :],
+        #    dim=0,
+        #    reduce="add"
+        #)
+        #certain_edges = data.edge_index[:, data.edge_attr == 1]
+        #in_degrees_min = torch.scatter(
+        #    input=torch.zeros(n),
+        #    value=1,
+        #    index=certain_edges[1, :],
+        #    dim=0,
+        #    reduce="add"
+        #)
+        #ns = in_degrees_max - in_degrees_min
+        #n_max = ns.max()
+        # TODO: handle too large degree -> clamping to max
+        #data.degree_indices, data.degree_weights = node_degree_weights_undirected(
+        #    data.x.size(0), data.edge_index, data.edge_attr,
+        #)
+        raise NotImplementedError
     else:
-        if combinations_degree:
-            #in_degrees_max = torch.scatter(
-            #    input=torch.zeros(n),
-            #    value=1,
-            #    index=data.edge_index[1, :],
-            #    dim=0,
-            #    reduce="add"
-            #)
-            #certain_edges = data.edge_index[:, data.edge_attr == 1]
-            #in_degrees_min = torch.scatter(
-            #    input=torch.zeros(n),
-            #    value=1,
-            #    index=certain_edges[1, :],
-            #    dim=0,
-            #    reduce="add"
-            #)
-            #ns = in_degrees_max - in_degrees_min
-            #n_max = ns.max()
-            raise NotImplementedError
-            # TODO: handle too large degree -> clamping to max
-            data.degree_indices, data.degree_weights = node_degree_weights_undirected(
-                data.x.size(0), data.edge_index, data.edge_attr,
-            )
-        else:
-            # TODO: refactor!
-            in_degrees_weighted = torch.scatter_add(
-                input=torch.zeros(n, device=device),
-                src=data.edge_attr,
-                index=data.edge_index[1, :],
-                dim=0,
-            )
-            # clamp to maximum degree
-            max_degree = max(num_in_degrees, num_out_degrees) - 1
-            in_degrees_weighted[in_degrees_weighted > max_degree] = max_degree
-            in_degrees_low = torch.floor(in_degrees_weighted).to(dtype=torch.long)
-            in_degrees_high = torch.ceil(in_degrees_weighted).to(dtype=torch.long)
-            weights_high = in_degrees_weighted - in_degrees_low
-            weights_low = in_degrees_high - in_degrees_weighted
-            weights_low[in_degrees_low == in_degrees_high] = 1
-            # unweighted edges, remove zero degree encoding 
-            # (never used during training, can't appear after discretization)
-            weights_low[in_degrees_low == 0] = 0
-            if directed_graphs:
-                data.in_degree_indices = torch.cat((in_degrees_low[:, None], in_degrees_high[:, None]), dim=1)
-                data.in_degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
-                # now for out degrees as well
-                out_degrees_weighted = torch.scatter_add(
-                    input=torch.zeros(n, device=device),
-                    src=data.edge_attr,
-                    index=data.edge_index[0, :],
-                    dim=0,
-                )
-                # clamp to maximum degree
-                max_degree = max(num_in_degrees, num_out_degrees) - 1
-                out_degrees_weighted[out_degrees_weighted > max_degree] = max_degree
-                out_degrees_low = torch.floor(out_degrees_weighted).to(dtype=torch.long)
-                out_degrees_high = torch.ceil(out_degrees_weighted).to(dtype=torch.long)
-                weights_high = out_degrees_weighted - out_degrees_low
-                weights_low = out_degrees_high - out_degrees_weighted
-                weights_low[out_degrees_low == out_degrees_high] = 1
-                # unweighted edges, remove zero degree encoding 
-                # (never used during training, can't appear after discretization)
-                weights_low[out_degrees_low == 0] = 0
-                data.out_degree_indices = torch.cat((out_degrees_low[:, None], out_degrees_high[:, None]), dim=1)
-                data.out_degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
-            else:
-                data.degree_indices = torch.cat((in_degrees_low[:, None], in_degrees_high[:, None]), dim=1)
-                data.degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
+        add_weighted_degrees_linear_interpolation_(data, n, device, num_in_degrees, num_out_degrees, directed_graphs)
 
     if node_degrees_only:
         return data
@@ -131,39 +83,7 @@ def weighted_graphormer_pre_processing(data):
     )
 
     max_distance = distance - 1
-    if find_weighted_sp:
-        # use the reciprocal of the edge weights to find the shortest paths
-
-        if use_weighted_path_distance:
-            # use weighted path distance and do linear interpolation of the discrete distances
-            spatial_types, spatial_types_weights = weighted_shortest_paths(
-                use_weighted_gradient=use_weighted_distance_gradient,
-                num_nodes=n,
-                edge_index=data.edge_index,
-                edge_attr=data.edge_attr,
-                max_distance=max_distance,
-                directed_graphs=directed_graphs,
-            )
-            data.spatial_types_weights = spatial_types_weights
-
-        else:
-            # only use the edge weights to find the shortest paths,
-            # but then use the actual hops of those paths as distance
-            inv_edge_attr = 1 / data.edge_attr.detach()
-            adj_weighted = to_scipy_sparse_matrix(data.edge_index, edge_attr=inv_edge_attr, num_nodes=n).tocsr()
-            _, predecessors_np = csgraph.dijkstra(
-                adj_weighted,
-                directed=directed_graphs,
-                return_predecessors=True,
-                unweighted=False,
-                limit=max_distance,
-            )
-            adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsr()
-            distances_hop_np = csgraph.construct_dist_matrix(adj, predecessors_np, directed=directed_graphs)
-            distances_hop_np[distances_hop_np > max_distance] = max_distance
-            spatial_types = torch.tensor(distances_hop_np.reshape(n ** 2), dtype=torch.long, device=device)
-
-    else:
+    if not (attack_mode and cfg.attack.Graphormer.sp_find_weighted):
         # just ignore the edge weights etirely
         spatial_types = get_shortest_paths(
             edge_index=data.edge_index,
@@ -171,6 +91,34 @@ def weighted_graphormer_pre_processing(data):
             directed=directed_graphs,
             max_distance=max_distance,
         )
+    elif cfg.attack.Graphormer.sp_use_weighted:
+        # use the reciprocal of the edge weights to find the shortest paths
+        # and use weighted path distance and do linear interpolation of the discrete distances
+        spatial_types, spatial_types_weights = weighted_shortest_paths(
+            use_weighted_gradient=cfg.attack.Graphormer.sp_use_gradient,
+            num_nodes=n,
+            edge_index=data.edge_index,
+            edge_attr=data.edge_attr,
+            max_distance=max_distance,
+            directed_graphs=directed_graphs,
+        )
+        data.spatial_types_weights = spatial_types_weights
+    else:
+        # only use the reciprocal of the edge weights to find the shortest paths,
+        # but then use the actual hops of those paths as distance
+        inv_edge_attr = 1 / data.edge_attr.detach()
+        adj_weighted = to_scipy_sparse_matrix(data.edge_index, edge_attr=inv_edge_attr, num_nodes=n).tocsr()
+        _, predecessors_np = csgraph.dijkstra(
+            adj_weighted,
+            directed=directed_graphs,
+            return_predecessors=True,
+            unweighted=False,
+            limit=max_distance,
+        )
+        adj = to_scipy_sparse_matrix(data.edge_index, num_nodes=n).tocsr()
+        distances_hop_np = csgraph.construct_dist_matrix(adj, predecessors_np, directed=directed_graphs)
+        distances_hop_np[distances_hop_np > max_distance] = max_distance
+        spatial_types = torch.tensor(distances_hop_np.reshape(n ** 2), dtype=torch.long, device=device)
 
     data.spatial_types = spatial_types
     return data
@@ -204,7 +152,7 @@ class WeightedBiasEncoder(torch.nn.Module):
         # To convert 2D matrices to dense-batch mode, one needs to decompose
         # them into index and value. One example is the adjacency matrix
         # but this generalizes actually to any 2D matrix
-        if cfg.posenc_GraphormerBias.sp_use_weighted and hasattr(data, "spatial_types_weights"):
+        if cfg.attack.Graphormer.sp_use_weighted and hasattr(data, "spatial_types_weights"):
             spatial_types: torch.Tensor = (
                 data.spatial_types_weights[:, :, None] * self.spatial_encoder(data.spatial_types)
             ).sum(1)
@@ -265,7 +213,7 @@ class WeightedNodeEncoder(torch.nn.Module):
                 out_degree_encoding = self.out_degree_encoder(data.out_degrees)
             else:
                 # continuous relaxation during attack
-                if cfg.posenc_GraphormerBias.combinations_degree:
+                if cfg.attack.Graphormer.combinations_degree:
                     # TODO: this doesn't quite seem right...
                     in_degree_encoding = data.degree_weights @ self.in_degree_encoder(data.degree_indices)
                     out_degree_encoding = data.degree_weights @ self.out_degree_encoder(data.degree_indices)
@@ -283,7 +231,7 @@ class WeightedNodeEncoder(torch.nn.Module):
                 degree_encoding = self.degree_encoder(data.degrees)
             else:
                 # continuous relaxation during attack
-                if cfg.posenc_GraphormerBias.combinations_degree:
+                if cfg.attack.Graphormer.combinations_degree:
                     degree_encoding = data.degree_weights @ self.degree_encoder(data.degree_indices)
                 else:
                     degree_encoding = (
@@ -315,7 +263,7 @@ class WeightedPreprocessing(torch.nn.Module):
         attack_mode = data.get("attack_mode", False)
         if attack_mode or data.get("spatial_types") is None:
             assert data.num_graphs == 1, "On the fly preprocessing only works for single graphs"
-            data = weighted_graphormer_pre_processing(data)
+            data = weighted_graphormer_pre_processing(data, attack_mode)
         return data
 
 
@@ -337,6 +285,53 @@ class WeightedGraphormerEncoder(torch.nn.Sequential):
 # utils for preprocessing:
         
 # degrees:
+
+
+def add_weighted_degrees_linear_interpolation_(data, n, device, num_in_degrees, num_out_degrees, directed_graphs):
+    # TODO: refactor!
+    in_degrees_weighted = torch.scatter_add(
+        input=torch.zeros(n, device=device),
+        src=data.edge_attr,
+        index=data.edge_index[1, :],
+        dim=0,
+    )
+    # clamp to maximum degree
+    max_degree = max(num_in_degrees, num_out_degrees) - 1
+    in_degrees_weighted[in_degrees_weighted > max_degree] = max_degree
+    in_degrees_low = torch.floor(in_degrees_weighted).to(dtype=torch.long)
+    in_degrees_high = torch.ceil(in_degrees_weighted).to(dtype=torch.long)
+    weights_high = in_degrees_weighted - in_degrees_low
+    weights_low = in_degrees_high - in_degrees_weighted
+    weights_low[in_degrees_low == in_degrees_high] = 1
+    # unweighted edges, remove zero degree encoding 
+    # (never used during training, can't appear after discretization)
+    weights_low[in_degrees_low == 0] = 0
+    if directed_graphs:
+        data.in_degree_indices = torch.cat((in_degrees_low[:, None], in_degrees_high[:, None]), dim=1)
+        data.in_degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
+        # now for out degrees as well
+        out_degrees_weighted = torch.scatter_add(
+            input=torch.zeros(n, device=device),
+            src=data.edge_attr,
+            index=data.edge_index[0, :],
+            dim=0,
+        )
+        # clamp to maximum degree
+        max_degree = max(num_in_degrees, num_out_degrees) - 1
+        out_degrees_weighted[out_degrees_weighted > max_degree] = max_degree
+        out_degrees_low = torch.floor(out_degrees_weighted).to(dtype=torch.long)
+        out_degrees_high = torch.ceil(out_degrees_weighted).to(dtype=torch.long)
+        weights_high = out_degrees_weighted - out_degrees_low
+        weights_low = out_degrees_high - out_degrees_weighted
+        weights_low[out_degrees_low == out_degrees_high] = 1
+        # unweighted edges, remove zero degree encoding 
+        # (never used during training, can't appear after discretization)
+        weights_low[out_degrees_low == 0] = 0
+        data.out_degree_indices = torch.cat((out_degrees_low[:, None], out_degrees_high[:, None]), dim=1)
+        data.out_degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
+    else:
+        data.degree_indices = torch.cat((in_degrees_low[:, None], in_degrees_high[:, None]), dim=1)
+        data.degree_weights = torch.cat((weights_low[:, None], weights_high[:, None]), dim=1)
 
 
 def node_degree_weights_undirected(

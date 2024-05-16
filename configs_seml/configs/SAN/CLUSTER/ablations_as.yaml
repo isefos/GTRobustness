@@ -24,7 +24,7 @@ grid:
       - 7813
       - 9537
 
-  graphgym.gt.wsan_add_partially_fake:
+  graphgym.attack.SAN.wsan_add_partially_fake:
     type: choice
     options:
       - true
@@ -33,7 +33,7 @@ grid:
       - false
     zip_id: ablations
 
-  graphgym.posenc_WLapPE.eigen.enable_pert_grad:
+  graphgym.attack.SAN.enable_pert_grad:
     type: choice
     options:
       - true
@@ -58,7 +58,6 @@ fixed:
       dim_pe: 16
       eigen:
         eigvec_norm: L2
-        eps_repeated_eigenvalue: 1.0e-06
         laplacian_norm: sym
         max_freqs: 10
       enable: true
@@ -67,6 +66,7 @@ fixed:
       pass_as_var: false
       post_layers: 0
       raw_norm_type: none
+      w_add_dummy_edge: true
 
     attack:
       e_budget: 0.01
@@ -99,7 +99,6 @@ fixed:
       with_early_stopping: true
       node_injection:
         enable: false
-      
 
     # copied from pre-trained model
 
@@ -229,7 +228,6 @@ fixed:
       pna_degrees: []
       residual: true
       update_e: true
-      wsan_add_dummy_edges: true
     mem:
       inplace: false
     metric_agg: argmax

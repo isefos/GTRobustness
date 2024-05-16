@@ -130,7 +130,7 @@ def add_eig(batch):
         lap_norm_type = None
     attack_mode = batch.get("attack_mode", False)
 
-    if (not attack_mode) or (batch.edge_attr is None) or not cfg.posenc_WLapPE.eigen.enable_pert_grad:
+    if (not attack_mode) or (batch.edge_attr is None) or not cfg.attack.SAN.enable_pert_grad:
         pe_cfg = cfg.posenc_WLapPE
         batch.EigVals, batch.EigVecs = get_lap_decomp_stats(
             batch.edge_index,

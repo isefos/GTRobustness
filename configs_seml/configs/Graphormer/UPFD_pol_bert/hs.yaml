@@ -43,8 +43,8 @@ fixed:
       has_edge_attr: false
       num_out_degrees: ${config.graphgym.posenc_GraphormerBias.num_in_degrees}
       # next 2 only matter for attack, set to fixed false
-      combinations_degree: false
-      use_weighted_path_distance: false
+       
+ 
 
     train:
       mode: custom

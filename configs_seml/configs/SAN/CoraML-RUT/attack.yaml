@@ -81,7 +81,6 @@ fixed:
         eigvec_norm: L2
         laplacian_norm: sym
         max_freqs: 84  # TODO: test (but requires retraining)
-        eps_repeated_eigenvalue: 1e-5  # TODO: test
       enable: true
       layers: 1
       model: none
@@ -89,6 +88,7 @@ fixed:
       pass_as_var: false
       post_layers: 0
       raw_norm_type: none
+      w_add_dummy_edge: false
 
     # copied from config of model that gets loaded
 
@@ -217,7 +217,6 @@ fixed:
       pna_degrees: []
       residual: true
       update_e: true
-      wsan_add_dummy_edges: false
     mem:
       inplace: false
     metric_agg: argmax
@@ -275,17 +274,6 @@ fixed:
         max_freqs: 10
       enable: false
       raw_norm_type: none
-    posenc_GraphormerBias:
-      combinations_degree: false
-      dim_pe: 0
-      directed_graphs: true
-      enable: false
-      has_edge_attr: true
-      node_degrees_only: false
-      num_in_degrees: null
-      num_out_degrees: null
-      num_spatial_types: null
-      use_weighted_path_distance: false
     posenc_HKdiagSE:
       dim_pe: 16
       enable: false
