@@ -35,7 +35,11 @@ def set_cfg_gt(cfg):
     cfg.gt.gamma_learnable = False
 
     # weighted san (attackable), can't actually have edge embeddings, but can have a dummy (all same)
-    cfg.gt.wsan_add_dummy_edges = False
+    cfg.gt.wsan_add_dummy_edges = True
+
+    # weighted san (attackable), when edges partially true/fake, add to both true and fake attention mechanisms
+    # (when False, all edges with p>0 will only be used in true attention mechanism without bias)
+    cfg.gt.wsan_add_partially_fake = True
 
     # Histogram of in-degrees of nodes in the training set used by PNAConv.
     # Used when `gt.layer_type: PNAConv+...`. If empty it is precomputed during

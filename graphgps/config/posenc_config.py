@@ -67,6 +67,9 @@ def set_cfg_posenc(cfg):
         # Maximum number of top smallest frequencies & eigenvectors to use
         pecfg.eigen.max_freqs = 10
 
+    # enable or disable the gradient using matrix perturbation approximation
+    cfg.posenc_WLapPE.eigen.enable_pert_grad = True
+
     # Use gradient-based eigen-decomposition for adversarial attacks
     cfg.posenc_WLapPE.eigen.eps_repeated_eigenvalue = 1e-6
 

@@ -250,4 +250,6 @@ class PRBCDAttackNISampling(PRBCDAttack):
         
     def _setup_sampling(self, **kwargs):
         # TODO: sample the nodes first, then the edges to those nodes
+        # self.samlple() will access the self.sampled_nodes to create a mapping of indexes
+        # or just sample in 2D and transform to linear
         return

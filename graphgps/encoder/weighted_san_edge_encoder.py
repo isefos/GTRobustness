@@ -23,7 +23,7 @@ class WeightedSANDummyEdgeEncoder(torch.nn.Module):
         # same for "fake" edges
         fake_edge_index = negate_edge_index(batch.edge_index, batch.batch)
 
-        if batch.get("attack_mode", False):
+        if batch.get("attack_mode", False) and cfg.gt.wsan_add_partially_fake:
             # for attack with weighted edges, edge probability in batch.edge_attr
             batch.edge_logprob = batch.edge_attr.log()
             # find the edges with weight less than one, add to fake_edge_index as partially fake edges

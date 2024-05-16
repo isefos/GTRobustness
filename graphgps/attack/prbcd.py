@@ -184,7 +184,7 @@ class PRBCDAttack(torch.nn.Module):
         assert self.connected_nodes[-1] == self.num_connected_nodes - 1, "some nodes of the clean graph are isolated"
         self._setup_sampling(x=x)
         # get the clean laplacian eigendecomposition
-        if cfg.posenc_WLapPE.enable and not random_baseline:
+        if cfg.posenc_WLapPE.enable and cfg.posenc_WLapPE.eigen.enable_pert_grad and not random_baseline:
             assert self.is_undirected
             self._setup_clean_lap_eigen(edge_index)
 

@@ -23,21 +23,22 @@ graphgym:
   posenc_WLapPE:
     enable: true
     eigen:
+      enable_pert_grad: false
       laplacian_norm: sym
       eigvec_norm: L2
       max_freqs: 10
       eps_repeated_eigenvalue: 1e-5
       nia_pert: half_weight
-    dim_pe: 8
-    layers: 2
-    n_heads: 4
+    dim_pe: 4
+    layers: 1
+    n_heads: 1
     raw_norm_type: none
     post_layers: 0
     pass_as_var: false
 
   train:
     mode: custom
-    batch_size: 32
+    batch_size: 8
     eval_period: 1
     enable_ckpt: true
     ckpt_best: true
@@ -49,7 +50,7 @@ graphgym:
   gt:
     layers: 1
     n_heads: 2
-    dim_hidden: 32  # `gt.dim_hidden` must match `gnn.dim_inner`
+    dim_hidden: 8  # `gt.dim_hidden` must match `gnn.dim_inner`
     full_graph: true
     gamma: 1e-5
     gamma_learnable: false
@@ -58,6 +59,7 @@ graphgym:
     batch_norm: true
     residual: true
     wsan_add_dummy_edges: true
+    wsan_add_partially_fake: false
     attn:
       use_bias: false
       clamp: null
@@ -66,13 +68,13 @@ graphgym:
     head: weighted_mean_pool_graph
     layers_pre_mp: 0
     layers_post_mp: 1
-    dim_inner: 32  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+    dim_inner: 8  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
   
   optim:
     optimizer: adam
     weight_decay: 0.0
     base_lr: 0.0007
-    max_epoch: 1  # 1000
+    max_epoch: 2  # 1000
     scheduler: reduce_on_plateau
     reduce_factor: 0.5
     schedule_patience: 15
@@ -92,7 +94,7 @@ graphgym:
     prediction_level: graph
     remove_isolated_components: true
     run_random_baseline: true
-    block_size: 400  # TODO: test
+    block_size: 1_000  # TODO: test
     epochs: 125  # TODO: test
     epochs_resampling: 100
     resample_period: 1  # TODO: test
