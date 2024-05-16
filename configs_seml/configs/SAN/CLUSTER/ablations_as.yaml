@@ -79,7 +79,7 @@ fixed:
       split: test
       prediction_level: node
       remove_isolated_components: false
-      run_random_baseline: true
+      run_random_baseline: false
       block_size: 20_000  # TODO: test
       epochs: 125  # TODO: test
       epochs_resampling: 100
