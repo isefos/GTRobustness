@@ -12,6 +12,7 @@ slurm:
     mem: 64G          # memory
     cpus-per-task: 8  # num cores
     time: 1-00:00     # max time, D-HH:MM
+    qos: deadline
 
 grid:
 
@@ -108,7 +109,7 @@ fixed:
 
     # copied from pre-trained model
 
-    accelerator: cuda
+    accelerator: auto
     benchmark: false
     best_by_loss: false
     bn:
@@ -172,14 +173,14 @@ fixed:
       att_heads: 1
       batchnorm: true
       clear_feature: true
-      dim_inner: 48
+      dim_inner: 35
       dropout: 0.0
       head: inductive_node
       keep_edge: 0.5
       l2norm: true
       layer_type: generalconv
       layers_mp: 2
-      layers_post_mp: 1
+      layers_post_mp: 2
       layers_pre_mp: 0
       msg_direction: single
       normalize_adj: false
@@ -207,7 +208,7 @@ fixed:
         full_attn: true
         norm_e: true
         use_bias: false
-      attn_dropout: 0.47760536032341805
+      attn_dropout: 0.38902072078162064
       batch_norm: true
       bigbird:
         add_cross_attention: false
@@ -222,19 +223,19 @@ fixed:
         use_bias: false
       bn_momentum: 0.1
       bn_no_runner: false
-      dim_hidden: 48
-      dropout: 0.01
+      dim_hidden: 35
+      dropout: 0.0
       full_graph: true
       gamma: 1.0e-05
       gamma_learnable: false
       layer_norm: false
       layer_type: SANLayer
-      layers: 12
-      n_heads: 8
+      layers: 14
+      n_heads: 5
       pna_degrees: []
       residual: true
       update_e: true
- false
+      wsan_add_dummy_edges: false
     mem:
       inplace: false
     metric_agg: argmax
@@ -251,7 +252,7 @@ fixed:
     num_threads: 6
     num_workers: 0
     optim:
-      base_lr: 0.0012947855659420759
+      base_lr: 0.0018297498928015596
       batch_accumulation: 1
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
@@ -272,7 +273,7 @@ fixed:
       - 30
       - 60
       - 90
-      weight_decay: 4.164003672200421e-06
+      weight_decay: 2.1285220495466528e-08
     posenc_ElstaticSE:
       dim_pe: 16
       enable: false
@@ -293,7 +294,7 @@ fixed:
       enable: false
       raw_norm_type: none
     posenc_GraphormerBias:
-       
+      combinations_degree: false
       dim_pe: 0
       directed_graphs: true
       enable: false
@@ -302,7 +303,7 @@ fixed:
       num_in_degrees: null
       num_out_degrees: null
       num_spatial_types: null
- 
+      use_weighted_path_distance: false
     posenc_HKdiagSE:
       dim_pe: 16
       enable: false
@@ -330,8 +331,8 @@ fixed:
       raw_norm_type: none
     posenc_RRWP:
       enable: true
-      ksteps: 4
-      w_add_dummy_edge: false
+      ksteps: 9
+      w_add_dummy_edge: true
     posenc_RWSE:
       dim_pe: 16
       enable: false
@@ -363,10 +364,10 @@ fixed:
       dim_pe: 16
       eigen:
         eigvec_norm: L2
- 
+        eps_repeated_eigenvalue: 1.0e-06
         laplacian_norm: sym
         max_freqs: 10
- 
+        nia_pert: half_weight
       enable: false
       layers: 3
       model: none
