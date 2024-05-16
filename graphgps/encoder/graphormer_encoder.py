@@ -16,7 +16,8 @@ INSERT_GRAPH_TOKEN = (1, 0, 1, 0)
 
 
 def get_discrete_degrees(edge_index, num_nodes):
-    in_degrees = torch.zeros(num_nodes, dtype=torch.long).scatter_(
+    device = edge_index.device
+    in_degrees = torch.zeros(num_nodes, dtype=torch.long, device=device).scatter_(
         value=1,
         index=edge_index[1, :],
         dim=0,
@@ -28,7 +29,7 @@ def get_discrete_degrees(edge_index, num_nodes):
     if cfg.posenc_GraphormerBias.directed_graphs:
         in_degrees[in_degrees >= num_in_d] = num_in_d - 1
 
-        out_degrees = torch.zeros(num_nodes, dtype=torch.long).scatter_(
+        out_degrees = torch.zeros(num_nodes, dtype=torch.long, device=device).scatter_(
             value=1,
             index=edge_index[0, :],
             dim=0,
@@ -39,7 +40,6 @@ def get_discrete_degrees(edge_index, num_nodes):
         num_d = max(num_in_d, num_out_d)
         in_degrees[in_degrees >= num_d] = num_d - 1
     return in_degrees, out_degrees
-
 
 
 def graphormer_pre_processing(data, is_undirected):
