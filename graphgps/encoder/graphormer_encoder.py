@@ -15,6 +15,33 @@ BATCH_HEAD_NODE_NODE = (0, 3, 1, 2)
 INSERT_GRAPH_TOKEN = (1, 0, 1, 0)
 
 
+def get_discrete_degrees(edge_index, num_nodes):
+    in_degrees = torch.zeros(num_nodes, dtype=torch.long).scatter_(
+        value=1,
+        index=edge_index[1, :],
+        dim=0,
+        reduce="add",
+    )
+    out_degrees = None
+    num_out_d = cfg.posenc_GraphormerBias.num_out_degrees
+    num_in_d = cfg.posenc_GraphormerBias.num_in_degrees
+    if cfg.posenc_GraphormerBias.directed_graphs:
+        in_degrees[in_degrees >= num_in_d] = num_in_d - 1
+
+        out_degrees = torch.zeros(num_nodes, dtype=torch.long).scatter_(
+            value=1,
+            index=edge_index[0, :],
+            dim=0,
+            reduce="add",
+        )
+        out_degrees[in_degrees >= num_out_d] = num_out_d - 1
+    else:
+        num_d = max(num_in_d, num_out_d)
+        in_degrees[in_degrees >= num_d] = num_d - 1
+    return in_degrees, out_degrees
+
+
+
 def graphormer_pre_processing(data, is_undirected):
     """Implementation of Graphormer pre-processing. Computes in- and out-degrees
     for node encodings, as well as spatial types (via shortest-path lengths) and
@@ -40,39 +67,17 @@ def graphormer_pre_processing(data, is_undirected):
         The augmented data object.
     """
     n = data.x.size(0)
-    in_degrees = torch.zeros(n, dtype=torch.long).scatter_(
-        value=1,
-        index=data.edge_index[1, :],
-        dim=0,
-        reduce="add",
-    )
-    if cfg.posenc_GraphormerBias.directed_graphs:
-        data.in_degrees = in_degrees
-        data.out_degrees = torch.zeros(n, dtype=torch.long).scatter_(
-            value=1,
-            index=data.edge_index[0, :],
-            dim=0,
-            reduce="add",
+    in_degrees, out_degrees = get_discrete_degrees(data.edge_index, n)
+    
+    if out_degrees is None:
+        assert is_undirected, (
+            "cfg.posenc_GraphormerBias.directed_graphs was set to False, but the data contains directed graphs! "
+            "Either set to True, or include a transformation to undirected to the dataset loader."
         )
-        modes = ["in_", "out_"]
-        mode_num = [cfg.posenc_GraphormerBias.num_in_degrees, cfg.posenc_GraphormerBias.num_out_degrees]
-        mode_degrees = [data.in_degrees, data.out_degrees]
-    else:
-        if not is_undirected:
-            raise ValueError(
-                "cfg.posenc_GraphormerBias.directed_graphs was set to False, but the data contains directed graphs! "
-                "Either set to True, or include a transformation to undirected to the dataset loader."
-            )
         data.degrees = in_degrees
-        modes = [""]
-        mode_num = [max(cfg.posenc_GraphormerBias.num_in_degrees, cfg.posenc_GraphormerBias.num_out_degrees)]
-        mode_degrees = [data.degrees]
-    # clamp to be below configured maximum value
-    for mode, num_degrees, degrees in zip(modes, mode_num, mode_degrees):
-        max_degree = torch.max(degrees)
-        if max_degree >= num_degrees:
-            degrees[degrees >= num_degrees] = num_degrees - 1
-            logging.debug(f"Encountered max {mode}degree: {max_degree}, clamped to: {num_degrees - 1}")
+    else:
+        data.in_degrees = in_degrees
+        data.out_degrees = out_degrees
 
     if cfg.posenc_GraphormerBias.node_degrees_only:
         return data
@@ -84,13 +89,20 @@ def graphormer_pre_processing(data, is_undirected):
         ),
         dim=0,
     )
-    if (
+    if not (
         cfg.posenc_GraphormerBias.has_edge_attr 
         and hasattr(data, "edge_attr") 
         and data.edge_attr is not None
     ):
-        distance = cfg.posenc_GraphormerBias.num_spatial_types
+        data.spatial_types = get_shortest_paths(
+            edge_index=data.edge_index,
+            num_nodes=n,directed=not is_undirected,
+            max_distance=cfg.posenc_GraphormerBias.num_spatial_types-1
+        )
+    else:
+        # Note: not relevant for attackable weighted model
         # did not bother optimizing this part yet, since we don't attack data with edge_attr:
+        distance = cfg.posenc_GraphormerBias.num_spatial_types
         graph: nx.DiGraph = to_networkx(data)
         N = len(graph.nodes)
         shortest_paths = nx.shortest_path(graph)
@@ -118,12 +130,6 @@ def graphormer_pre_processing(data, is_undirected):
                 )
         data.spatial_types = spatial_types
         data.shortest_path_types = shortest_path_types
-    else:
-        data.spatial_types = get_shortest_paths(
-            edge_index=data.edge_index,
-            num_nodes=n,directed=not is_undirected,
-            max_distance=cfg.posenc_GraphormerBias.num_spatial_types-1
-        )
     return data
 
 
