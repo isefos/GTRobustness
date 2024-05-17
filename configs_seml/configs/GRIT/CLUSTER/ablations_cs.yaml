@@ -74,7 +74,7 @@ fixed:
 
     attack:
       e_budget: 0.01
-      cluster_sampling: false
+      cluster_sampling: true
       enable: true
       num_attacked_graphs: 50
       skip_incorrect_graph_classification: false

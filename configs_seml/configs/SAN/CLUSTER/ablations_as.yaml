@@ -5,9 +5,9 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 8
+  experiments_per_job: 6
   sbatch_options:
-    partition: gpu_large
+    partition: gpu_all
     gres: gpu:1       # num GPUs
     mem: 40G          # memory
     cpus-per-task: 8  # num cores
@@ -30,7 +30,6 @@ grid:
       - true
       - true
       - false
-      - false
     zip_id: ablations
 
   graphgym.attack.SAN.enable_pert_grad:
@@ -39,7 +38,6 @@ grid:
       - true
       - false
       - true
-      - false
     zip_id: ablations
 
 # experiment fixed configs

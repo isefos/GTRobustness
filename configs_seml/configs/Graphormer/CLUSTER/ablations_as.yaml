@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 3
+  experiments_per_job: 5
   sbatch_options:
     partition: gpu_all
     gres: gpu:1       # num GPUs
@@ -31,7 +31,6 @@ grid:
       - true   # sp 2, degree
       - false  # no sp, degree
       - true   # sp all, no degree
-      - false  # no sp, no degree
     zip_id: ablations
 
   graphgym.attack.Graphormer.sp_use_weighted:
@@ -42,7 +41,6 @@ grid:
       - false  # sp 2, degree
       - false  # no sp, degree
       - true   # sp all, no degree
-      - false  # no sp, no degree
     zip_id: ablations
 
   graphgym.attack.Graphormer.sp_use_gradient:
@@ -53,7 +51,6 @@ grid:
       - false  # sp 2, degree
       - false  # no sp, degree
       - true   # sp all, no degree
-      - false  # no sp, no degree
     zip_id: ablations
 
   graphgym.attack.Graphormer.use_weighted_degrees:
@@ -64,7 +61,6 @@ grid:
       - true   # sp 2, degree
       - true   # no sp, degree
       - false  # sp all, no degree
-      - false  # no sp, no degree
     zip_id: ablations
   
 
