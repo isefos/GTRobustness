@@ -43,45 +43,6 @@ fixed:
     # copied from config of model that gets loaded    
     
     accelerator: auto
-    attack:
-      allow_existing_graph_pert: true
-      block_size: 2000
-      e_budget: 0.1
-      enable: false
-      enable_node_injection: false
-      epochs: 125
-      epochs_resampling: 100
-      eps: 1.0e-07
-      eps_init_noised: false
-      existing_node_prob_multiplier: 1
-      include_root_nodes_for_injection: true
-      is_undirected: true
-      load_best_model: true
-      log_progress: true
-      loss: train
-      lr: 4000
-      max_edge_weight_update: 0.0
-      max_final_samples: 20
-      max_trials_sampling: 20
-      metric: null
-      minimum_budget: 0
-      node_injection_from_test: true
-      node_injection_from_train: true
-      node_injection_from_val: true
-      node_prob_enable: true
-      node_prob_iterations: 5
-      node_prob_log: true
-      num_attacked_graphs: 0
-      prediction_level: graph
-      remove_isolated_components: true
-      resample_period: 1
-      root_node_idx: null
-      run_random_baseline: true
-      sample_only_connected: false
-      sample_only_trees: false
-      skip_incorrect_graph_classification: true
-      split: test
-      with_early_stopping: true
     benchmark: false
     best_by_loss: false
     bn:
