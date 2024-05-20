@@ -108,7 +108,6 @@ fixed:
       max_edge_weight_update: 0.0  # TODO: test
       max_trials_sampling: 20
       minimum_budget: 1
-      node_prob_enable: true
       node_prob_iterations: 3
       node_prob_log: true
       root_node_idx: 0
