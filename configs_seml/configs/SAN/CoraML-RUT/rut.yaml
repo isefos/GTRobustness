@@ -33,7 +33,7 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/PyG-RobustnessUnitTest-cora_ml-SAN/0'  # ${graphgym.dataset.split_index}'
+      dir: '/ceph/hdd/students/foth/models/SAN/CoraML-RUT/0'  # ${graphgym.dataset.split_index}'
       finetune: false
 
     robustness_unit_test:
