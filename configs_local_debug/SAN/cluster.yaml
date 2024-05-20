@@ -28,7 +28,7 @@ graphgym:
     enable: true
     num_attacked_graphs: 50
     skip_incorrect_graph_classification: false
-    log_progress: false
+    log_progress: true
     load_best_model: false
     split: test
     prediction_level: node
@@ -54,7 +54,8 @@ graphgym:
     node_injection:
       enable: false
     SAN:
-      wsan_add_partially_fake: false
+      add_partially_fake_edges: true
+      partially_fake_edge_grad: false
       enable_pert_grad: true
 
   # copied from pre-trained model

@@ -28,7 +28,6 @@ def get_dense_eigh(A: NDArray, max_freqs: int = 10, need_full: bool = True):
     return E, U
 
 
-@torch.no_grad
 def get_lap_decomp_stats(
     edge_index: torch.Tensor,
     edge_attr: torch.Tensor,
@@ -39,15 +38,18 @@ def get_lap_decomp_stats(
     pad_too_small: bool = True,
     need_full: bool = False,
     return_lap: bool = False,
+    no_grad_lap: bool = True,
 ):
     """Compute Laplacian eigen-decomposition-based PE stats of the given graph.
     """
+    if no_grad_lap and edge_attr is not None:
+        edge_attr = edge_attr.detach()
     lap_norm_type = lap_norm_type.lower() if lap_norm_type is not None else None
     if lap_norm_type == 'none':
         lap_norm_type = None
 
     L_edge_index, L_edge_attr = get_laplacian(edge_index, edge_attr, lap_norm_type, num_nodes=num_nodes)
-    L = to_scipy_sparse_matrix(L_edge_index, L_edge_attr, num_nodes)
+    L = to_scipy_sparse_matrix(L_edge_index, L_edge_attr.detach(), num_nodes)
 
     E, U = None, None
     if not need_full and (4 * max_freqs) < num_nodes:
@@ -203,8 +205,9 @@ def get_ev_pert(E: torch.Tensor, E_diff: torch.Tensor, U: torch.Tensor, eta: flo
     return P_ev
 
 
-def invert_wrong_signs(U: torch.Tensor, U_noised: torch.Tensor):
-    inverted_sign = (U_noised - U).abs().sum(0) > (U_noised + U).abs().sum(0)
-    flipper = U.new_ones((U.size(1), ))
+def invert_wrong_signs(U_reference: torch.Tensor, U_invert: torch.Tensor):
+    # cosine similarity, when negative pointing in different directions
+    inverted_sign = (U_reference * U_invert).sum(0) < 0
+    flipper = U_reference.new_ones((U_reference.size(1), ))
     flipper[inverted_sign] = -1
-    return U_noised * flipper[None, :]
+    return U_invert * flipper[None, :]

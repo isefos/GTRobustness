@@ -104,13 +104,13 @@ class WeightedMultiHeadAttentionLayer(nn.Module):
         # Apply attention score to each source node to create edge messages
         msg = batch.V_h[batch.edge_index[0]] * score  # (num real edges) x num_heads x out_dim
         # Add-up real msgs in destination nodes as given by batch.edge_index[1]
-        batch.wV = scatter(msg, batch.edge_index[1], dim=0, reduce="sum")  # (num nodes in batch) x num_heads x out_dim
+        batch.wV = scatter(msg, batch.edge_index[1], dim=0, dim_size=batch.num_nodes, reduce="sum")  # (num nodes in batch) x num_heads x out_dim
 
         if self.full_graph:
             # Attention via fictional edges
             msg_fake = batch.V_h[batch.edge_index_fake[0]] * score_fake
             # Add messages along fake edges to destination nodes
-            batch.wV += scatter(msg_fake, batch.edge_index_fake[1], dim=0, reduce="sum")
+            batch.wV += scatter(msg_fake, batch.edge_index_fake[1], dim=0, dim_size=batch.num_nodes, reduce="sum")
 
 
     def forward(self, batch):

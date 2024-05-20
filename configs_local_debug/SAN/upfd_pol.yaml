@@ -119,5 +119,6 @@ graphgym:
       include_root_nodes: false
       sample_only_trees: true
     SAN:
-      wsan_add_partially_fake: false
-      enable_pert_grad: false
+      add_partially_fake_edges: false
+      enable_pert_grad: true
+      set_first_pert_zero: true

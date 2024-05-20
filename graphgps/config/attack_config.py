@@ -118,11 +118,14 @@ def dataset_cfg(cfg):
     cfg.attack.SAN = CN()
     # weighted san (attackable), when edges partially true/fake, add to both true and fake attention mechanisms
     # (when False, all edges with p>0 will only be used in true attention mechanism without bias)
-    cfg.attack.SAN.wsan_add_partially_fake = True
+    cfg.attack.SAN.add_partially_fake_edges = True
+    cfg.attack.SAN.partially_fake_edge_grad = True
     # enable or disable the gradient using matrix perturbation approximation
     cfg.attack.SAN.enable_pert_grad = True
     # Use gradient-based eigen-decomposition for adversarial attacks
-    cfg.attack.SAN.eps_repeated_eigenvalue = 1e-6
+    cfg.attack.SAN.eps_repeated_eigenvalue = 1.0e-5
+    # set the perturbation approximation of the first eigenvalue to zero (so that we don't try to optimize it)
+    cfg.attack.SAN.set_first_pert_zero = True
     # Node Injection Attack with LapPE -> how to define the approximation perturbation
     cfg.attack.SAN.nia_pert = "half_weight"  # or half_eps # TODO: add option for 1 eigenvalue with unit vector
 

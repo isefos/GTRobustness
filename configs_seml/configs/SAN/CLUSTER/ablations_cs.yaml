@@ -24,20 +24,44 @@ grid:
       - 7813
       - 9537
 
-  graphgym.attack.SAN.wsan_add_partially_fake:
+  graphgym.attack.SAN.add_partially_fake_edges:
     type: choice
     options:
-      - true
-      - true
-      - false
+      - true   # all
+      - true   # only part fake edge grad
+      - true   # only pert. appr. grad (but adding part fake edges)
+      - true   # only pert. appr. grad (but adding part fake edges) zero first eigval
+      - false  # only pert. appr. grad without adding part fake edges
+    zip_id: ablations
+
+  graphgym.attack.SAN.partially_fake_edge_grad:
+    type: choice
+    options:
+      - true   # all
+      - true   # only part fake edge grad
+      - false  # only pert. appr. grad (but adding part fake edges)
+      - false  # only pert. appr. grad (but adding part fake edges) zero first eigval
+      - false  # only pert. appr. grad without adding part fake edges
     zip_id: ablations
 
   graphgym.attack.SAN.enable_pert_grad:
     type: choice
     options:
-      - true
-      - false
-      - true
+      - true   # all
+      - false  # only part fake edge grad
+      - true   # only pert. appr. grad (but adding part fake edges)
+      - true   # only pert. appr. grad (but adding part fake edges) zero first eigval
+      - true   # only pert. appr. grad without adding part fake edges
+    zip_id: ablations
+
+  graphgym.attack.SAN.set_first_pert_zero:
+    type: choice
+    options:
+      - false  # all
+      - false  # only part fake edge grad
+      - false  # only pert. appr. grad (but adding part fake edges)
+      - true   # only pert. appr. grad (but adding part fake edges) zero first eigval
+      - false  # only pert. appr. grad without adding part fake edges
     zip_id: ablations
 
 # experiment fixed configs
