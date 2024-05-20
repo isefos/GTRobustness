@@ -28,7 +28,7 @@ fixed:
 
   graphgym:
 
-    datasetsplit_index: 0
+    dataset.split_index: 0
 
     out_dir: configs_seml/results
 
