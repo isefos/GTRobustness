@@ -212,7 +212,6 @@ fixed:
       pna_degrees: []
       residual: true
       update_e: true
- false
     mem:
       inplace: false
     metric_agg: argmax
@@ -270,17 +269,6 @@ fixed:
         max_freqs: 10
       enable: false
       raw_norm_type: none
-    posenc_GraphormerBias:
-       
-      dim_pe: 0
-      directed_graphs: true
-      enable: false
-      has_edge_attr: true
-      node_degrees_only: false
-      num_in_degrees: null
-      num_out_degrees: null
-      num_spatial_types: null
- 
     posenc_HKdiagSE:
       dim_pe: 16
       enable: false
@@ -335,21 +323,6 @@ fixed:
       pass_as_var: false
       phi_hidden_dim: 64
       phi_out_dim: 4
-      post_layers: 0
-      raw_norm_type: none
-    posenc_WLapPE:
-      dim_pe: 16
-      eigen:
-        eigvec_norm: L2
- 
-        laplacian_norm: sym
-        max_freqs: 10
- 
-      enable: false
-      layers: 3
-      model: none
-      n_heads: 4
-      pass_as_var: false
       post_layers: 0
       raw_norm_type: none
     print: both

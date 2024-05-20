@@ -122,10 +122,13 @@ def dataset_cfg(cfg):
     cfg.attack.SAN.partially_fake_edge_grad = True
     # enable or disable the gradient using matrix perturbation approximation
     cfg.attack.SAN.enable_pert_grad = True
-    # Use gradient-based eigen-decomposition for adversarial attacks
+    cfg.attack.SAN.pert_BPDA = False
     cfg.attack.SAN.eps_repeated_eigenvalue = 1.0e-5
+    # probably good to use when BPDA is True
+    cfg.attack.SAN.match_true_signs = False
+    cfg.attack.SAN.match_true_eigenspaces = False
     # set the perturbation approximation of the first eigenvalue to zero (so that we don't try to optimize it)
-    cfg.attack.SAN.set_first_pert_zero = True
+    cfg.attack.SAN.set_first_pert_zero = False
     # Node Injection Attack with LapPE -> how to define the approximation perturbation
     cfg.attack.SAN.nia_pert = "half_weight"  # or half_eps # TODO: add option for 1 eigenvalue with unit vector
 

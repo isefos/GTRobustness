@@ -13,25 +13,27 @@ slurm:
     cpus-per-task: 4  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
-grid:
+#grid:
 
-  graphgym.dataset.split_index:
-    type: choice
-    options:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
+#  graphgym.dataset.split_index:
+#    type: choice
+#    options:
+#      - 0
+#      - 1
+#      - 2
+#      - 3
+#      - 4
 
 fixed:
 
   graphgym:
 
+    dataset.split_index: 0
+
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/PyG-RobustnessUnitTest-cora_ml-SAN/${graphgym.dataset.split_index}'
+      dir: '/ceph/hdd/students/foth/models/PyG-RobustnessUnitTest-cora_ml-SAN/0'  # ${graphgym.dataset.split_index}'
       finetune: false
 
     robustness_unit_test:

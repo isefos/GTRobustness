@@ -131,6 +131,16 @@ def add_eig(batch):
         lap_norm_type = None
     attack_mode = batch.get("attack_mode", False)
     pert_approx = attack_mode and batch.edge_attr is not None and cfg.attack.SAN.enable_pert_grad
+    need_full_true_eigen = pert_approx and cfg.attack.SAN.match_true_eigenspaces
+    need_true_eigen = (
+        (not pert_approx)
+        or (pert_approx and cfg.attack.SAN.match_true_eigenspaces)
+        or (pert_approx and cfg.attack.SAN.match_true_signs)
+        or (pert_approx and cfg.attack.SAN.pert_BPDA)
+    )
+
+    if need_true_eigen:
+        pass
 
     out = get_lap_decomp_stats(
         batch.edge_index,
@@ -140,7 +150,7 @@ def add_eig(batch):
         max_freqs,
         eigvec_norm,
         pad_too_small=not pert_approx,
-        need_full=pert_approx,
+        need_full=need_full_true_eigen,
         return_lap=True,
         no_grad_lap=not pert_approx,
     )
@@ -192,18 +202,21 @@ def add_eig(batch):
     # normalize the pert eigenvectors
     U_pert = eigvec_normalizer(U_pert, E_pert, eigvec_norm)
     
-    # find remaining repeated eigenvalues in E_pert and transform the corresponding
-    # eigenvectors in U_pert to be as close as possible to the ones in eigenvectors_true
-    U_pert = match_eigenspaces(E_pert, U_pert, eigenvectors_true, max_freqs)
+    if cfg.attack.SAN.match_true_eigenspaces:
+        # find remaining repeated eigenvalues in E_pert and transform the corresponding
+        # eigenvectors in U_pert to be as close as possible to the ones in eigenvectors_true
+        U_pert = match_eigenspaces(E_pert, U_pert, eigenvectors_true, max_freqs)
 
     # select only the smallest max_freqs
     E_pert = E_pert[:max_freqs]
     U_pert = U_pert[:, :max_freqs]
-    eigenvalues_true = eigenvalues_true[:max_freqs]
-    eigenvectors_true = eigenvectors_true[:, :max_freqs]
+    if need_full_true_eigen:
+        eigenvalues_true = eigenvalues_true[:max_freqs]
+        eigenvectors_true = eigenvectors_true[:, :max_freqs]
     
-    # for eigenvectors of the unique eigenvalues that might be flipped in relation to the true ones 
-    U_pert = invert_wrong_signs(eigenvectors_true, U_pert)
+    if cfg.attack.SAN.match_true_signs:
+        # for eigenvectors of the unique eigenvalues that might be flipped in relation to the true ones 
+        U_pert = invert_wrong_signs(eigenvectors_true, U_pert)
 
     if cfg.attack.SAN.set_first_pert_zero:
         eigenvalues = torch.zeros((max_freqs, ), device=batch.x.device)
@@ -221,9 +234,12 @@ def add_eig(batch):
         print(f"Avg eigvec sim.: {U_sim.mean().item()}")
         print(f"Max eigvec sim.: {U_sim.max().item()}")
 
-    # BPDA
-    evals = eigenvalues_true + E_pert - E_pert.detach()
-    evects = eigenvectors_true + U_pert - U_pert.detach()
+    if cfg.attack.SAN.pert_BPDA:
+        # BPDA
+        evals = eigenvalues_true + E_pert - E_pert.detach()
+        evects = eigenvectors_true + U_pert - U_pert.detach()
+    else:
+        evals, evects = E_pert, U_pert
 
     # pad if max_freq > num_nodes
     if num_nodes < max_freqs:
