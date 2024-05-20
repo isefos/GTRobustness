@@ -166,7 +166,6 @@ fixed:
       pna_degrees: []
       residual: true
       update_e: true
-      wsan_add_dummy_edges: false
     mem:
       inplace: false
     metric_agg: argmax
