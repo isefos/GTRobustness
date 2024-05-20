@@ -12,7 +12,7 @@ slurm:
     mem: 16G          # memory
     cpus-per-task: 4  # num cores
     time: 1-00:00     # max time, D-HH:MM
-
+    qos: deadline
 
 grid:
 
