@@ -7,55 +7,117 @@ seml:
 slurm:
   experiments_per_job: 1
   sbatch_options:
-    partition: gpu_large
+    partition: gpu_all
     gres: gpu:1       # num GPUs
     mem: 16G          # memory
     cpus-per-task: 4  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
+
 grid:
 
-  graphgym.attack.e_budget:
-    type: range
-    min: 0.0075
-    max: 0.151
-    step: 0.0075
-
-  graphgym.dataset.split_index:
+  graphgym.seed:
     type: choice
     options:
-      - 0
-      - 1
-      - 2
-      - 3
-      - 4
+      - 15
+      - 843
+      - 1094
+      - 1982
+
+  graphgym.attack.node_prob_enable:
+    type: choice
+    options:
+      - true   # sp all, degree
+      - true   # sp 1, degree
+      - true   # sp 2, degree
+      - true  # no sp, degree
+      - true   # sp all, no degree
+      - false   # all, but no node probs
+      - true   # none, but node probs
+    zip_id: ablations
+
+  graphgym.attack.Graphormer.sp_find_weighted:
+    type: choice
+    options:
+      - true   # sp all, degree
+      - true   # sp 1, degree
+      - true   # sp 2, degree
+      - false  # no sp, degree
+      - true   # sp all, no degree
+      - true   # all, but no node probs
+      - false   # none, but node probs
+    zip_id: ablations
+
+  graphgym.attack.Graphormer.sp_use_weighted:
+    type: choice
+    options:
+      - true   # sp all, degree
+      - true   # sp 1, degree
+      - false  # sp 2, degree
+      - false  # no sp, degree
+      - true   # sp all, no degree
+      - true   # all, but no node probs
+      - false   # none, but node probs
+    zip_id: ablations
+
+  graphgym.attack.Graphormer.sp_use_gradient:
+    type: choice
+    options:
+      - true   # sp all, degree
+      - false  # sp 1, degree
+      - false  # sp 2, degree
+      - false  # no sp, degree
+      - true   # sp all, no degree
+      - true   # all, but no node probs
+      - false   # none, but node probs
+    zip_id: ablations
+
+  graphgym.attack.Graphormer.use_weighted_degrees:
+    type: choice
+    options:
+      - true   # sp all, degree
+      - true   # sp 1, degree
+      - true   # sp 2, degree
+      - true   # no sp, degree
+      - false  # sp all, no degree
+      - true   # all, but no node probs
+      - false   # none, but node probs
+    zip_id: ablations
+
+# experiment fixed configs
 
 fixed:
 
   graphgym:
 
-    seed: 42
-
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/GRIT/CoraML-RUT/${graphgym.dataset.split_index}'
+      dir: '/ceph/hdd/students/foth/models/Graphormer/UPFD_pol_bert/0'
       finetune: false
 
-    robustness_unit_test:
-      enable: false
+    posenc_GraphormerBias:
+      dim_pe: 0
+      directed_graphs: false
+      enable: true
+      has_edge_attr: false
+      node_degrees_only: false
+      num_in_degrees: 31
+      num_out_degrees: 31
+      num_spatial_types: 10
 
     attack:
+      e_budget: 0.1
       enable: true
       num_attacked_graphs: 50
       skip_incorrect_graph_classification: false
       log_progress: false
       load_best_model: false
       split: test
-      prediction_level: node
-      remove_isolated_components: false
+      prediction_level: graph
+      remove_isolated_components: true
       run_random_baseline: true
-      block_size: 20_000  # TODO: test
+      block_size: 1_000  # TODO: test
       epochs: 125  # TODO: test
       epochs_resampling: 100
       resample_period: 1  # TODO: test
@@ -63,27 +125,34 @@ fixed:
       eps: 1.0e-07  # TODO: test
       eps_init_noised: false  # TODO: test
       is_undirected: true
-      loss: tanh_margin  # TODO: test
-      metric: neg_accuracy
+      loss: raw_prediction  # TODO: test
+      metric: null
       lr: 4000  # TODO: test
       max_edge_weight_update: 0.0  # TODO: test
       max_trials_sampling: 20
       minimum_budget: 1
-      node_prob_enable: false
-      root_node_idx: null
+      node_prob_iterations: 3
+      node_prob_log: true
+      root_node_idx: 0
       with_early_stopping: true
       node_injection:
-        enable: false
+        enable: true
+        from_train: true
+        from_val: true
+        from_test: true
+        allow_existing_graph_pert: false
+        sample_only_connected: true
+        include_root_nodes: false
+        sample_only_trees: true
 
-    # copied from config of model that gets loaded
-    
+    # copied from pre-trained model
+
     accelerator: auto
     benchmark: false
     best_by_loss: false
     bn:
       eps: 1.0e-05
       mom: 0.1
-    cfg_dest: config.yaml
     custom_metrics: []
     dataset:
       cache_load: false
@@ -101,15 +170,15 @@ fixed:
       encoder_bn: true
       encoder_dim: 128
       encoder_name: db
-      format: PyG-RobustnessUnitTest
-      infer_link_label: None
+      format: PyG-UPFD
+      infer_link_label: null
       label_column: none
       label_table: none
       location: local
-      name: cora_ml
+      name: politifact-bert
       node_encoder: true
       node_encoder_bn: false
-      node_encoder_name: LinearNode+WeightedRRWPLinear
+      node_encoder_name: LinearNode+WeightedGraphormerBias
       node_encoder_num_types: 0
       pe_transform_on_the_fly: false
       remove_feature: false
@@ -122,11 +191,12 @@ fixed:
       - 0.1
       - 0.1
       split_dir: ./splits
+      split_index: 0
       split_mode: standard
-      task: node
-      task_type: classification
+      task: graph
+      task_type: classification_binary
       to_undirected: false
-      transductive: true
+      transductive: false
       transform: none
       tu_simple: true
     devices: 1
@@ -141,9 +211,9 @@ fixed:
       att_heads: 1
       batchnorm: true
       clear_feature: true
-      dim_inner: 24
+      dim_inner: 40
       dropout: 0.0
-      head: node
+      head: graphormer_graph
       keep_edge: 0.5
       l2norm: true
       layer_type: generalconv
@@ -160,10 +230,10 @@ fixed:
     graphormer:
       attention_dropout: 0.0
       dropout: 0.0
-      embed_dim: 80
+      embed_dim: 40
       input_dropout: 0.0
       mlp_dropout: 0.0
-      num_heads: 4
+      num_heads: 8
       num_layers: 6
       use_graph_token: true
     gt:
@@ -176,7 +246,7 @@ fixed:
         full_attn: true
         norm_e: true
         use_bias: false
-      attn_dropout: 0.41097091538688835
+      attn_dropout: 0.0
       batch_norm: true
       bigbird:
         add_cross_attention: false
@@ -191,36 +261,35 @@ fixed:
         use_bias: false
       bn_momentum: 0.1
       bn_no_runner: false
-      dim_hidden: 24
-      dropout: 0.12018300862399241
+      dim_hidden: 64
+      dropout: 0.0
       full_graph: true
       gamma: 1.0e-05
       gamma_learnable: false
       layer_norm: false
       layer_type: SANLayer
-      layers: 4
-      n_heads: 4
+      layers: 3
+      n_heads: 8
       pna_degrees: []
       residual: true
       update_e: true
- 
     mem:
       inplace: false
     metric_agg: argmax
     metric_best: accuracy
     model:
       edge_decoding: dot
-      graph_pooling: add
+      graph_pooling: graph_token
       loss_fun: cross_entropy
       match_upper: true
       size_average: mean
       thresh: 0.5
-      type: GritTransformer
+      type: Graphormer
     name_tag: ''
     num_threads: 6
     num_workers: 0
     optim:
-      base_lr: 0.0036341288121494167
+      base_lr: 0.0001291431389395534
       batch_accumulation: 1
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
@@ -229,10 +298,10 @@ fixed:
       early_stopping_patience: 30
       early_stopping_warmup: 30
       lr_decay: 0.1
-      max_epoch: 200
+      max_epoch: 300
       min_lr: 0.0
       momentum: 0.9
-      num_warmup_epochs: 10
+      num_warmup_epochs: 5
       optimizer: adamW
       reduce_factor: 0.1
       schedule_patience: 10
@@ -241,7 +310,7 @@ fixed:
       - 30
       - 60
       - 90
-      weight_decay: 0.0001
+      weight_decay: 0.0067022017097888706
     posenc_ElstaticSE:
       dim_pe: 16
       enable: false
@@ -261,17 +330,6 @@ fixed:
         max_freqs: 10
       enable: false
       raw_norm_type: none
-    posenc_GraphormerBias:
-       
-      dim_pe: 0
-      directed_graphs: true
-      enable: false
-      has_edge_attr: true
-      node_degrees_only: false
-      num_in_degrees: null
-      num_out_degrees: null
-      num_spatial_types: null
- 
     posenc_HKdiagSE:
       dim_pe: 16
       enable: false
@@ -298,9 +356,9 @@ fixed:
       post_layers: 0
       raw_norm_type: none
     posenc_RRWP:
-      enable: true
+      enable: false
       ksteps: 21
-      w_add_dummy_edge: true
+      w_add_dummy_edge: false
     posenc_RWSE:
       dim_pe: 16
       enable: false
@@ -328,23 +386,10 @@ fixed:
       phi_out_dim: 4
       post_layers: 0
       raw_norm_type: none
-    posenc_WLapPE:
-      dim_pe: 16
-      eigen:
-        correct_pert_eigvec_sign: false
-        eigvec_norm: L2
-        laplacian_norm: sym
-        max_freqs: 10
-        straight_through_estimator: true
-        use_gradient: false
-      enable: false
-      layers: 3
-      model: none
-      n_heads: 4
-      pass_as_var: false
-      post_layers: 0
-      raw_norm_type: none
     print: both
+    robustness_unit_test:
+      enable: false
+      load_best_model: true
     round: 5
     run_multiple_splits: []
     share:
@@ -355,15 +400,15 @@ fixed:
     tensorboard_each_run: false
     train:
       auto_resume: false
-      batch_size: 1
+      batch_size: 16
       ckpt_best: true
       ckpt_clean: true
       ckpt_period: 100
       enable_ckpt: true
       epoch_resume: -1
       eval_period: 1
-      homophily_regularization: 3.425792083952826
-      homophily_regularization_gt_weight: 1.084843199568787
+      homophily_regularization: 0.0
+      homophily_regularization_gt_weight: 1.0
       iter_per_epoch: 32
       mode: custom
       neighbor_sizes:

@@ -24,44 +24,39 @@ grid:
       - 1094
       - 1982
 
+  graphgym.attack.node_prob_enable:
+    type: choice
+    options:
+      - false   # all, but no node probs
+      - true   # none, but node probs
+    zip_id: ablations
+
   graphgym.attack.Graphormer.sp_find_weighted:
     type: choice
     options:
-      - true   # sp all, degree
-      - true   # sp 1, degree
-      - true   # sp 2, degree
-      - false  # no sp, degree
-      - true   # sp all, no degree
+      - true   # all, but no node probs
+      - false   # none, but node probs
     zip_id: ablations
 
   graphgym.attack.Graphormer.sp_use_weighted:
     type: choice
     options:
-      - true   # sp all, degree
-      - true   # sp 1, degree
-      - false  # sp 2, degree
-      - false  # no sp, degree
-      - true   # sp all, no degree
+      - true   # all, but no node probs
+      - false   # none, but node probs
     zip_id: ablations
 
   graphgym.attack.Graphormer.sp_use_gradient:
     type: choice
     options:
-      - true   # sp all, degree
-      - false  # sp 1, degree
-      - false  # sp 2, degree
-      - false  # no sp, degree
-      - true   # sp all, no degree
+      - true   # all, but no node probs
+      - false   # none, but node probs
     zip_id: ablations
 
   graphgym.attack.Graphormer.use_weighted_degrees:
     type: choice
     options:
-      - true   # sp all, degree
-      - true   # sp 1, degree
-      - true   # sp 2, degree
-      - true   # no sp, degree
-      - false  # sp all, no degree
+      - true   # all, but no node probs
+      - false   # none, but node probs
     zip_id: ablations
 
 # experiment fixed configs
