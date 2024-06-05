@@ -1,6 +1,7 @@
 import seml
 import numpy as np
 import matplotlib
+matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from pathlib import Path
@@ -10,8 +11,27 @@ import shutil
 from collections import defaultdict
 
 
+use_tex = True
+if use_tex:
+    plt.rcParams.update({
+        "text.usetex": True,
+        "font.family": "serif",
+        "font.serif": ["Computer Modern Roman"],
+    })
+
+
+def save_figure(fig, path, name, png=False):
+    if png:
+        file_name = name + ".png"
+        fig.savefig(path / file_name, bbox_inches="tight", dpi=500)
+        return
+    file_name = name + ".pdf"
+    fig.savefig(path / file_name, bbox_inches="tight")
+
+
 datasets = {
-    "CLUSTER": {"format":"PyG-GNNBenchmarkDataset", "name": "CLUSTER"},
+    "CLUSTER_cs": {"format":"PyG-GNNBenchmarkDataset", "name": "CLUSTER"},
+    "CLUSTER_as": {"format":"PyG-GNNBenchmarkDataset", "name": "CLUSTER"},
     "CoraML-RUT": {"format": "PyG-RobustnessUnitTest", "name": "cora_ml"},
     "Citeseer-RUT": {"format": "PyG-RobustnessUnitTest", "name": "citeseer"},
     "UPFD_gos_bert": {"format": "PyG-UPFD", "name": "gossipcop-bert"},
@@ -28,46 +48,96 @@ models = {
 
 
 attack_cols_graph = {
-    "Average attack success rate": {
+    "Attack success rate": {
         "transfer": "avg_attack_success_rate", "random": "avg_attack_success_rate_random",
     },
-    "Average accuracy": {
+    "Accuracy": {
         "clean": "avg_correct_clean", "transfer": "avg_correct_pert", "random": "avg_correct_pert_random",
     },
-    "Average margin": {
+    "Margin": {
         "clean": "avg_margin_clean", "transfer": "avg_margin_pert", "random": "avg_margin_pert_random",
     },
 }
 attack_cols_node = {
-    "Average attack success rate": {
+    "Attack success rate": {
         "transfer": "avg_attack_success_rate", "random": "avg_attack_success_rate_random",
     },
-    "Average accuracy": {
+    "Accuracy": {
         "clean": "avg_correct_acc_clean", "transfer": "avg_correct_acc_pert", "random": "avg_correct_acc_pert_random", 
     },
-    "Average mean margin": {
+    "Margin": {
         "clean": "avg_margin_mean_clean", "transfer": "avg_margin_mean_pert", "random": "avg_margin_mean_pert_random",
     },
+}
+
+
+agg_cols_graph = {
+    "strongest_asr.csv": (
+        "max",
+        ["avg_attack_success_rate", "avg_attack_success_rate_random"],
+        0,
+    ),
+    "strongest_acc.csv": (
+        "min",
+        ["avg_correct_pert", "avg_correct_pert_random"],
+        "avg_correct_clean",
+    ),
+    "strongest_margin.csv": (
+        "min",
+        ["avg_margin_pert", "avg_margin_pert_random"],
+        "avg_margin_clean",
+    ),
+}
+agg_cols_node = {
+    "strongest_asr.csv": (
+        "max",
+        ["avg_attack_success_rate", "avg_attack_success_rate_random"],
+        0,
+    ),
+    "strongest_acc.csv": (
+        "min",
+        ["avg_correct_acc_pert", "avg_correct_acc_pert_random"],
+        "avg_correct_acc_clean",
+    ),
+    "strongest_margin.csv": (
+        "min",
+        ["avg_margin_mean_pert", "avg_margin_mean_pert_random"],
+        "avg_margin_mean_clean",
+    ),
 }
 
 
 budget_measures = {
     "budget": {
         "key": "budget",
-        "label": r"Budget (% edge modifications allowed)",
+        "label": r"Edge mod. budget (\%)",
         "mul": 100,
     },
-    "budget_used": {
-        "key": "bu",
-        "label": r"Average edges modified (%)",
-        "mul": 100,
-    },
-    "num_modifications": {
-        "key": "m",
-        "label": r"Average num. edges modified",
-        "mul": 1,
+    #"budget_used": {
+    #    "key": "bu",
+    #    "label": r"Avg. edges mod. (\%)",
+    #    "mul": 100,
+    #},
+    #"num_modifications": {
+    #    "key": "m",
+    #    "label": r"Avg. edges mod.",
+    #    "mul": 1,
+    #},
+}
+
+styles = {
+    "adaptive": {"color": ["b"], "linestyle": [":"], "marker": ["o"], "markersize": [6]},
+    "random": {"color": ["g"], "linestyle": ["-."], "marker": ["*"], "markersize": [9]},
+    "transfer": {
+        "color": ["r", "k", "orange", "m", "aqua"],
+        "linestyle": ["--", (0, (3, 5, 1, 5, 1, 5)), (0, (5, 10)), (0, (5, 1)), (0, (1, 1))],
+        "marker": ["v", "s", "X", "p", "s"],
+        "markersize": [7, 6, 8, 8, 8],
     },
 }
+
+figsize = (2.5, 2.0)
+figsize_all = (4.5, 3.5)
 
 
 def clean_path(results_path: str):
@@ -123,6 +193,9 @@ def write_results(
     for col_group in attack_cols.values():
         cols.extend(list(col_group.values()))
 
+    df_dir = seed_dir / "all"
+    df_dir.mkdir()
+
     run_seed_dataframes = {}
 
     for result in results:
@@ -150,7 +223,7 @@ def write_results(
         for seed, r in seed_results.items():
             df = pd.DataFrame(r)
             seed_dataframes[seed] = df
-            df.to_csv(seed_dir / f"{run_name}_s{seed}.csv")
+            df.to_csv(df_dir / f"{run_name}_s{seed}.csv")
 
         run_seed_dataframes[run_name] = seed_dataframes
 
@@ -164,6 +237,13 @@ def save_plots(
     results_path,
     attack_cols,
     max_idx_small_budget: int,
+    agg_cols,
+    seed_dir,
+    y_label: bool,
+    add_title: bool,
+    add_legend: bool,
+    y_min: float | None,
+    y_max: float | None,
 ):
     plots_dir = results_path / "plots"
     plots_dir_runs = plots_dir / "individual"
@@ -171,26 +251,35 @@ def save_plots(
     all_agg_results = {}
     all_agg_results_sb = {}
 
+    all_dfs_mean = []
+    all_dfs_std = []
+
+    plot_individual = False
+
     for run_name, seed_dfs in run_seed_dfs.items():
         rand_run = run_name == "random"
         plots_dir_run = plots_dir_runs / run_name
         plots_dir_run.mkdir(parents=True)
         
         # aggregate seeds, mean and error std
-        df_agg = pd.concat(list(seed_dfs.values()))
+        df_agg = pd.concat(list(seed_dfs.values()), ignore_index=True)
         df_agg_mean = df_agg.groupby("budget", as_index=False).mean()
+        all_dfs_mean.append(df_agg_mean)
         df_agg_std = df_agg.groupby("budget", as_index=False).std()
+        all_dfs_std.append(df_agg_std)
 
         # plot aggregate
         for title, col_group in attack_cols.items():
 
             for budget_measure, budget_dict in budget_measures.items():
 
-                fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
-                fig_sb, ax_sb = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
-                fig_title = f"{model} - {dataset.replace('_', ' ')}"
-                ax.set_title(fig_title)
-                ax_sb.set_title(fig_title)
+                if plot_individual:
+                    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
+                    fig_sb, ax_sb = plt.subplots(nrows=1, ncols=1, figsize=figsize)
+                    fig_title = f"{model} - {dataset.replace('_', ' ')}"
+                    if add_title:
+                        ax.set_title(fig_title)
+                        ax_sb.set_title(fig_title)
 
                 if "clean" in col_group:
                     zb_val = df_agg_mean[col_group["clean"]][0]
@@ -205,75 +294,211 @@ def save_plots(
                     else:
                         agg_res[title][budget_measure][run_name] = {}
 
+                label_occurrences = defaultdict(int)
+
                 for label, col in col_group.items():
                     rand_label = label == "random"
                     if label == "clean":
                         continue  #  don't plot the clean (is equal to first step anyway)
                     if (rand_run and not rand_label) or (not rand_run and rand_label):
                         continue  # for random only plot the random col, for transfer dont plot rand col
+
+                    l_count = label_occurrences[label]
+                    c = styles[label]["color"][l_count]
+                    l = styles[label]["linestyle"][l_count]
+                    m = styles[label]["marker"][l_count]
+                    ms = styles[label]["markersize"][l_count]
+                    label_occurrences[label] += 1
+
                     x = np.concatenate((np.array([0.0]), np.array(df_agg_mean.index)))
                     x = np.concatenate(
                         (np.array([0.0]), np.array(df_agg_mean[budget_dict["key"]]))
                     ) * budget_dict["mul"]
                     y = np.concatenate((np.array([zb_val]), np.array(df_agg_mean[col])))
                     std = np.concatenate((np.array([0.0]), np.array(df_agg_std[col])))
-                    ax.plot(x, y, label=label)
-                    ax.fill_between(x, y-std, y+std, alpha=0.2)
+
+                    if "margin" not in col:
+                        y *= 100
+                        std *= 100
+
+                    if plot_individual:
+                        ax.plot(x, y, label=label, alpha=0.7, color=c, marker=m, linestyle=l, markeredgewidth=0.0, markersize=ms)
+                        ax.fill_between(x, y-std, y+std, color=c, alpha=0.1, linewidth=0.0)
 
                     x_sb = x[:max_idx_small_budget+1]
                     y_sb = y[:max_idx_small_budget+1]
                     std_sb = std[:max_idx_small_budget+1]
-                    ax_sb.plot(x_sb, y_sb, label=label)
-                    ax.fill_between(x_sb, y_sb-std_sb, y_sb+std_sb, alpha=0.2)
+
+                    if plot_individual:
+                        ax_sb.plot(x_sb, y_sb, label=label, alpha=0.7, color=c, marker=m, linestyle=l, markeredgewidth=0.0, markersize=ms)
+                        ax.fill_between(x_sb, y_sb-std_sb, y_sb+std_sb, color=c, alpha=0.1, linewidth=0.0)
 
                     all_agg_results[title][budget_measure][run_name][col] = {"x": x, "y": y, "std": std}
                     all_agg_results_sb[title][budget_measure][run_name][col] = {"x": x_sb, "y": y_sb, "std": std_sb}
 
-                ax.set_xlabel(budget_dict["label"])
-                ax_sb.set_xlabel(budget_dict["label"])
-                ax.set_ylabel(title)
-                ax_sb.set_ylabel(title)
-                ax.legend()
-                ax_sb.legend()
-                filename = f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}"
-                fig.savefig(plots_dir_run / f"{filename}.png")
-                fig_sb.savefig(plots_dir_run / f"{filename}_sb.png")
-                ax.clear()
-                ax_sb.clear()
-                plt.close(fig)
-                plt.close(fig_sb)
+                if plot_individual:
+                    ax.set_xlabel(budget_dict["label"])
+                    ax_sb.set_xlabel(budget_dict["label"])
+                    if y_label:
+                        ax.set_ylabel(title)
+                        ax_sb.set_ylabel(title)
+                    ax.legend()
+                    ax_sb.legend()
+                    filename = f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}"
+                    save_figure(fig, plots_dir_run, filename)
+                    #fig.savefig(plots_dir_run / f"{filename}.png")
+                    save_figure(fig_sb, plots_dir_run, f"{filename}_sb")
+                    #fig_sb.savefig(plots_dir_run / f"{filename}_sb.png")
+                    ax.clear()
+                    ax_sb.clear()
+                    plt.close(fig)
+                    plt.close(fig_sb)
+
+    # save the worst case attack to a file
+    for filename, (agg_mode, cols, clean_col) in agg_cols.items():
+        df_all_mean = pd.concat(all_dfs_mean, ignore_index=True)
+        df_all_std = pd.concat(all_dfs_std, ignore_index=True)
+        df_agg_mean_all = df_all_mean[["budget"] + cols].fillna(0.0)
+        df_agg_std_all = df_all_std[["budget"] + cols].fillna(0.0)
+
+        # assert that the colomns are complementary
+        num_nonzero_mean_cols = df_agg_mean_all[cols].astype(bool).sum(axis=1)
+        assert np.all(num_nonzero_mean_cols <= 1)
+        df_agg_mean_all["stat"] = df_agg_mean_all[cols].sum(1)
+
+        num_nonzero_std_cols = df_agg_std_all[cols].astype(bool).sum(axis=1)
+        assert np.all(num_nonzero_std_cols <= 1)
+        df_agg_std_all["stat"] = df_agg_std_all[cols].sum(1)
+
+        df_mean_gb = df_agg_mean_all.groupby("budget")
+        
+        if agg_mode == "max":
+            strongest_idx = df_mean_gb["stat"].idxmax().values
+        else:
+            strongest_idx = df_mean_gb["stat"].idxmin().values
+
+        budgets = df_agg_mean_all["budget"].iloc[strongest_idx]
+        strongest_mean = df_agg_mean_all["stat"].iloc[strongest_idx]
+        strongest_std = df_agg_std_all["stat"].iloc[strongest_idx]
+
+        budgets = np.concatenate([np.array([0]), budgets], axis=0)
+        if not clean_col:
+            clean_mean_val = 0.0
+            clean_std_val = 0.0
+        else:
+            # the clean of the strongest first budget (should all be the same anyway) 
+            clean_mean_val = df_all_mean[clean_col].iloc[strongest_idx[0]]
+            clean_std_val = df_all_std[clean_col].iloc[strongest_idx[0]]
+        strongest_mean = np.concatenate([np.array([clean_mean_val]), strongest_mean], axis=0)
+        strongest_std = np.concatenate([np.array([clean_std_val]), strongest_std], axis=0)
+
+
+        data = {"budget": budgets, "mean": strongest_mean, "std": strongest_std}
+        df_strongest = pd.DataFrame(data)
+        df_strongest.to_csv(seed_dir / filename)
+
 
     plotdir_all = plots_dir / "agg_all_budgets"
     plotdir_all.mkdir()
     plotdir_small = plots_dir / "agg_small_budgets"
     plotdir_small.mkdir()
+    plotdir_bt = plots_dir / "agg_best_transfer"
+    plotdir_bt.mkdir()
 
-    for agg_res, pdir in zip([all_agg_results, all_agg_results_sb], [plotdir_all, plotdir_small]):
+    for agg_res, pdir, bt in zip(
+        [all_agg_results, all_agg_results_sb, all_agg_results_sb],
+        [plotdir_all, plotdir_small, plotdir_bt],
+        [False, False, True],
+    ):
 
         for title, run_stats_b in agg_res.items():
 
             for budget_measure, budget_dict in budget_measures.items():
 
+                if bt and (budget_measure != "budget" or "rate" in title):
+                    # only get the best transfer for:
+                    #  - allowed budget, where the x values should to align
+                    #  - acc and margin where we find the min (to add asr, handle min/max)
+                    continue
+
+                x_best = None
+                y_best = None
+                std_best = None
+
+                label_occurrences = defaultdict(int)
                 run_stats = run_stats_b[budget_measure]
-                fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
-                ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
-                for run_name, agg_res in run_stats.items():
-                    for col, res in agg_res.items():
+                if bt:
+                    fs_ = figsize
+                else:
+                    fs_ = figsize_all
+                fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
+                if add_title:
+                    ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
+                for run_name, agg_res_run in run_stats.items():
+                    # not really a loop, should only have one entry...
+                    assert len(agg_res_run) == 1
+                    for col, res in agg_res_run.items():
+
+                        if run_name == model:
+                            label = "adaptive"
+                            l = label
+                        elif run_name == "random":
+                            label = "random"
+                            l = label
+                        else:
+                            if bt:
+                                # save best
+                                if x_best is None:
+                                    x_best = res["x"]
+                                    y_best = res["y"]
+                                    std_best = res["std"]
+                                else:
+                                    assert np.all(x == res["x"])
+                                    y_new = res["y"]
+                                    new_best = y_new < y_best
+                                    y_best[new_best] = y_new[new_best]
+                                    std_best[new_best] = res["std"][new_best]
+                                label = "transfer"
+                                l = label
+                                continue
+                            else:
+                                l = "transfer"
+                                label = f"transfer from {run_name}"
+
+                        l_count = label_occurrences[l]
+                        c = styles[l]["color"][l_count]
+                        ls = styles[l]["linestyle"][l_count]
+                        m = styles[l]["marker"][l_count]
+                        ms = styles[l]["markersize"][l_count]
+                        label_occurrences[l] += 1
+
                         x = res["x"]
                         y = res["y"]
                         std = res["std"]
-                        if run_name == model:
-                            label = f"adaptive"
-                        elif run_name == "random":
-                            label = "random"
-                        else:
-                            label = f"transfer from {run_name}"
-                        ax.plot(x, y, label=label)
-                        ax.fill_between(x, y-std, y+std, alpha=0.2)
+
+                        ax.plot(x, y, label=label, alpha=0.7, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
+                        ax.fill_between(x, y-std, y+std, color=c, alpha=0.1, linewidth=0.0)
+
+                if bt:
+                    l = "transfer"
+                    c = styles[l]["color"][0]
+                    ls = styles[l]["linestyle"][0]
+                    m = styles[l]["marker"][0]
+                    ms = styles[l]["markersize"][0]
+                    label_occurrences[l] += 1
+                    ax.plot(x_best, y_best, label=l, alpha=0.7, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
+                    ax.fill_between(x_best, y_best-std_best, y_best+std_best, color=c, alpha=0.1, linewidth=0.0)
+
                 ax.set_xlabel(budget_dict["label"])
-                ax.set_ylabel(title)
-                ax.legend()
-                fig.savefig(pdir / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
+                if y_label:
+                    if "margin" not in title:
+                        ax.set_ylabel(title + r" (\%)")
+                    else:
+                        ax.set_ylabel(title)
+                if add_legend:
+                    ax.legend(fontsize="small", framealpha=0.5, bbox_to_anchor=(1.01, 0), loc="lower left")
+                save_figure(fig, pdir, f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}")
+                #fig.savefig(pdir / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
                 ax.clear()
                 plt.close(fig)
 
@@ -340,13 +565,19 @@ def get_random_attack_collection_results(collection, dataset, model, pred_level)
     return random_transfer_result
 
 
-def check_correct_result(result, dataset, model, pred_level):
+def check_correct_result(result, dataset: str, model: str, pred_level: str):
     df = result["config"]["graphgym"]["dataset"]["format"]
     dfg = datasets[dataset]["format"]
     dn = result["config"]["graphgym"]["dataset"]["name"]
     dng = datasets[dataset]["name"]
     assert df == dfg, (f"Dataset format was given to be `{dfg}`, but encountered `{df}`.")
     assert dn == dng, (f"Dataset name was given to be `{dng}`, but encountered `{dn}`.")
+    if dataset.startswith("CLUSTER"):
+        constrained_attack = dataset.endswith("cs")
+        if constrained_attack:
+            assert result["config"]["graphgym"]["attack"]["cluster_sampling"]
+        else:
+            assert not result["config"]["graphgym"]["attack"]["cluster_sampling"]
     
     mt = result["config"]["graphgym"]["model"]["type"]
     mtg = models[model]["type"]
@@ -383,6 +614,11 @@ def main(
     model: str,
     max_idx_small_budget: int,
     attack_collection: str,
+    y_label: bool,
+    add_title: bool,
+    add_legend: bool,
+    y_min: float | None,
+    y_max: float | None,
 ):
     (
         results,
@@ -394,8 +630,10 @@ def main(
     pred_level = results[0]["config"]["graphgym"]["attack"]["prediction_level"]
     if pred_level == "graph":
         attack_cols = attack_cols_graph
+        agg_cols = agg_cols_graph
     elif pred_level == "node":
         attack_cols = attack_cols_node
+        agg_cols = agg_cols_node
     else:
         raise ValueError(f"Unknown prediction level: `{pred_level}`")
     for res in results:
@@ -420,6 +658,13 @@ def main(
         results_path,
         attack_cols,
         max_idx_small_budget,
+        agg_cols,
+        seed_dir,
+        y_label,
+        add_title,
+        add_legend,
+        y_min,
+        y_max,
     )
 
 
@@ -429,6 +674,12 @@ parser.add_argument("-d", "--dataset")
 parser.add_argument("-m", "--model")
 parser.add_argument("-s", "--small-budget-idx")
 parser.add_argument("-a", "--attack-collection")
+parser.add_argument("-y", "--y-label", action="store_true")
+parser.add_argument("-t", "--title", action="store_true")
+parser.add_argument("-l", "--legend", action="store_true")
+parser.add_argument("-b", "--best-transfer-only", action="store_true")
+parser.add_argument("--y-min", type=float, default=None)
+parser.add_argument("--y-max", type=float, default=None)
 
 
 if __name__ == "__main__":
@@ -445,4 +696,9 @@ if __name__ == "__main__":
         model=args.model,
         max_idx_small_budget=int(args.small_budget_idx),
         attack_collection=args.attack_collection,
+        y_label=args.y_label,
+        add_title=args.title,
+        add_legend=args.legend,
+        y_min=args.y_min,
+        y_max=args.y_max,
     )

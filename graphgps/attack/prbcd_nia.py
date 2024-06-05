@@ -5,6 +5,7 @@ from torch import Tensor
 from torch_geometric.utils import (
     to_undirected,
     to_scipy_sparse_matrix,
+    coalesce,
 )
 from torch_geometric.data import Data
 from graphgps.attack.prbcd import PRBCDAttack
@@ -106,19 +107,21 @@ class PRBCDAttackNI(PRBCDAttack):
         edge_weight_off = None
         if not discrete and cfg.posenc_WLapPE.enable and cfg.attack.SAN.enable_pert_grad:
             node_inj_pert = cfg.attack.SAN.nia_pert
-            if node_inj_pert == "half_weight":
-                block_weights_off = self.block_edge_weight.detach() / 2
-            elif node_inj_pert == "half_eps":
-                block_weights_off = self.block_edge_weight.detach() - (self.coeffs['eps'] / 2)
-            else:
-                raise ValueError(f"cfg.attack.SAN.nia_pert = {node_inj_pert} is not valid")
+            if node_inj_pert != "full":
 
-            _, edge_weight_off = self._get_modified_adj(
-                self.edge_index,
-                self.edge_weight,
-                self.block_edge_index,
-                block_weights_off,
-            )
+                if node_inj_pert == "half_weight":
+                    block_weights_off = self.block_edge_weight.detach() / 2
+                elif node_inj_pert == "half_eps":
+                    block_weights_off = self.block_edge_weight.detach() - (self.coeffs['eps'] / 2)
+                else:
+                    raise ValueError(f"cfg.attack.SAN.nia_pert = {node_inj_pert} is not valid")
+
+                _, edge_weight_off = self._get_modified_adj(
+                    self.edge_index,
+                    self.edge_weight,
+                    self.block_edge_index,
+                    block_weights_off,
+                )
         # create a data, clone x, since it gets modified inplace in the forward pass
         data = Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight, edge_weight_off=edge_weight_off)
         return data
@@ -132,20 +135,39 @@ class PRBCDAttackNI(PRBCDAttack):
             data.E_clean = self.E_lap
             data.U_clean = self.U_lap.clone()
         else:
-            # TODO: add option where we add 1 eigenvalue with unit eigenvector for new disconnected nodes
             assert num_nodes_added > 0, "Shouldn't be possible to have less during non-discrete"
-            # compute the laplcaian eigendecomposition of a slightly off-perturbed adjacency
-            data.E_clean, data.U_clean, data.lap_clean_edge_index, data.lap_clean_edge_attr = get_lap_decomp_stats(
-                data.edge_index,
-                data.edge_weight_off,
-                data.x.size(0),
-                cfg.posenc_WLapPE.eigen.laplacian_norm,
-                max_freqs=cfg.posenc_WLapPE.eigen.max_freqs,
-                eigvec_norm=cfg.posenc_WLapPE.eigen.eigvec_norm,
-                pad_too_small=False,
-                need_full=True,
-                return_lap=True,
-            )
+
+            if cfg.attack.SAN.nia_pert == "full":
+
+                device = self.lap_edge_index.device
+                assert cfg.posenc_WLapPE.eigen.eigvec_norm  # not None, then eigenvalue of isolated is 1
+                added_index = (torch.arange(num_nodes_added, device=device) + self.num_connected_nodes).repeat(2, 1)
+                added_attr = self.lap_edge_attr.new_ones(num_nodes_added)
+                data.lap_clean_edge_index, data.lap_clean_edge_attr = coalesce(
+                    torch.cat([self.lap_edge_index, added_index], 1),
+                    torch.cat([self.lap_edge_attr, added_attr], 0),
+                )
+                E_clean = torch.cat([self.E_lap, added_attr], 0) 
+                U_clean = torch.block_diag(self.U_lap.clone(), torch.eye(num_nodes_added))
+                idx = E_clean.argsort()
+                E_clean = E_clean[idx]
+                U_clean = U_clean[:, idx]
+                data.E_clean = E_clean
+                data.U_clean = U_clean
+
+            else:
+                # compute the laplcaian eigendecomposition of a slightly off-perturbed adjacency
+                data.E_clean, data.U_clean, data.lap_clean_edge_index, data.lap_clean_edge_attr = get_lap_decomp_stats(
+                    data.edge_index,
+                    data.edge_weight_off,
+                    data.x.size(0),
+                    cfg.posenc_WLapPE.eigen.laplacian_norm,
+                    max_freqs=cfg.posenc_WLapPE.eigen.max_freqs,
+                    eigvec_norm=cfg.posenc_WLapPE.eigen.eigvec_norm,
+                    pad_too_small=False,
+                    need_full=True,
+                    return_lap=True,
+                )
         del data.edge_weight_off
 
     def _get_discrete_sampled_graph(self, sampled_block_edge_weight: Tensor) -> Tuple[Tensor, Tensor, Tensor]:

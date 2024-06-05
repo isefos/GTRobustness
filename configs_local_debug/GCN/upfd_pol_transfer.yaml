@@ -4,7 +4,11 @@ graphgym:
   out_dir: configs_seml/results
   metric_best: accuracy
   tensorboard_each_run: false
-  seed: 42
+  seed: 103
+
+  pretrained:
+    dir: 'test_transfer/test_model'
+    finetune: false
 
   dataset:
     format: PyG-UPFD
@@ -14,17 +18,8 @@ graphgym:
     transductive: false
     split_mode: standard
     node_encoder: true
-    node_encoder_name: LinearNode+WeightedGraphormerBias
+    node_encoder_name: LinearNode
     node_encoder_bn: false
-
-  posenc_GraphormerBias:
-    enable: true
-    num_spatial_types: 8
-    num_in_degrees: 27
-    num_out_degrees: 27
-    node_degrees_only: false
-    directed_graphs: false
-    has_edge_attr: false
 
   train:
     mode: custom
@@ -34,50 +29,33 @@ graphgym:
     ckpt_best: true
 
   model:
-    type: Graphormer
+    type: gnn
     loss_fun: cross_entropy
-    graph_pooling: graph_token
-
-  graphormer:
-    num_layers: 2
-    num_heads: 2
-    embed_dim: 32
-    dropout: 0.0
-    attention_dropout: 0.0  # 0.1
-    mlp_dropout: 0.0  # 0.1
-    input_dropout: 0.0  # 0.1
 
   gnn:
-    head: graphormer_graph
+    layer_type: gcnconvweighted
+    stage_type: stack
+    batchnorm: true
+    act: relu
+    dropout: 0.0
     layers_pre_mp: 0
+    layers_mp: 1
     layers_post_mp: 1
-    dim_inner: 32  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
-  
-  optim:
-    base_lr: 0.001
-    weight_decay: 0.01
-    clip_grad_norm: true
-    clip_grad_norm_value: 5.0
-    optimizer: adamW
-    max_epoch: 1
-    scheduler: cosine_with_warmup
-    num_warmup_epochs: 30
-    early_stopping: true
-    early_stopping_patience: 35
-    early_stopping_delta_e: 0.05
-    early_stopping_warmup: 30
+    dim_inner: 64  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+    head: weighted_add_pool_graph
 
   attack:
     enable: true
     e_budget: 0.1
-    num_attacked_graphs: 3
+    num_attacked_graphs: 10
     skip_incorrect_graph_classification: false
     log_progress: true
-    load_best_model: true
+    load_best_model: false
     split: test
     prediction_level: graph
+    only_return_avg: true
     remove_isolated_components: true
-    run_random_baseline: true
+    run_random_baseline: false
     block_size: 1_000  # TODO: test
     epochs: 125  # TODO: test
     epochs_resampling: 100
@@ -106,10 +84,6 @@ graphgym:
       sample_only_connected: true
       include_root_nodes: false
       sample_only_trees: true
-    Graphormer:
-      use_weighted_degrees: true
-      combinations_degree: false
-      sp_find_weighted: true
-      weight_function: log
-      sp_use_weighted: true
-      sp_use_gradient: true
+    transfer:
+      enable: true
+      perturbation_path: 'test_transfer/test_perturbations'

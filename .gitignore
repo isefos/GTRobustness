@@ -29,6 +29,8 @@ configs_seml/logs
 configs_seml/results
 results_*/
 debugplayground.py
+test_transfer
+final_figures
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -70,7 +70,7 @@ graphgym:
     optimizer: adam
     weight_decay: 0.0
     base_lr: 0.0007
-    max_epoch: 2  # 1000
+    max_epoch: 1  # 1000
     scheduler: reduce_on_plateau
     reduce_factor: 0.5
     schedule_patience: 15
@@ -122,3 +122,8 @@ graphgym:
       add_partially_fake_edges: false
       enable_pert_grad: true
       set_first_pert_zero: true
+      nia_pert: full
+      match_true_signs: false
+      match_true_eigenspaces: false
+      pert_BPDA: false
+      eps_repeated_eigenvalue: 1.0e-5

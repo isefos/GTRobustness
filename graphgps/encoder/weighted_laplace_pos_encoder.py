@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.register import register_node_encoder
-from torch_geometric.utils import coalesce
+from torch_geometric.utils import coalesce, get_laplacian
 from torch_sparse import spmm
 from graphgps.transform.lap_eig import (
     get_dense_eigh,
@@ -134,27 +134,32 @@ def add_eig(batch):
     need_full_true_eigen = pert_approx and cfg.attack.SAN.match_true_eigenspaces
     need_true_eigen = (
         (not pert_approx)
-        or (pert_approx and cfg.attack.SAN.match_true_eigenspaces)
+        or need_full_true_eigen
         or (pert_approx and cfg.attack.SAN.match_true_signs)
         or (pert_approx and cfg.attack.SAN.pert_BPDA)
     )
 
     if need_true_eigen:
-        pass
-
-    out = get_lap_decomp_stats(
-        batch.edge_index,
-        batch.edge_attr,
-        num_nodes,
-        lap_norm_type,
-        max_freqs,
-        eigvec_norm,
-        pad_too_small=not pert_approx,
-        need_full=need_full_true_eigen,
-        return_lap=True,
-        no_grad_lap=not pert_approx,
-    )
-    eigenvalues_true, eigenvectors_true, lap_attack_edge_index, lap_attack_edge_attr = out
+        out = get_lap_decomp_stats(
+            batch.edge_index,
+            batch.edge_attr,
+            num_nodes,
+            lap_norm_type,
+            max_freqs,
+            eigvec_norm,
+            pad_too_small=not pert_approx,
+            need_full=need_full_true_eigen,
+            return_lap=True,
+            no_grad_lap=not pert_approx,
+        )
+        eigenvalues_true, eigenvectors_true, lap_attack_edge_index, lap_attack_edge_attr = out
+    else:
+        lap_attack_edge_index, lap_attack_edge_attr = get_laplacian(
+            batch.edge_index,
+            batch.edge_attr,
+            lap_norm_type,
+            num_nodes=num_nodes,
+        )
 
     if not pert_approx:
         batch.EigVals, batch.EigVecs = eigenvalues_true, eigenvectors_true
@@ -211,9 +216,10 @@ def add_eig(batch):
     E_pert = E_pert[:max_freqs]
     U_pert = U_pert[:, :max_freqs]
     if need_full_true_eigen:
+        # haven't been selected yet
         eigenvalues_true = eigenvalues_true[:max_freqs]
         eigenvectors_true = eigenvectors_true[:, :max_freqs]
-    
+
     if cfg.attack.SAN.match_true_signs:
         # for eigenvectors of the unique eigenvalues that might be flipped in relation to the true ones 
         U_pert = invert_wrong_signs(eigenvectors_true, U_pert)

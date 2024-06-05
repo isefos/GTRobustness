@@ -104,9 +104,9 @@ def weighted_graphormer_pre_processing(data, attack_mode):
         )
         data.spatial_types_weights = spatial_types_weights
     else:
-        # only use the reciprocal of the edge weights to find the shortest paths,
+        # only use the edge weights to find the shortest paths,
         # but then use the actual hops of those paths as distance
-        inv_edge_attr = 1 / data.edge_attr.detach()
+        inv_edge_attr = probs_to_weights(data.edge_attr.detach())
         adj_weighted = to_scipy_sparse_matrix(data.edge_index, edge_attr=inv_edge_attr, num_nodes=n).tocsr()
         _, predecessors_np = csgraph.dijkstra(
             adj_weighted,
@@ -457,6 +457,18 @@ def get_degree_weights(
 # shortest paths:
 
 
+def probs_to_weights(probs: torch.Tensor) -> torch.Tensor:
+    if cfg.attack.Graphormer.weight_function == "inv":
+        weights = 1 / probs
+    elif cfg.attack.Graphormer.weight_function == "log":
+        weights = 1 - probs.log()
+    else:
+        raise ValueError(
+            f"Unsupported `cfg.attack.Graphormer.weight_function`: {cfg.attack.Graphormer.weight_function}"
+        )
+    return weights
+
+
 def weighted_shortest_paths(
     use_weighted_gradient: bool,
     num_nodes: int,
@@ -468,13 +480,14 @@ def weighted_shortest_paths(
     device = edge_index.device
     # when using the weighted path distance, we can prune away all nodes that we know have a distance > max_distance
     num_distances = num_nodes ** 2
-    max_edge_weights = get_node_max_edge_weight(
+    max_edge_probs = get_node_max_edge_prob(
         edge_index=edge_index,
         edge_weights=edge_attr,
         num_nodes=num_nodes,
         is_undirected=not directed_graphs,
     )
-    min_shortest_path = 1 / max_edge_weights
+    # find the minimum shortest path for each node
+    min_shortest_path = probs_to_weights(max_edge_probs)
     prune_mask = min_shortest_path <= max_distance
     p_num_nodes = int(prune_mask.sum().item())
     distances_prune_mask = (prune_mask[:, None] * prune_mask[None, :]).reshape(num_distances)
@@ -534,7 +547,7 @@ def distances_shortest_weighted_paths(
     directed_graphs: bool,
 ):
     num_distances = num_nodes ** 2
-    inv_edge_attr = 1 / edge_attr
+    inv_edge_attr = probs_to_weights(edge_attr)
     adj_weighted = to_scipy_sparse_matrix(edge_index, edge_attr=inv_edge_attr.detach(), num_nodes=num_nodes).tocsr()
     distances_weighted_np, predecessors_np = csgraph.dijkstra(
         adj_weighted,
@@ -619,7 +632,7 @@ def reconstruct_weighted_distances_over_path(
     return distances_weighted
 
 
-def get_node_max_edge_weight(
+def get_node_max_edge_prob(
     edge_index: torch.Tensor,
     edge_weights: torch.Tensor,
     num_nodes: int,

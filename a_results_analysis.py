@@ -11,7 +11,8 @@ from collections import defaultdict
 
 
 datasets = {
-    "CLUSTER": {"format":"PyG-GNNBenchmarkDataset", "name": "CLUSTER"},
+    "CLUSTER_as": {"format":"PyG-GNNBenchmarkDataset", "name": "CLUSTER"},
+    "CLUSTER_cs": {"format":"PyG-GNNBenchmarkDataset", "name": "CLUSTER"},
     "CoraML-RUT": {"format": "PyG-RobustnessUnitTest", "name": "cora_ml"},
     "Citeseer-RUT": {"format": "PyG-RobustnessUnitTest", "name": "citeseer"},
     "UPFD_gos_bert": {"format": "PyG-UPFD", "name": "gossipcop-bert"},
@@ -122,12 +123,23 @@ def write_results(
             seed_results[seed][budget_measure].append(budget)
         for col in cols:
             seed_results[seed][col].append(results[i]["result"]["attack"]["avg"][col])
-    seed_dataframes = {}
+    seed_dfs = {}
+    df_dir = seed_dir / "all"
+    df_dir.mkdir()
     for seed, results in seed_results.items():
         df = pd.DataFrame(results)
-        seed_dataframes[seed] = df
-        df.to_csv(seed_dir / f"seed_{seed}.csv")
-    return seed_dataframes
+        seed_dfs[seed] = df
+        df.to_csv(df_dir / f"seed_{seed}.csv")
+
+    # aggregate seeds, mean and error std
+    df_agg = pd.concat(list(seed_dfs.values()), ignore_index=True)
+    df_agg = df_agg.drop("run_ids", axis=1)
+    df_agg_mean = df_agg.groupby("budget", as_index=False).mean()
+    df_agg_std = df_agg.groupby("budget", as_index=False).std()
+    df_agg_mean.to_csv(seed_dir / "agg_mean.csv")
+    df_agg_std.to_csv(seed_dir / "agg_std.csv")
+
+    return seed_dfs, df_agg_mean, df_agg_std
 
 
 def save_plots(
@@ -136,6 +148,8 @@ def save_plots(
     seed_dfs,
     results_path,
     attack_cols,
+    df_agg_mean,
+    df_agg_std,
 ):
     plots_dir = results_path / "plots"
     seed_plot_dir = plots_dir / "seeds"
@@ -176,12 +190,6 @@ def save_plots(
 
     agg_plot_dir = plots_dir / "agg"
     agg_plot_dir.mkdir(parents=True)
-    
-    # aggregate seeds, mean and error std
-    df_agg = pd.concat(list(seed_dfs.values()))
-    df_agg = df_agg.drop("run_ids", axis=1)
-    df_agg_mean = df_agg.groupby("budget", as_index=False).mean()
-    df_agg_std = df_agg.groupby("budget", as_index=False).std()
 
     # plot aggregate
     for title, col_group in attack_cols.items():
@@ -290,6 +298,12 @@ def main(
         dng = datasets[dataset]["name"]
         assert df == dfg, (f"Dataset format was given to be `{dfg}`, but encountered `{df}`.")
         assert dn == dng, (f"Dataset name was given to be `{dng}`, but encountered `{dn}`.")
+        if dataset.startswith("CLUSTER"):
+            constrained_attack = dataset.endswith("cs")
+            if constrained_attack:
+                assert res["config"]["graphgym"]["attack"]["cluster_sampling"]
+            else:
+                assert not res["config"]["graphgym"]["attack"]["cluster_sampling"]
         
         mt = res["config"]["graphgym"]["model"]["type"]
         mtg = models[model]["type"]
@@ -313,7 +327,7 @@ def main(
 
     results_path, info_file, seed_dir = clean_path(results_path)
     # write results into file
-    seed_dataframes = write_results(
+    seed_dataframes, df_agg_mean, df_agg_std = write_results(
         info_file,
         seed_dir,
         results,
@@ -333,6 +347,8 @@ def main(
         seed_dataframes,
         results_path,
         attack_cols,
+        df_agg_mean,
+        df_agg_std,
     )
 
 
