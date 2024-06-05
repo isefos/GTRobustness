@@ -148,7 +148,7 @@ class PRBCDAttackNI(PRBCDAttack):
                     torch.cat([self.lap_edge_attr, added_attr], 0),
                 )
                 E_clean = torch.cat([self.E_lap, added_attr], 0) 
-                U_clean = torch.block_diag(self.U_lap.clone(), torch.eye(num_nodes_added))
+                U_clean = torch.block_diag(self.U_lap.clone(), torch.eye(num_nodes_added, device=device))
                 idx = E_clean.argsort()
                 E_clean = E_clean[idx]
                 U_clean = U_clean[:, idx]
