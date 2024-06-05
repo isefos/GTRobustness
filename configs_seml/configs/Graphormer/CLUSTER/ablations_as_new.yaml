@@ -29,11 +29,17 @@ grid:
       - true   # sp all, degree
       - true   # sp hop, degree
       - true   # sp all, no degree
+      - true   # sp all, degree
+      - true   # sp hop, degree
+      - true   # sp all, no degree
     zip_id: ablations
 
   graphgym.attack.Graphormer.sp_use_weighted:
     type: choice
     options:
+      - true   # sp all, degree
+      - false  # sp hop, degree
+      - true   # sp all, no degree
       - true   # sp all, degree
       - false  # sp hop, degree
       - true   # sp all, no degree
@@ -45,11 +51,17 @@ grid:
       - true   # sp all, degree
       - false  # sp hop, degree
       - true   # sp all, no degree
+      - true   # sp all, degree
+      - false  # sp hop, degree
+      - true   # sp all, no degree
     zip_id: ablations
 
   graphgym.attack.Graphormer.use_weighted_degrees:
     type: choice
     options:
+      - true   # sp all, degree
+      - true   # sp hop, degree
+      - false  # sp all, no degree
       - true   # sp all, degree
       - true   # sp hop, degree
       - false  # sp all, no degree
@@ -61,6 +73,9 @@ grid:
       - log   # sp all, degree
       - log   # sp hop, degree
       - log  # sp all, no degree
+      - loglog   # sp all, degree
+      - loglog   # sp hop, degree
+      - loglog  # sp all, no degree
     zip_id: ablations
   
 

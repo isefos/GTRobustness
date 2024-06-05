@@ -12,6 +12,8 @@ from torch_geometric.utils import (
 from itertools import combinations
 from graphgps.encoder.graphormer_encoder import add_graph_token, get_shortest_paths, get_discrete_degrees
 from scipy.sparse import csgraph
+import math
+import functools
 
 
 # Permutes from (batch, node, node, head) to (batch, head, node, node)
@@ -457,11 +459,25 @@ def get_degree_weights(
 # shortest paths:
 
 
+@functools.cache
+def get_base(l: str) -> float:
+    eps = cfg.attack.eps
+    assert cfg.posenc_GraphormerBias.num_spatial_types >= 3
+    dmax = cfg.posenc_GraphormerBias.num_spatial_types - 1.001
+    if l == "log":
+        return math.log(math.pow(eps, (1 / (1 - dmax))))
+    elif l == "loglog":
+        return math.log(math.pow((1 - math.log10(eps)), (1 / (dmax - 1))))
+    raise ValueError
+
+
 def probs_to_weights(probs: torch.Tensor) -> torch.Tensor:
     if cfg.attack.Graphormer.weight_function == "inv":
         weights = 1 / probs
     elif cfg.attack.Graphormer.weight_function == "log":
-        weights = 1 - probs.log()
+        weights = 1 - (probs.log() / get_base("log"))
+    elif cfg.attack.Graphormer.weight_function == "loglog":
+        weights = 1 + ((1 - probs.log10()).log() / get_base("loglog"))
     else:
         raise ValueError(
             f"Unsupported `cfg.attack.Graphormer.weight_function`: {cfg.attack.Graphormer.weight_function}"

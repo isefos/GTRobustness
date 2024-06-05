@@ -110,7 +110,7 @@ def dataset_cfg(cfg):
     cfg.attack.Graphormer.combinations_degree = False
     # use reciprocal edge weight to find the shortest paths, if False, will ignore `sp_use_weighted` and `sp_use_gradient`
     cfg.attack.Graphormer.sp_find_weighted = True
-    # how to invert the probabilities to make edge weights: log or inv
+    # how to invert the probabilities to make edge weights: inv or log or loglog
     cfg.attack.Graphormer.weight_function = "inv"
     # use the weighted distances for the found paths (if False will use the hop distance, and will ignore `sp_use_gradient`)
     cfg.attack.Graphormer.sp_use_weighted = True
