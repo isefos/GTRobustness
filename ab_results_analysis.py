@@ -64,6 +64,7 @@ ablations_settings = {
         "sp_find_w": ["config.graphgym.attack.Graphormer.sp_find_weighted"],
         "sp_use_w": ["config.graphgym.attack.Graphormer.sp_use_weighted"],
         "sp_grad_w": ["config.graphgym.attack.Graphormer.sp_use_gradient"],
+        "sp_weight_fun": ["config.graphgym.attack.Graphormer.weight_function"],
         # TODO: add for node injection
         "node_prob": ["config.graphgym.attack.node_prob_enable"],
     },
@@ -71,6 +72,7 @@ ablations_settings = {
         "cont_att": ["config.graphgym.attack.SAN.wsan_add_partially_fake", "config.graphgym.attack.SAN.add_partially_fake_edges"],
         #"cont_att_grad": ["config.graphgym.attack.SAN.partially_fake_edge_grad"],
         "pert_grad": ["config.graphgym.attack.SAN.enable_pert_grad"],
+        "BPDA": ["config.graphgym.attack.SAN.pert_BPDA"],
         # "config.graphgym.attack.SAN.set_first_pert_zero",
         # TODO: add for node injection
         "node_prob": ["config.graphgym.attack.node_prob_enable"],
