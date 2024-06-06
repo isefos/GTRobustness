@@ -7,7 +7,7 @@ seml:
 slurm:
   experiments_per_job: 1
   sbatch_options:
-    partition: gpu_large
+    partition: gpu_a100
     gres: gpu:1       # num GPUs
     mem: 16G          # memory
     cpus-per-task: 4  # num cores
@@ -102,6 +102,8 @@ fixed:
         sample_only_connected: true
         include_root_nodes: false
         sample_only_trees: true
+      SAN:
+        nia_pert: full
 
     # copied from pre-trained model
 
