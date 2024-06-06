@@ -57,7 +57,7 @@ def transfer_unit_test(model, clean_test_loader):
         results[transfer_model] = r
 
     # extreme perturbations
-    for key in ["chain", "random", "random10x", "radom0.1x"]:
+    for key in ["chain", "random", "random10x", "random0.1x"]:
         dataset = get_modified_RUT_dataset(dataset_dir, key)
         loader = get_loader(dataset)
         for batch in loader:

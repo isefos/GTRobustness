@@ -7,23 +7,42 @@ from pathlib import Path
 import pandas as pd
 import argparse
 import shutil
-from collections import defaultdict
+
+
+use_tex = True
+if use_tex:
+    plt.rcParams.update({
+        "text.usetex": True,
+        "font.family": "serif",
+        "font.serif": ["Computer Modern Roman"],
+    })
+
+
+def save_figure(fig, name, figures_dir, png=False):
+    if png:
+        file_name = name + ".png"
+        fig.savefig(figures_dir / file_name, bbox_inches="tight", dpi=500)
+        return
+    file_name = name + ".pdf"
+    fig.savefig(figures_dir / file_name, bbox_inches="tight")
 
 
 datasets = {
-    "CLUSTER": {"format":"PyG-GNNBenchmarkDataset", "name": "CLUSTER"},
     "CoraML-RUT": {"format": "PyG-RobustnessUnitTest", "name": "cora_ml"},
     "Citeseer-RUT": {"format": "PyG-RobustnessUnitTest", "name": "citeseer"},
-    "UPFD_gos_bert": {"format": "PyG-UPFD", "name": "gossipcop-bert"},
-    "UPFD_pol_bert": {"format": "PyG-UPFD", "name": "politifact-bert"},
 }
 models = {
     "Graphormer": {"type": set(["Graphormer"]), "gnn_layer_type": None},
     "SAN": {"type": set(["SANTransformer", "WeightedSANTransformer"]), "gnn_layer_type": None},
     "GRIT": {"type": set(["GritTransformer"]), "gnn_layer_type": None},
     "GCN": {"type": set(["gnn"]), "gnn_layer_type": set(["gcnconvweighted", "gcnconv"])},
+    "GCN-hom": {"type": set(["gnn"]), "gnn_layer_type": set(["gcnconvweighted", "gcnconv"])},
     "GAT": {"type": set(["gnn"]), "gnn_layer_type": set(["gatconvweighted", "gatconv"])},
     "GATv2": {"type": set(["gnn"]), "gnn_layer_type": set(["gatv2convweighted", "gatv2conv"])},
+}
+num_edges_clean = {
+    "CoraML-RUT": 5069,
+    "Citeseer-RUT": "TODO: replace with actual number",
 }
 
 
@@ -35,7 +54,9 @@ attack_cols = {
 
 
 # cols = ["clean", "gcn", "jaccard_gcn", "svd_gcn", "rgcn", "pro_gcn", "gnn_guard", "grand", "soft_median_gdc"]
-output_keys = ["correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max"]
+# output_keys = ["correct_acc", "margin_mean", "margin_median", "margin_min", "margin_max"]
+
+extra_runs_names = ["chain", "random", "radom0.1x", "random0.1x", "random10x"]
 
 
 def clean_path(results_path: str):
@@ -49,27 +70,24 @@ def clean_path(results_path: str):
     return results_path, general_info_file, csv_dir
 
 
-def write_info_file(info_file, num_params, extras, run_dir):
+def write_info_file(info_file, num_params, extras, run_dir, extra_runs):
     with open(info_file, "w") as f:
         f.write("RUT run infos:")
         f.write(f"\n\tnum_params: {num_params}")
         for k, v in extras.items():
             f.write(f"\n\t{k}: {v}")
         f.write(f"\n\trun_dir: {run_dir}")
+        f.write("\n\textra perturbations:")
+        for run_name, res in extra_runs.items():
+            f.write(f"\n\t\t{run_name}")
+            for k, v in res.items():
+                f.write(f"\n\t\t\t{k}: {v}")
         f.write("\n")
 
 
-def write_results(
-    info_file,
-    results_dir,
-    res,
-    extras,
-    run_dir,
-    num_params,
-    attack_cols,
-):
-    write_info_file(info_file, num_params, extras, run_dir)
+def write_results(results_dir, res):
     run_dfs = {}
+    extra_runs = {}
     clean_acc, clean_margin_mean = None, None
     for run_name, results in res["result"]["robustness_unit_test"].items():
         if run_name == "clean":
@@ -77,7 +95,14 @@ def write_results(
             clean_margin_mean = results["margin_mean"]
             continue
 
-        # TODO: maybe also add num clean graphs for each dataset to get relative budget used
+        if run_name in extra_runs_names:
+            extra_runs[run_name] = {
+                "attack_success_rate": results["attack_success_rate"],
+                "correct_acc": results["correct_acc"],
+                "margin_mean": results["margin_mean"],
+            }
+            continue
+
         df_result = {title: results[col] for title, col in attack_cols.items()}
         df_result["budgets"] = results["budgets"]
         df = pd.DataFrame(df_result)
@@ -85,7 +110,7 @@ def write_results(
         df.to_csv(results_dir / f"{run_name}.csv")
 
     assert clean_acc is not None and clean_margin_mean is not None
-    return run_dfs, clean_acc, clean_margin_mean
+    return run_dfs, clean_acc, clean_margin_mean, extra_runs
 
 
 def save_plots(
@@ -100,85 +125,79 @@ def save_plots(
     plots_dir_runs = plots_dir / "individual"
 
     all_agg_results = {}
+    # find the strongest attack:
+    num_edges = num_edges_clean[dataset]
+    e_budgets = [i * 0.0075 for i in range(21)]
+    num_budgets = np.array([e * num_edges for e in e_budgets])
+    strongest_acc = np.ones(21)
 
     for run_name, df in run_dfs.items():
 
         plots_dir_run = plots_dir_runs / run_name
         plots_dir_run.mkdir(parents=True)
-        
-        # aggregate seeds, mean and error std
-        df_agg = pd.concat(list(seed_dfs.values()))
-        df_agg_mean = df_agg.groupby("budget", as_index=False).mean()
-        df_agg_std = df_agg.groupby("budget", as_index=False).std()
 
         # plot aggregate
-        for title, col_group in attack_cols.items():
+        for title in attack_cols:
 
-            for budget_measure, budget_dict in budget_measures.items():
+            fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
+            #ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
 
-                fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
-                ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
+            if title == "Accuracy":
+                zb_val = clean_acc
+            elif title == "Average margin":
+                zb_val = clean_margin_mean
+            elif title == "Attack success rate":
+                zb_val = 0.0
+            else:
+                raise Exception("Probably changed the titles in attack_cols...")
 
-                if "clean" in col_group:
-                    zb_val = df_agg_mean[col_group["clean"]][0]
-                else:
-                    zb_val = 0.0
+            if title not in all_agg_results:
+                all_agg_results[title] = {}
 
-                if title not in all_agg_results:
-                    all_agg_results[title] = {budget_measure: {run_name: {}}}
-                elif budget_measure not in all_agg_results[title]:
-                    all_agg_results[title][budget_measure] = {run_name: {}}
-                else:
-                    all_agg_results[title][budget_measure][run_name] = {}
+            x = np.concatenate((np.array([0.0]), np.array(df["budgets"])))
+            y = np.concatenate((np.array([zb_val]), np.array(df[title])))
+            ax.plot(x, y)
 
-                for label, col in col_group.items():
-                    if label == "clean":
-                        continue  #  don't plot the clean (is equal to first step anyway)
-                    x = np.concatenate((np.array([0.0]), np.array(df_agg_mean.index)))
-                    x = np.concatenate(
-                        (np.array([0.0]), np.array(df_agg_mean[budget_dict["key"]]))
-                    ) * budget_dict["mul"]
-                    y = np.concatenate((np.array([zb_val]), np.array(df_agg_mean[col])))
-                    std = np.concatenate((np.array([0.0]), np.array(df_agg_std[col])))
-                    ax.plot(x, y, label=label)
-                    ax.fill_between(x, y-std, y+std, alpha=0.2)
+            all_agg_results[title][run_name] = {"x": x, "y": y}
 
-                    all_agg_results[title][budget_measure][run_name][col] = {"x": x, "y": y, "std": std}
+            if title == "Accuracy":
+                budget_idx = np.searchsorted(num_budgets, x)
+                strongest_acc[budget_idx] = np.minimum(strongest_acc[budget_idx], y)
 
-                ax.set_xlabel(budget_dict["label"])
-                ax.set_ylabel(title)
-                ax.legend()
-                fig.savefig(plots_dir_run / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
-                ax.clear()
-                plt.close(fig)
+            ax.set_xlabel("Num. edges flipped")
+            ax.set_ylabel(title)
+            #ax.legend()
+            save_figure(fig, f"{dataset}_{model}_{title.replace(' ', '_')}", plots_dir_run)
+            ax.clear()
+            plt.close(fig)
 
     plots_dir_all_runs = plots_dir / "all"
     plots_dir_all_runs.mkdir()
 
-    for title, run_stats_b in all_agg_results.items():
+    for title, runs_stats in all_agg_results.items():
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
+        #ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
+        for run_name, res in runs_stats.items():
+            x = res["x"]
+            y = res["y"]
+            ax.plot(x, y, label=run_name)
+        ax.set_xlabel("Num. edges flipped")
+        ax.set_ylabel(title)
+        ax.legend()
+        save_figure(fig, f"{dataset}_{model}_{title.replace(' ', '_')}", plots_dir_all_runs)
+        ax.clear()
+        plt.close(fig)
 
-        for budget_measure, budget_dict in budget_measures.items():
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
+    ax.plot(e_budgets, strongest_acc)
+    ax.set_xlabel(r"Budget (\% edges flipped)")
+    ax.set_ylabel(title)
+    save_figure(fig, f"strongest_{dataset}_{model}_{title.replace(' ', '_')}", plots_dir_all_runs)
+    ax.clear()
+    plt.close(fig)
 
-            run_stats = run_stats_b[budget_measure]
-            fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(7, 4))
-            ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
-            for run_name, agg_res in run_stats.items():
-                for col, res in agg_res.items():
-                    x = res["x"]
-                    y = res["y"]
-                    std = res["std"]
-                    if run_name == model:
-                        label = f"adaptive"
-                    else:
-                        label = f"transfer from {run_name}"
-                    ax.plot(x, y, label=label)
-                    ax.fill_between(x, y-std, y+std, alpha=0.2)
-            ax.set_xlabel(budget_dict["label"])
-            ax.set_ylabel(title)
-            ax.legend()
-            fig.savefig(plots_dir_all_runs / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
-            ax.clear()
-            plt.close(fig)
+    df_strongest = pd.DataFrame({"budgets": e_budgets, "Accuracy": strongest_acc})
+    df_strongest.to_csv(results_path / "results" / "strongest.csv")
 
 
 def get_collection_results(collection, filter_dict):
@@ -195,11 +214,12 @@ def get_collection_results(collection, filter_dict):
     r = results[0]
     extras = dict()
     for key in extra_fields:
+        r_e = r
         keys_list = key.split(".")
         for key_l in keys_list[:-1]:
-            r = r.get(key_l, {})
+            r_e = r_e.get(key_l, {})
         key_last = keys_list[-1]
-        v = r.get(key_last, None)
+        v = r_e.get(key_last, None)
         if v is not None:
             if key_last.endswith("bytes"):
                 v = f"{v * 1e-9:.1f} GB"
@@ -211,15 +231,7 @@ def get_collection_results(collection, filter_dict):
     return r, extras, run_dir, num_params
 
 
-def main(
-    collection: str,
-    results_path: str,
-    filter_dict,
-    dataset: str,
-    model: str,
-):
-    res, extras, run_dir, num_params = get_collection_results(collection, filter_dict)
-
+def check_input_result_match(res, dataset, model):
     df = res["config"]["graphgym"]["dataset"]["format"]
     dfg = datasets[dataset]["format"]
     dn = res["config"]["graphgym"]["dataset"]["name"]
@@ -235,20 +247,22 @@ def main(
         ml = res["config"]["graphgym"]["gnn"]["layer_type"]
         assert ml in mlg, (f"Model layer was given to be in {mlg}, but encountered `{ml}`.")
 
-    pred_level = res["config"]["graphgym"]["attack"]["prediction_level"]
-    assert pred_level == "node"
+
+def main(
+    collection: str,
+    results_path: str,
+    filter_dict,
+    dataset: str,
+    model: str,
+):
+    res, extras, run_dir, num_params = get_collection_results(collection, filter_dict)
+
+    check_input_result_match(res, dataset, model)
 
     results_path, info_file, csv_dir = clean_path(results_path)
     # write results into file
-    run_dfs, clean_acc, clean_margin_mean = write_results(
-        info_file,
-        csv_dir,
-        res,
-        extras,
-        run_dir,
-        num_params,
-        attack_cols,
-    )
+    run_dfs, clean_acc, clean_margin_mean, extra_runs = write_results(csv_dir, res)
+    write_info_file(info_file, num_params, extras, run_dir, extra_runs)
     # plots
     save_plots(
         model,
