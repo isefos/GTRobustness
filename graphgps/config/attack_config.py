@@ -122,6 +122,10 @@ def dataset_cfg(cfg):
     # (when False, all edges with p>0 will only be used in true attention mechanism without bias)
     cfg.attack.SAN.add_partially_fake_edges = True
     cfg.attack.SAN.partially_fake_edge_grad = True
+    # enable or disable the backprop through eigendecomposition (either this or pert, not both)
+    cfg.attack.SAN.enable_eig_backprop = False
+    # how much space to put between repeated eigenvalues
+    cfg.attack.SAN.eig_backprop_separation_pert = 1.0e-4
     # enable or disable the gradient using matrix perturbation approximation
     cfg.attack.SAN.enable_pert_grad = True
     cfg.attack.SAN.pert_BPDA = False
@@ -132,7 +136,7 @@ def dataset_cfg(cfg):
     # set the perturbation approximation of the first eigenvalue to zero (so that we don't try to optimize it)
     cfg.attack.SAN.set_first_pert_zero = False
     # Node Injection Attack with LapPE -> how to define the approximation perturbation
-    cfg.attack.SAN.nia_pert = "half_weight"  # or half_eps # TODO: add option for 1 eigenvalue with unit vector
+    cfg.attack.SAN.nia_pert = "full"  # full / half_weight / half_eps
 
     cfg.attack.GRIT = CN()
     # whether to compute a RRWP using the continuous edge probabilities or not, if False, will ignore grad_RRWP

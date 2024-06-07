@@ -3,16 +3,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.register import register_node_encoder
-from torch_geometric.utils import coalesce, get_laplacian
+from torch_geometric.utils import coalesce, get_laplacian, scatter
 from torch_sparse import spmm
 from graphgps.transform.lap_eig import (
     get_dense_eigh,
     get_lap_decomp_stats,
     eigvec_normalizer,
-    invert_wrong_signs,
     get_repeated_eigenvalue_slices,
 )
 import numpy as np
+import scipy
 
 
 @register_node_encoder("WLapPE")
@@ -126,19 +126,85 @@ def add_eig(batch):
     max_freqs = pe_cfg.eigen.max_freqs
     lap_norm_type = pe_cfg.eigen.laplacian_norm
     lap_norm_type = lap_norm_type.lower() if lap_norm_type is not None else None
-    eigvec_norm = pe_cfg.eigen.eigvec_norm
     if lap_norm_type == 'none':
         lap_norm_type = None
-    attack_mode = batch.get("attack_mode", False)
-    pert_approx = attack_mode and batch.edge_attr is not None and cfg.attack.SAN.enable_pert_grad
-    need_full_true_eigen = pert_approx and cfg.attack.SAN.match_true_eigenspaces
-    need_true_eigen = (
-        (not pert_approx)
-        or need_full_true_eigen
-        or (pert_approx and cfg.attack.SAN.match_true_signs)
-        or (pert_approx and cfg.attack.SAN.pert_BPDA)
+    eigvec_norm = pe_cfg.eigen.eigvec_norm
+
+    attack_mode = batch.get("attack_mode", False) and batch.edge_attr is not None
+    pert_approx = attack_mode and cfg.attack.SAN.enable_pert_grad
+    diff_pert = attack_mode and cfg.attack.SAN.enable_eig_backprop
+    assert not (pert_approx and diff_pert), (
+        "Either use the perturbation approximation, or backprop through eigh, not both!" 
     )
 
+    if pert_approx:
+        E_pert, U_pert, eigenvalues_true, eigenvectors_true = get_spectral_pert_approx(
+            batch, num_nodes, lap_norm_type, max_freqs, eigvec_norm,
+        )
+    elif diff_pert:
+        E_pert, U_pert, eigenvalues_true, eigenvectors_true = get_lap_decomp_diff(
+            batch, num_nodes, lap_norm_type, max_freqs, eigvec_norm,
+        )
+    else:
+        # no gradient, simply get the laplacian eigendecomposition
+        batch.EigVals, batch.EigVecs = get_lap_decomp_stats(
+            batch.edge_index,
+            batch.edge_attr,
+            num_nodes,
+            lap_norm_type,
+            max_freqs,
+            eigvec_norm,
+            pad_too_small=True,
+            need_full=False,
+            return_lap=False,
+        )
+        batch.EigVals = batch.EigVals.repeat(num_nodes, 1)[:, :, None]
+        return
+
+    if cfg.attack.SAN.match_true_signs:
+        # for eigenvectors of the unique eigenvalues that might be flipped in relation to the true ones 
+        U_pert = invert_wrong_signs(eigenvectors_true, U_pert)
+
+    if cfg.attack.SAN.set_first_pert_zero:
+        eigenvalues = torch.zeros((max_freqs, ), device=batch.x.device)
+        eigenvalues[1:] = E_pert[1:]
+        E_pert = eigenvalues
+
+    debug = True
+    if debug:
+        E_error = (E_pert - eigenvalues_true).abs()
+        U_sim = (U_pert * eigenvectors_true).sum(0)
+        print(f"Min eigval error: {E_error.min().item()}")
+        print(f"Avg eigval error: {E_error.mean().item()}")
+        print(f"Max eigval error: {E_error.max().item()}")
+        print(f"Min eigvec sim.: {U_sim.min().item()}")
+        print(f"Avg eigvec sim.: {U_sim.mean().item()}")
+        print(f"Max eigvec sim.: {U_sim.max().item()}")
+
+    if cfg.attack.SAN.pert_BPDA:
+        # BPDA
+        evals = eigenvalues_true + E_pert - E_pert.detach()
+        evects = eigenvectors_true + U_pert - U_pert.detach()
+    else:
+        evals, evects = E_pert, U_pert
+
+    # pad if max_freq > num_nodes
+    if num_nodes < max_freqs:
+        evals = F.pad(evals, (0, max_freqs - num_nodes), value=float('nan'))
+        evects = F.pad(evects, (0, max_freqs - num_nodes), value=float('nan'))
+    
+    batch.EigVals = evals.repeat(num_nodes, 1)[:, :, None]
+    batch.EigVecs = evects
+
+
+def get_spectral_pert_approx(batch, num_nodes, lap_norm_type, max_freqs, eigvec_norm):
+    need_true_eigen = (
+        cfg.attack.SAN.match_true_eigenspaces
+        or cfg.attack.SAN.match_true_signs
+        or cfg.attack.SAN.pert_BPDA
+    )
+
+    eigenvalues_true, eigenvectors_true = None, None
     if need_true_eigen:
         out = get_lap_decomp_stats(
             batch.edge_index,
@@ -147,10 +213,10 @@ def add_eig(batch):
             lap_norm_type,
             max_freqs,
             eigvec_norm,
-            pad_too_small=not pert_approx,
-            need_full=need_full_true_eigen,
+            pad_too_small=False,
+            need_full=cfg.attack.SAN.match_true_eigenspaces,
             return_lap=True,
-            no_grad_lap=not pert_approx,
+            no_grad_lap=False,
         )
         eigenvalues_true, eigenvectors_true, lap_attack_edge_index, lap_attack_edge_attr = out
     else:
@@ -160,11 +226,6 @@ def add_eig(batch):
             lap_norm_type,
             num_nodes=num_nodes,
         )
-
-    if not pert_approx:
-        batch.EigVals, batch.EigVecs = eigenvalues_true, eigenvectors_true
-        batch.EigVals = batch.EigVals.repeat(num_nodes, 1)[:, :, None]
-        return
     
     # get eigen perturbation approximation (function of laplacian perturbation)
     delta_lap_edge_index, delta_lap_edge_attr = coalesce(
@@ -211,49 +272,13 @@ def add_eig(batch):
         # find remaining repeated eigenvalues in E_pert and transform the corresponding
         # eigenvectors in U_pert to be as close as possible to the ones in eigenvectors_true
         U_pert = match_eigenspaces(E_pert, U_pert, eigenvectors_true, max_freqs)
+        eigenvalues_true = eigenvalues_true[:max_freqs]
+        eigenvectors_true = eigenvectors_true[:, :max_freqs]
 
     # select only the smallest max_freqs
     E_pert = E_pert[:max_freqs]
     U_pert = U_pert[:, :max_freqs]
-    if need_full_true_eigen:
-        # haven't been selected yet
-        eigenvalues_true = eigenvalues_true[:max_freqs]
-        eigenvectors_true = eigenvectors_true[:, :max_freqs]
-
-    if cfg.attack.SAN.match_true_signs:
-        # for eigenvectors of the unique eigenvalues that might be flipped in relation to the true ones 
-        U_pert = invert_wrong_signs(eigenvectors_true, U_pert)
-
-    if cfg.attack.SAN.set_first_pert_zero:
-        eigenvalues = torch.zeros((max_freqs, ), device=batch.x.device)
-        eigenvalues[1:] = E_pert[1:]
-        E_pert = eigenvalues
-
-    debug = False
-    if debug:
-        E_error = (E_pert - eigenvalues_true).abs()
-        U_sim = (U_pert * eigenvectors_true).sum(0)
-        print(f"Min eigval error: {E_error.min().item()}")
-        print(f"Avg eigval error: {E_error.mean().item()}")
-        print(f"Max eigval error: {E_error.max().item()}")
-        print(f"Min eigvec sim.: {U_sim.min().item()}")
-        print(f"Avg eigvec sim.: {U_sim.mean().item()}")
-        print(f"Max eigvec sim.: {U_sim.max().item()}")
-
-    if cfg.attack.SAN.pert_BPDA:
-        # BPDA
-        evals = eigenvalues_true + E_pert - E_pert.detach()
-        evects = eigenvectors_true + U_pert - U_pert.detach()
-    else:
-        evals, evects = E_pert, U_pert
-
-    # pad if max_freq > num_nodes
-    if num_nodes < max_freqs:
-        evals = F.pad(evals, (0, max_freqs - num_nodes), value=float('nan'))
-        evects = F.pad(evects, (0, max_freqs - num_nodes), value=float('nan'))
-    
-    batch.EigVals = evals.repeat(num_nodes, 1)[:, :, None]
-    batch.EigVecs = evects
+    return E_pert, U_pert, eigenvalues_true, eigenvectors_true
 
 
 @torch.no_grad
@@ -303,3 +328,116 @@ def match_eigenspaces(E_pert, U_pert, U_true, max_freq):
             break
         
     return U_pert_transformed
+
+
+def invert_wrong_signs(U_reference: torch.Tensor, U_invert: torch.Tensor):
+    # cosine similarity, when negative pointing in different directions
+    inverted_sign = (U_reference * U_invert).sum(0) < 0
+    flipper = U_reference.new_ones((U_reference.size(1), ))
+    flipper[inverted_sign] = -1
+    return U_invert * flipper[None, :]
+
+
+def get_lap_decomp_diff(
+    batch,
+    num_nodes: int | None,
+    lap_norm_type: str | None,
+    max_freqs: int,
+    eigvec_norm: str,
+):
+    L_edge_index, L_edge_attr = get_laplacian(batch.edge_index, batch.edge_attr, lap_norm_type, num_nodes=num_nodes)
+    L_dense = scatter(
+        L_edge_attr,
+        num_nodes * L_edge_index[0] + L_edge_index[1],
+        dim=0,
+        dim_size=num_nodes**2,
+        reduce='sum',
+    ).reshape((num_nodes, num_nodes))
+
+    E, U = torch.linalg.eigh(L_dense)
+    P = get_pert_diff_eigenvects(E.detach(), U.detach())
+    if P is None:
+        E_pert, U_pert = E, U
+    else:
+        L_pert = L_dense + P
+        E_pert, U_pert = torch.linalg.eigh(L_pert)
+    E = E.detach()
+    U = U.detach()
+
+    E = E[:max_freqs]
+    E_pert = E_pert[:max_freqs]
+    U = U[:, :max_freqs]
+    U_pert = U_pert[:, :max_freqs]
+
+    eigvec_normalizer(U, E, eigvec_norm)
+    eigvec_normalizer(U_pert, E_pert, eigvec_norm)
+    return E_pert, U_pert, E, U
+
+
+@torch.no_grad
+def get_pert_diff_eigenvects(E, U):
+    # eta is the minimal space we would like between two eigenvalues
+    eta = cfg.attack.SAN.eig_backprop_separation_pert
+    E_diff = torch.diff(E)
+    # check if it has "repeated" eigenvalues
+    needs_pert = torch.any(E_diff < eta)
+    if not needs_pert:
+        return None
+    
+    P = get_ev_pert(E, U, eta)
+    return P
+
+
+@torch.no_grad
+def get_ev_pert(E: torch.Tensor, U: torch.Tensor, eta: float):
+    # find the offsets to add to the eigenvalues such that they are separated by eta
+    n, e_min, e_max = E.size(0), E[0].item(), E[-1].item()
+    assert eta < (e_max - e_min) / n, (
+        f"Too  many eigenvalues ({n}) in the range {[e_min, e_max]} to separate them with eta={eta}"
+    )
+    # can be solved as a constrained optimization problem:
+    #  -> minimize the offsets, such that all eigenvalues are separated by eta (and the range stays the same)
+    offsets = torch.from_numpy(get_offsets(E.numpy(), eta)).float()
+    P_ev = U @ torch.diag(offsets) @ U.T
+    return P_ev
+
+
+def get_offsets(e, eta, gtol=1e-9):
+    res = scipy.optimize.minimize(
+        lambda x: 0.5 * (x ** 2).sum(),
+        get_initial_guess(e),
+        method='trust-constr',
+        jac=lambda x: x,
+        hessp=lambda x, p: p,
+        constraints=[get_lin_constraint(e, eta)],
+        bounds=get_bounds(e, eta),
+        options={'gtol': gtol},
+    )
+    offsets = res.x
+    offsets[np.abs(offsets) < gtol] = 0
+    return offsets
+
+
+def get_bounds(e, eta):
+    n = e.size
+    eta_range = eta * np.arange(n)
+    lb = e[0] - e + eta_range
+    lb[-1] = 0
+    ub = e[-1] - e - eta_range[::-1]
+    ub[0] = 0
+    return scipy.optimize.Bounds(lb, ub)
+
+
+def get_initial_guess(e):
+    n = e.size
+    return np.linspace(e[0], e[-1], n) - e
+
+
+def get_lin_constraint(e, eta):
+    n = e.size
+    e_diff = np.diff(e)
+    return scipy.optimize.LinearConstraint(get_A(n), lb=eta-e_diff)
+
+
+def get_A(n):
+    return scipy.sparse.dia_matrix((np.array([[-1], [1]]).repeat(n, 1), np.array([0, 1])), (n-1, n))

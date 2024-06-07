@@ -120,10 +120,12 @@ graphgym:
       sample_only_trees: true
     SAN:
       add_partially_fake_edges: false
-      enable_pert_grad: true
-      set_first_pert_zero: true
+      enable_pert_grad: false
+      set_first_pert_zero: false
       nia_pert: full
-      match_true_signs: false
+      match_true_signs: true
       match_true_eigenspaces: false
-      pert_BPDA: false
+      pert_BPDA: true
       eps_repeated_eigenvalue: 1.0e-5
+      enable_eig_backprop: true
+      eig_backprop_separation_pert: 1.0e-4

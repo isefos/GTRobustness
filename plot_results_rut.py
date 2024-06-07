@@ -36,11 +36,11 @@ datasets = {
     },
 }
 models = {
-    "Graphormer": {"color": "b", "linestyle": ":", "marker": "o", "markersize": 3},
-    "SAN": {"color": "r", "linestyle": "--", "marker": "v", "markersize": 3},
-    "GRIT": {"color": "g", "linestyle": "-.", "marker": "*", "markersize": 3},
-    "GCN": {"color": "k", "linestyle": (0, (3, 5, 1, 5, 1, 5)), "marker": "s", "markersize": 3},
-    "GCN-hom": {"color": "orange", "linestyle": (0, (5, 10)), "marker": "X", "markersize": 3},
+    "Graphormer": {"color": "b", "linestyle": ":", "marker": "o", "markersize": 5},
+    "SAN": {"color": "r", "linestyle": "--", "marker": "v", "markersize": 5},
+    "GRIT": {"color": "g", "linestyle": "-.", "marker": "*", "markersize": 7},
+    "GCN": {"color": "k", "linestyle": (0, (3, 5, 1, 5, 1, 5)), "marker": "s", "markersize": 5},
+    "GCN-hom": {"color": "orange", "linestyle": (0, (5, 10)), "marker": "X", "markersize": 6},
     #"GATv2": {"color": "m", "linestyle": (0, (5, 1)), "marker": "p", "markersize": 8},
 }
 metrics = {"acc": "Accuracy (\%)", "asr": "Attack success rate (\%)", "margin": "Margin"}
