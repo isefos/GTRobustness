@@ -355,7 +355,7 @@ def get_lap_decomp_diff(
     ).reshape((num_nodes, num_nodes))
 
     E, U = torch.linalg.eigh(L_dense)
-    P = get_pert_diff_eigenvects(E.detach(), U.detach())
+    P = get_pert_diff_eigenvects(E, U)
     if P is None:
         E_pert, U_pert = E, U
     else:
@@ -397,7 +397,7 @@ def get_ev_pert(E: torch.Tensor, U: torch.Tensor, eta: float):
     )
     # can be solved as a constrained optimization problem:
     #  -> minimize the offsets, such that all eigenvalues are separated by eta (and the range stays the same)
-    offsets = torch.from_numpy(get_offsets(E.numpy(), eta)).float()
+    offsets = torch.from_numpy(get_offsets(E.detach().cpu().numpy(), eta)).float().to(E.device)
     P_ev = U @ torch.diag(offsets) @ U.T
     return P_ev
 
