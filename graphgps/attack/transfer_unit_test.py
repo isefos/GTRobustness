@@ -166,7 +166,7 @@ def get_modified_RUT_dataset(dataset_dir, key):
         a = torch.randint(0, N, (10 * E_clean,), dtype=torch.long)
         b = torch.randint(0, N, (10 * E_clean,), dtype=torch.long)
         dataset._data.edge_index = to_undirected(torch.vstack((a, b)))
-    elif key == "radom0.1x":
+    elif key == "random0.1x":
         a = torch.randint(0, N, (E_clean // 10,), dtype=torch.long)
         b = torch.randint(0, N, (E_clean // 10,), dtype=torch.long)
         dataset._data.edge_index = to_undirected(torch.vstack((a, b)))
