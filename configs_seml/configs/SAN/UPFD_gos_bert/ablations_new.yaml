@@ -57,40 +57,7 @@ grid:
       - true
     zip_id: ablations
 
-  graphgym.attack.SAN.enable_pert_grad:
-    type: choice
-    options:
-      - true
-      - true
-      - true
-      - true
-      - true
-      - true
-    zip_id: ablations
-
-  graphgym.attack.SAN.nia_pert:
-    type: choice
-    options:
-      - full
-      - full
-      - full
-      - full
-      - full
-      - full
-    zip_id: ablations
-
   graphgym.attack.SAN.match_true_signs:
-    type: choice
-    options:
-      - false
-      - false
-      - false
-      - true
-      - true
-      - true
-    zip_id: ablations
-  
-  graphgym.attack.SAN.match_true_eigenspaces:
     type: choice
     options:
       - false
@@ -179,6 +146,11 @@ fixed:
         sample_only_connected: true
         include_root_nodes: false
         sample_only_trees: true
+      SAN:
+        enable_pert_grad: false
+        nia_pert: full
+        enable_eig_backprop: true
+        eig_backprop_separation_pert: 1.0e-4
 
     # copied from pre-trained model
 
