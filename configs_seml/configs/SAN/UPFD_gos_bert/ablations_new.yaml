@@ -64,7 +64,7 @@ grid:
 
   graphgym.attack.SAN.set_first_pert_zero:
     type: choice
-    option:
+    options:
       - true
       - false
 
