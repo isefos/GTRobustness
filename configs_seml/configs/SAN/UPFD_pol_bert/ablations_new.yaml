@@ -26,57 +26,46 @@ grid:
   graphgym.attack.node_prob_enable:
     type: choice
     options:
-      - true  # all
-      - true  # only pert. appr. grad
-      - false # all, no node prob
-      - true  # all, BPDA
-      - true  # only pert. appr. grad, BPDA
-      - false # all, no node prob, BPDA
-    zip_id: ablations
+      - true
+      - false
 
   graphgym.attack.SAN.add_partially_fake_edges:
     type: choice
     options:
       - true
-      - false
-      - true
       - true
       - false
-      - true
-    zip_id: ablations
+    zip_id: ablationsSepAttn
 
   graphgym.attack.SAN.partially_fake_edge_grad:
     type: choice
     options:
       - true
       - false
-      - true
-      - true
       - false
-      - true
-    zip_id: ablations
+    zip_id: ablationsSepAttn
 
   graphgym.attack.SAN.match_true_signs:
     type: choice
     options:
       - false
       - false
-      - false
       - true
-      - true
-      - true
-    zip_id: ablations
+    zip_id: ablationsBPDA
 
   graphgym.attack.SAN.pert_BPDA:
     type: choice
     options:
       - false
+      - true
+      - true
+    zip_id: ablationsBPDA
+
+  graphgym.attack.SAN.set_first_pert_zero:
+    type: choice
+    option:
+      - true
       - false
-      - false
-      - true
-      - true
-      - true
-    zip_id: ablations
 
 # experiment fixed configs
 

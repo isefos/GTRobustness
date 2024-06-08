@@ -56,6 +56,20 @@ grid:
       - true   # only pert. appr. grad without adding part fake edges, zero first eigval
     zip_id: ablations
 
+  graphgym.attack.SAN.match_true_signs:
+    type: choice
+    options:
+      - false
+      - true
+    zip_id: ablations2
+
+  graphgym.attack.SAN.pert_BPDA:
+    type: choice
+    options:
+      - true
+      - true
+    zip_id: ablations2
+
 # experiment fixed configs
 
 fixed:
