@@ -319,7 +319,7 @@ def get_collection_results(collection, filter_dict):
         if d_per_head > 0 and d_hidden == 0:
             if model == "Graphormer":
                 n_heads = result["config"]["graphgym"]["graphormer"]["num_heads"]
-            elif model in ["GritTransformer", "WeightedSANTransformer", "SANTransformer"]:
+            elif model in ["GritTransformer", "WeightedSANTransformer", "SANTransformer", "GPSModel"]:
                 n_heads = result["config"]["graphgym"]["gt"]["n_heads"]
             else:
                 raise NotImplementedError(f"model={model} is not implemented")
@@ -636,6 +636,22 @@ hyperparameters = {
         ("graphgym.train.homophily_regularization", False, False),
         ("graphgym.train.homophily_regularization_gt_weight", False, False),
     ],
+    "GPS": [
+        ("graphgym.optim.base_lr", False, True),
+        ("graphgym.optim.weight_decay", False, True),
+        ("graphgym.gnn.dim_inner", False, False),
+        ("graphgym.gt.n_heads", True, False),
+        ("graphgym.gt.layers", True, False),
+        ("graphgym.gt.dropout", False, False),
+        ("graphgym.posenc_WLapPE.layers", True, False),
+        ("graphgym.posenc_WLapPE.dim_pe", False, False),
+        ("graphgym.posenc_WLapPE.eigen.max_freqs", False, False),
+        ("graphgym.gnn.head", True, False),
+        ("graphgym.gnn.layers_post_mp", True, False),
+        ("graphgym.train.batch_size", True, False),
+        ("graphgym.train.homophily_regularization", False, False),
+        ("graphgym.train.homophily_regularization_gt_weight", False, False),
+    ],
 }
 
 datasets = {
@@ -653,6 +669,7 @@ models = {
     "GCN": {"type": set(["gnn"]), "gnn_layer_type": set(["gcnconvweighted", "gcnconv"])},
     "GAT": {"type": set(["gnn"]), "gnn_layer_type": set(["gatconvweighted", "gatconv"])},
     "GATv2": {"type": set(["gnn"]), "gnn_layer_type": set(["gatv2convweighted", "gatv2conv"])},
+    "GPS": {"type": set(["GPSModel"]), "gnn_layer_type": None},
 }
 
 

@@ -5,18 +5,18 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 2
+  experiments_per_job: 16
   sbatch_options:
-    partition: gpu_gtx1080
+    partition: gpu_a100
     gres: gpu:1       # num GPUs
-    mem: 32G          # memory
-    cpus-per-task: 4  # num cores
+    mem: 48G          # memory
+    cpus-per-task: 16  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
 # Hyperparameter search
 
 random:
-  samples: 10
+  samples: 80
   seed: 187
 
   graphgym.seed:
@@ -28,47 +28,26 @@ random:
   graphgym.optim.base_lr:
     seed: 2264
     type: loguniform
-    min: 3.0e-5
-    max: 1.0e-2
+    min: 3.0e-4
+    max: 8.0e-3
 
   graphgym.optim.weight_decay:
     seed: 89
     type: loguniform
-    min: 1.0e-8
-    max: 1.0e-3
-
-  graphgym.gt.n_heads:
-    seed: 13094
-    type: choice
-    options:
-      - 6
-      - 8
+    min: 1.0e-9
+    max: 1.0e-6
 
   dims_per_head:
     seed: 164
     type: randint
     min: 3
-    max: 9
+    max: 7
 
   graphgym.gt.layers:
     seed: 357
     type: randint
-    min: 2
-    max: 13
-
-  graphgym.posenc_WLapPE.eigen.max_freqs:
-    seed: 392
-    type: randint
-    min: 5
-    max: 30
-
-  graphgym.posenc_WLapPE.layers:
-    seed: 7154
-    type: choice
-    options:
-      - 1
-      - 2
-      - 3
+    min: 8
+    max: 17
 
   graphgym.gnn.layers_post_mp:
     seed: 96624
@@ -76,7 +55,6 @@ random:
     options:
       - 1
       - 2
-
 
 # experiment fixed configs
 
@@ -104,7 +82,7 @@ fixed:
     train:
       mode: custom
       eval_period: 1
-      batch_size: 16
+      batch_size: 64
 
     model:
       type: GPSModel
@@ -113,10 +91,12 @@ fixed:
     posenc_WLapPE:
       enable: true
       dim_pe: 16
+      layers: 2
       model: DeepSet
       eigen:
         eigvec_norm: L2
         laplacian_norm: sym
+        max_freqs: 10
       pass_as_var: false
       post_layers: 0
       raw_norm_type: none
@@ -126,8 +106,9 @@ fixed:
       dim_hidden: 0  # determined using num_heads and dims_per_head
       layer_norm: false
       batch_norm: true
-      dropout: 0.1
-      attn_dropout: 0.5
+      dropout: 0.05
+      attn_dropout: 0.4
+      n_heads: 8
 
     gnn:
       batchnorm: true
