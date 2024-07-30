@@ -62,11 +62,11 @@ class WeightedLapPENodeEncoder(torch.nn.Module):
             self.pe_encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
         else:
             # DeepSet model for LapPE
+            self.linear_A = nn.Linear(2, 2 * dim_pe)
             layers = []
             if n_layers == 1:
                 layers.append(activation())
             else:
-                self.linear_A = nn.Linear(2, 2 * dim_pe)
                 layers.append(activation())
                 for _ in range(n_layers - 2):
                     layers.append(nn.Linear(2 * dim_pe, 2 * dim_pe))

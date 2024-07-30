@@ -39,33 +39,28 @@ random:
 
   graphgym.gt.n_heads:
     seed: 13094
-    type: randint
-    min: 4
-    max: 9
+    type: choice
+    options:
+      - 6
+      - 8
 
   dims_per_head:
     seed: 164
     type: randint
     min: 3
-    max: 10
+    max: 9
 
   graphgym.gt.layers:
     seed: 357
     type: randint
     min: 2
-    max: 17
+    max: 13
 
   graphgym.posenc_WLapPE.eigen.max_freqs:
     seed: 392
     type: randint
     min: 5
     max: 30
-
-  graphgym.posenc_WLapPE.dim_pe:
-    seed: 9913
-    type: randint
-    min: 8
-    max: 24
 
   graphgym.posenc_WLapPE.layers:
     seed: 7154
@@ -117,6 +112,7 @@ fixed:
 
     posenc_WLapPE:
       enable: true
+      dim_pe: 16
       model: DeepSet
       eigen:
         eigvec_norm: L2
