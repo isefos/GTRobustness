@@ -5,52 +5,52 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 16
+  experiments_per_job: 5
   sbatch_options:
-    partition: gpu_h100
+    partition: gpu_gtx1080
     gres: gpu:1       # num GPUs
-    mem: 48G          # memory
+    mem: 24G          # memory
     cpus-per-task: 16  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
 # Hyperparameter search
 
 random:
-  samples: 32
-  seed: 18784
+  samples: 30
+  seed: 57187
 
   graphgym.seed:
-    seed: 86
+    seed: 8286
     type: randint
     min: 0
     max: 10000
 
   graphgym.optim.base_lr:
-    seed: 226
+    seed: 1226
     type: loguniform
     min: 3.0e-4
     max: 8.0e-3
 
   graphgym.optim.weight_decay:
-    seed: 8976
+    seed: 1976
     type: loguniform
     min: 1.0e-9
     max: 1.0e-6
 
   dims_per_head:
-    seed: 4164
+    seed: 4114
     type: randint
     min: 3
     max: 7
 
   graphgym.gt.layers:
-    seed: 3762
+    seed: 13762
     type: randint
     min: 8
     max: 17
 
   graphgym.gnn.layers_post_mp:
-    seed: 966
+    seed: 1966
     type: choice
     options:
       - 1
