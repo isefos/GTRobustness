@@ -50,6 +50,8 @@ class WeightedGATConvGraphGymLayer(nn.Module):
                 f"The given hidden channel size ({layer_config.dim_out}) is not divisible by the number of "
                 f"attention heads ({heads}). Hidden channel size was set to {per_head_dim_out * heads}."
             )
+        # cfg.gnn.aggr is not used, aggregation is always 'add', but the attention scores always sum to 1 (softmax), 
+        # so 'mean' would be double normalization
         self.model = WeightedGATConvLayer(
             layer_config.dim_in,
             per_head_dim_out,

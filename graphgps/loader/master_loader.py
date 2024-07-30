@@ -573,14 +573,15 @@ def preformat_TUDataset(dataset_dir, name):
     Returns:
         PyG dataset object
     """
+    func = None
+    use_node_attr = False
     if name in ['DD', 'NCI1', 'ENZYMES', 'PROTEINS', 'TRIANGLES']:
         func = None
-    elif name.startswith('IMDB-') or name == "COLLAB":
+    elif name.startswith('IMDB-') or name in ["COLLAB", "twitch_egos", "reddit_threads", "github_stargazers"]:
         func = T.Constant()
     else:
-        raise ValueError(f"Loading dataset '{name}' from "
-                         f"TUDataset is not supported.")
-    dataset = TUDataset(dataset_dir, name, pre_transform=func)
+        raise ValueError(f"Loading dataset '{name}' from TUDataset is not supported.")
+    dataset = TUDataset(dataset_dir, name, pre_transform=func, use_node_attr=use_node_attr)
     return dataset
 
 

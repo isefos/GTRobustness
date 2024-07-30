@@ -117,6 +117,7 @@ def dataset_cfg(cfg):
     # use the gradient of the weighted shortest path distances
     cfg.attack.Graphormer.sp_use_gradient = True
 
+    # TODO: should rename the Lap eigen-decomp. cfgs to "spectral" since they're also used by non-SAN models such as GPS...
     cfg.attack.SAN = CN()
     # weighted san (attackable), when edges partially true/fake, add to both true and fake attention mechanisms
     # (when False, all edges with p>0 will only be used in true attention mechanism without bias)
@@ -128,6 +129,8 @@ def dataset_cfg(cfg):
     cfg.attack.SAN.eig_backprop_separation_pert = 1.0e-4
     # enable or disable the gradient using matrix perturbation approximation
     cfg.attack.SAN.enable_pert_grad = True
+    # use as backwards pass differential approximation, i.e. use the actual values in the forward pass? 
+    # (valid for both methods, pert and backprop)
     cfg.attack.SAN.pert_BPDA = False
     cfg.attack.SAN.eps_repeated_eigenvalue = 1.0e-5
     # probably good to use when BPDA is True
@@ -149,3 +152,6 @@ def dataset_cfg(cfg):
     cfg.attack.GRIT.cont_degree = True
     # whether to compute a continuous node degree with gradient or not
     cfg.attack.GRIT.grad_degree = True
+
+    cfg.attack.GPS = CN()
+    cfg.attack.GPS.grad_MPNN = True

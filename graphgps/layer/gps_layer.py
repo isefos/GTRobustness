@@ -12,6 +12,8 @@ from graphgps.layer.bigbird_layer import SingleBigBirdLayer
 from graphgps.layer.gatedgcn_layer import GatedGCNLayer
 from graphgps.layer.gine_conv_layer import GINEConvESLapPE
 
+from torch_geometric.graphgym.config import cfg
+
 
 class GPSLayer(nn.Module):
     """Local MPNN + full graph attention x-former layer.
@@ -46,7 +48,7 @@ class GPSLayer(nn.Module):
             self.local_model = None
 
         # MPNNs without edge attributes support.
-        elif local_gnn_type == "GCN":
+        elif local_gnn_type in ["GCN", "WeightedGCN"]:
             self.local_gnn_with_edge_attr = False
             self.local_model = pygnn.GCNConv(dim_h, dim_h)
         elif local_gnn_type == 'GIN':
@@ -94,6 +96,10 @@ class GPSLayer(nn.Module):
                                              residual=True,
                                              act=act,
                                              equivstable_pe=equivstable_pe)
+        elif local_gnn_type == "WeightedGatedGCN":
+            # TODO:
+            self.local_model = None
+            raise NotImplementedError
         else:
             raise ValueError(f"Unsupported local GNN model: {local_gnn_type}")
         self.local_gnn_type = local_gnn_type
@@ -172,6 +178,14 @@ class GPSLayer(nn.Module):
                 # GatedGCN does residual connection and dropout internally.
                 h_local = local_out.x
                 batch.edge_attr = local_out.edge_attr
+            elif self.local_gnn_type == "WeightedGCN":
+                # need to pass edge probabilities as well
+                edge_attr = batch.edge_attr
+                if (edge_attr is not None) and (not cfg.attack.GPS.grad_MPNN):
+                    edge_attr = edge_attr.detach()
+                if edge_attr is None:
+                    edge_attr = h.new_zeros(batch.edge_index.size(1))
+                h_local = self.local_model(h, batch.edge_index, edge_attr)
             else:
                 if self.local_gnn_with_edge_attr:
                     if self.equivstable_pe:
@@ -196,12 +210,40 @@ class GPSLayer(nn.Module):
 
         # Multi-head attention.
         if self.self_attn is not None:
+
             h_dense, mask = to_dense_batch(h, batch.batch)
-            if self.global_model_type == 'Transformer':
-                h_attn = self._sa_block(h_dense, None, ~mask)[mask]
-            elif self.global_model_type == 'BiasedTransformer':
+            B, N, _ = h_dense.shape
+
+            attn_bias = None
+            if self.global_model_type == 'BiasedTransformer':
                 # Use Graphormer-like conditioning, requires `batch.attn_bias`.
-                h_attn = self._sa_block(h_dense, batch.attn_bias, ~mask)[mask]
+                attn_bias = batch.attn_bias
+                assert attn_bias is not None, "When using `BiasedTransformer`, must set `batch.attn_bias`."
+
+            if hasattr(batch, "node_logprob"):
+                assert batch.node_logprob.size(0) == N
+                if not attn_bias:
+                    attn_bias = h_dense.new_zeros((self.num_heads * B, N, N))
+                attn_bias += batch.node_logprob[None, None, :]
+                
+            elif hasattr(batch, "node_prob"):
+                assert batch.node_prob.size(0) == N
+                if not attn_bias:
+                    attn_bias = h_dense.new_zeros((self.num_heads * B, N, N))
+                # if p is so small that log(p) = -inf, gradient is undefined, so just set -inf for very small p
+                l = torch.zeros_like(batch.node_prob) - torch.inf
+                min_prob_mask = batch.node_prob > 1e-30
+                l[min_prob_mask] = batch.node_prob[min_prob_mask].log()
+                bias += l[None, None, :]
+            
+            if attn_bias is not None:
+                assert self.global_model_type in ['Transformer', 'BiasedTransformer'], "Not implemented for others yet."
+                key_padding_mask = (torch.zeros_like(~mask, dtype=torch.float32).masked_fill_(~mask, float("-inf")))
+            else:
+                key_padding_mask = ~mask
+
+            if self.global_model_type in ['Transformer', 'BiasedTransformer']:
+                h_attn = self._sa_block(h_dense, attn_bias, key_padding_mask)[mask]
             elif self.global_model_type == 'Performer':
                 h_attn = self.self_attn(h_dense, mask=mask)[mask]
             elif self.global_model_type == 'BigBird':

@@ -11,6 +11,8 @@ class WeightedGCNConvGraphGymLayer(nn.Module):
     """
     def __init__(self, layer_config: LayerConfig, **kwargs):
         super().__init__()
+        # cfg.gnn.aggr is not used, aggregation is always 'add', but the normalized adjacency matrix is used, 
+        # so the messages are already normalized by the node degrees so 'mean' would be double normalization
         self.model = pyg_nn.GCNConv(
             layer_config.dim_in, layer_config.dim_out, bias=layer_config.has_bias,
         )

@@ -19,8 +19,6 @@ import scipy
 class WeightedLapPENodeEncoder(torch.nn.Module):
     """Weighted Laplace Positional Embedding node encoder.
 
-    for simplicity, just allow transformer (original)
-
     LapPE of size dim_pe will get appended to each node feature vector.
     If `expand_x` set True, original node features will be first linearly
     projected to (dim_emb - dim_pe) size and the concatenated with LapPE.
@@ -35,6 +33,12 @@ class WeightedLapPENodeEncoder(torch.nn.Module):
         dim_in = cfg.share.dim_in  # Expected original input node features dim
 
         pecfg = cfg.posenc_WLapPE
+
+        model_type = pecfg.model  # Encoder NN model type for PEs
+        if model_type not in ['Transformer', 'DeepSet']:
+            raise ValueError(f"Unexpected PE model {model_type}")
+        self.model_type = model_type
+
         dim_pe = pecfg.dim_pe  # Size of Laplace PE embedding
         n_layers = pecfg.layers  # Num. layers in PE encoder model
         n_heads = pecfg.n_heads  # Num. attention heads in Trf PE encoder
@@ -48,14 +52,29 @@ class WeightedLapPENodeEncoder(torch.nn.Module):
             self.linear_x = nn.Linear(dim_in, dim_emb - dim_pe)
         self.expand_x = expand_x and dim_emb - dim_pe > 0
 
-        # Initial projection of eigenvalue and the node's eigenvector value
-        self.linear_A = nn.Linear(2, dim_pe)
-
         activation = nn.ReLU
-        # Transformer model for LapPE
-        encoder_layer = nn.TransformerEncoderLayer(d_model=dim_pe, nhead=n_heads, batch_first=True)
-        self.pe_encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
 
+        if model_type == 'Transformer':
+            # Transformer model for LapPE
+            # Initial projection of eigenvalue and the node's eigenvector value
+            self.linear_A = nn.Linear(2, dim_pe)
+            encoder_layer = nn.TransformerEncoderLayer(d_model=dim_pe, nhead=n_heads, batch_first=True)
+            self.pe_encoder = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
+        else:
+            # DeepSet model for LapPE
+            layers = []
+            if n_layers == 1:
+                layers.append(activation())
+            else:
+                self.linear_A = nn.Linear(2, 2 * dim_pe)
+                layers.append(activation())
+                for _ in range(n_layers - 2):
+                    layers.append(nn.Linear(2 * dim_pe, 2 * dim_pe))
+                    layers.append(activation())
+                layers.append(nn.Linear(2 * dim_pe, dim_pe))
+                layers.append(activation())
+            self.pe_encoder = nn.Sequential(*layers)
+        
         self.post_mlp = None
         if post_n_layers > 0:
             # MLP to apply post pooling
@@ -93,8 +112,11 @@ class WeightedLapPENodeEncoder(torch.nn.Module):
         pos_enc[empty_mask] = 0  # (Num nodes) x (Num Eigenvectors) x 2
         pos_enc = self.linear_A(pos_enc)  # (Num nodes) x (Num Eigenvectors) x dim_pe
 
-        # PE encoder (Transformer)
-        pos_enc = self.pe_encoder(src=pos_enc, src_key_padding_mask=empty_mask[:, :, 0])
+        # PE encoder
+        if self.model_type == 'Transformer':
+            pos_enc = self.pe_encoder(src=pos_enc, src_key_padding_mask=empty_mask[:, :, 0])
+        else:  # DeepSet
+            pos_enc = self.pe_encoder(pos_enc)
 
         # Set masked parts back to zero
         pos_enc = pos_enc * (~empty_mask[:, :, [0]]).float()
@@ -170,7 +192,7 @@ def add_eig(batch):
         eigenvalues[1:] = E_pert[1:]
         E_pert = eigenvalues
 
-    debug = True
+    debug = False
     if debug:
         E_error = (E_pert - eigenvalues_true).abs()
         U_sim = (U_pert * eigenvectors_true).sum(0)

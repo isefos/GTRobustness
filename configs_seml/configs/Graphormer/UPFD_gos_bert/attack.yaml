@@ -60,7 +60,6 @@ fixed:
       num_in_degrees: 21
       num_out_degrees: 21
       num_spatial_types: 8
- 
 
     attack:
       enable: true

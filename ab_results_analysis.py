@@ -70,10 +70,12 @@ ablations_settings = {
     },
     "SAN": {
         "cont_att": ["config.graphgym.attack.SAN.wsan_add_partially_fake", "config.graphgym.attack.SAN.add_partially_fake_edges"],
-        #"cont_att_grad": ["config.graphgym.attack.SAN.partially_fake_edge_grad"],
+        "cont_att_grad": ["config.graphgym.attack.SAN.partially_fake_edge_grad"],
         "pert_grad": ["config.graphgym.attack.SAN.enable_pert_grad"],
         "BPDA": ["config.graphgym.attack.SAN.pert_BPDA"],
-        # "config.graphgym.attack.SAN.set_first_pert_zero",
+        "BPDA_match_signs": ["config.graphgym.attack.SAN.match_true_signs"],
+        "zero_first": ["config.graphgym.attack.SAN.set_first_pert_zero"],
+        "backprop": ["config.graphgym.attack.SAN.enable_eig_backprop"],
         # TODO: add for node injection
         "node_prob": ["config.graphgym.attack.node_prob_enable"],
     },
@@ -101,12 +103,12 @@ random_results = {
     "UPFD_gos_bert": {
         "Graphormer": "a_gph_upfd_gos_bert_prel",
         "GRIT": "a_grt_upfd_gos_bert_prel",
-        "SAN": "a_san_upfd_gos_bert_prel",
+        "SAN": "a_san_upfd_gos_bert_new",
     },
     "UPFD_pol_bert": {
         "Graphormer": "a_gph_upfd_pol_bert_prel",
         "GRIT": "a_grt_upfd_pol_bert_prel",
-        "SAN": "a_san_upfd_pol_bert_prel",
+        "SAN": "a_san_upfd_pol_bert_new",
     },
 }
 

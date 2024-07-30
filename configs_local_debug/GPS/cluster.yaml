@@ -1,0 +1,117 @@
+graphgym:
+
+  seed: 42
+
+  out_dir: configs_seml/results
+
+  dataset:
+    format: PyG-GNNBenchmarkDataset
+    name: CLUSTER
+    node_encoder: true
+    node_encoder_name: WLapPE
+    edge_encoder: false
+    split_mode: standard
+    task: graph
+    task_type: classification
+    transductive: false
+
+  model:
+    loss_fun: weighted_cross_entropy
+    type: GPSModel
+
+  posenc_WLapPE:
+    model: DeepSet
+    dim_pe: 8  # 16
+    eigen:
+      eigvec_norm: L2
+      laplacian_norm: sym
+      max_freqs: 10
+    enable: true
+    layers: 2
+    pass_as_var: false
+    post_layers: 0
+    raw_norm_type: none
+    w_add_dummy_edge: False
+
+  gt:
+    layer_type: WeightedGCN+Transformer
+    dropout: 0.1
+    attn_dropout: 0.5
+    batch_norm: true
+    layer_norm: false
+    dim_hidden: 16  # 48
+    layers: 2  # 16
+    n_heads: 4  # 8
+
+  gnn:
+    act: relu
+    batchnorm: true
+    dim_inner: 16  # 48
+    head: inductive_node
+    layers_post_mp: 1  # 3
+    layers_pre_mp: 0
+
+  train:
+    batch_size: 16
+    ckpt_best: true
+    enable_ckpt: true
+    eval_period: 1
+    mode: custom
+
+  optim:
+    base_lr: 0.0005
+    clip_grad_norm: true
+    clip_grad_norm_value: 5.0
+    early_stopping: true
+    early_stopping_delta_e: 0.02
+    early_stopping_patience: 40
+    early_stopping_warmup: 20
+    max_epoch: 10  # 200
+    optimizer: adamW
+    scheduler: cosine_with_warmup
+    num_warmup_epochs: 5
+    weight_decay: 1.0e-5
+
+  attack:
+    e_budget: 0.05
+    cluster_sampling: false
+    enable: true
+    num_attacked_graphs: 3  # 50
+    skip_incorrect_graph_classification: false
+    log_progress: true
+    load_best_model: false
+    split: test
+    prediction_level: node
+    remove_isolated_components: false
+    run_random_baseline: true
+    block_size: 2000  # 20_000
+    epochs: 125
+    epochs_resampling: 100
+    resample_period: 1
+    max_final_samples: 20
+    eps: 1.0e-07
+    eps_init_noised: false
+    is_undirected: true
+    loss: tanh_margin
+    metric: neg_accuracy
+    lr: 4000
+    max_edge_weight_update: 0.0
+    max_trials_sampling: 20
+    minimum_budget: 1
+    node_prob_enable: false
+    root_node_idx: null
+    with_early_stopping: true
+    node_injection:
+      enable: false
+    SAN:
+      eps_repeated_eigenvalue: 1.0e-5
+      enable_pert_grad: true
+      enable_eig_backprop: false
+      eig_backprop_separation_pert: 1.0e-4
+      set_first_pert_zero: true
+      nia_pert: full
+      pert_BPDA: false
+      match_true_signs: false
+      match_true_eigenspaces: false
+    GPS:
+      grad_MPNN: true
