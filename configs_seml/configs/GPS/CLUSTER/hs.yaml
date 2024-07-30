@@ -7,7 +7,7 @@ seml:
 slurm:
   experiments_per_job: 16
   sbatch_options:
-    partition: gpu_a100
+    partition: gpu_h100
     gres: gpu:1       # num GPUs
     mem: 48G          # memory
     cpus-per-task: 16  # num cores
@@ -16,41 +16,41 @@ slurm:
 # Hyperparameter search
 
 random:
-  samples: 80
-  seed: 187
+  samples: 32
+  seed: 18784
 
   graphgym.seed:
-    seed: 786
+    seed: 86
     type: randint
     min: 0
     max: 10000
 
   graphgym.optim.base_lr:
-    seed: 2264
+    seed: 226
     type: loguniform
     min: 3.0e-4
     max: 8.0e-3
 
   graphgym.optim.weight_decay:
-    seed: 89
+    seed: 8976
     type: loguniform
     min: 1.0e-9
     max: 1.0e-6
 
   dims_per_head:
-    seed: 164
+    seed: 4164
     type: randint
     min: 3
     max: 7
 
   graphgym.gt.layers:
-    seed: 357
+    seed: 3762
     type: randint
     min: 8
     max: 17
 
   graphgym.gnn.layers_post_mp:
-    seed: 96624
+    seed: 966
     type: choice
     options:
       - 1
