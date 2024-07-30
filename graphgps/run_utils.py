@@ -131,7 +131,7 @@ def setup_run(graphgym, dims_per_head, dims_per_head_PE, seml_seed=None, jupyter
         if model_type == "Graphormer":
             dim_inner = dims_per_head * graphgym["graphormer"]["num_heads"]
             graphgym["graphormer"]["embed_dim"] = dim_inner
-        elif model_type in ["SANTransformer", "WeightedSANTransformer", "GritTransformer"]:
+        elif model_type in ["SANTransformer", "WeightedSANTransformer", "GritTransformer", "GPSModel"]:
             dim_inner = dims_per_head * graphgym["gt"]["n_heads"]
             graphgym["gt"]["dim_hidden"] = dim_inner
         elif model_type == "gnn" and graphgym["gnn"]["layer_type"] in ["gatconvweighted"]:
