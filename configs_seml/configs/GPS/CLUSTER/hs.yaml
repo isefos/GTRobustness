@@ -5,11 +5,11 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 5
+  experiments_per_job: 6
   sbatch_options:
-    partition: gpu_gtx1080
+    partition: gpu_a100
     gres: gpu:1       # num GPUs
-    mem: 24G          # memory
+    mem: 32G          # memory
     cpus-per-task: 16  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
@@ -17,44 +17,19 @@ slurm:
 
 random:
   samples: 30
-  seed: 57187
+  seed: 18753
 
   graphgym.seed:
-    seed: 8286
+    seed: 5721
     type: randint
     min: 0
     max: 10000
 
-  graphgym.optim.base_lr:
-    seed: 1226
-    type: loguniform
-    min: 3.0e-4
-    max: 8.0e-3
-
-  graphgym.optim.weight_decay:
-    seed: 1976
-    type: loguniform
-    min: 1.0e-9
-    max: 1.0e-6
-
   dims_per_head:
-    seed: 4114
+    seed: 3522
     type: randint
-    min: 3
-    max: 7
-
-  graphgym.gt.layers:
-    seed: 13762
-    type: randint
-    min: 8
-    max: 17
-
-  graphgym.gnn.layers_post_mp:
-    seed: 1966
-    type: choice
-    options:
-      - 1
-      - 2
+    min: 12
+    max: 22
 
 # experiment fixed configs
 
@@ -103,11 +78,12 @@ fixed:
 
     gt:
       layer_type: WeightedGCN+Transformer
+      layers: 16
       dim_hidden: 0  # determined using num_heads and dims_per_head
       layer_norm: false
       batch_norm: true
       dropout: 0.05
-      attn_dropout: 0.4
+      attn_dropout: 0.5
       n_heads: 8
 
     gnn:
@@ -115,18 +91,22 @@ fixed:
       act: relu
       head: inductive_node
       layers_pre_mp: 0
+      layers_post_mp: 2
       dim_inner: 0  # determined using num_heads and dims_per_head
 
     optim:
-      clip_grad_norm: true
-      clip_grad_norm_value: 5.0
-      optimizer: adamW
-      max_epoch: 100
-      scheduler: cosine_with_warmup
-      num_warmup_epochs: 5
+      optimizer: adam
+      weight_decay: 0.0
+      max_epoch: 170
+      base_lr: 0.003
+      scheduler: reduce_on_plateau
+      reduce_factor: 0.5
+      schedule_patience: 5
+      min_lr: 1.0e-5
+      clip_grad_norm: false
       early_stopping: true
       early_stopping_patience: 30
-      early_stopping_delta_e: 0.02
+      early_stopping_delta_e: 0.01
       early_stopping_warmup: 30
 
     attack:
