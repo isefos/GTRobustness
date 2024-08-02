@@ -38,7 +38,7 @@ fixed:
       node_encoder_name: WLapPE
       node_encoder_bn: false
       edge_encoder: True
-      edge_encoder_name: DummyEdge
+      edge_encoder_name: WeightedDummyEdge
       edge_encoder_bn: False
 
     train:
@@ -64,7 +64,7 @@ fixed:
       raw_norm_type: none
 
     gt:
-      layer_type: CustomGatedGCN+Transformer
+      layer_type: WeightedGatedGCN+Transformer
       layers: 16
       dim_hidden: 48
       layer_norm: false
