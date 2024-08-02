@@ -37,6 +37,9 @@ fixed:
       node_encoder: true
       node_encoder_name: WLapPE
       node_encoder_bn: false
+      edge_encoder: True
+      edge_encoder_name: DummyEdge
+      edge_encoder_bn: False
 
     train:
       mode: custom
