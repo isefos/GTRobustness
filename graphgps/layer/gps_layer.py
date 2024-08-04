@@ -218,7 +218,7 @@ class GPSLayer(nn.Module):
                 if (edge_attr is not None) and (not cfg.attack.GPS.grad_MPNN):
                     edge_attr = edge_attr.detach()
                 if edge_attr is None:
-                    edge_attr = h.new_zeros(batch.edge_index.size(1))
+                    edge_attr = h.new_ones(batch.edge_index.size(1))
                 h_local, batch.edge_features = self.local_model(
                     x=h,
                     e=batch.edge_features,
@@ -233,7 +233,7 @@ class GPSLayer(nn.Module):
                 if (edge_attr is not None) and (not cfg.attack.GPS.grad_MPNN):
                     edge_attr = edge_attr.detach()
                 if edge_attr is None:
-                    edge_attr = h.new_zeros(batch.edge_index.size(1))
+                    edge_attr = h.new_ones(batch.edge_index.size(1))
                 h_local = self.local_model(h, batch.edge_index, edge_attr)
                 h_local = self.dropout_local(h_local)
                 h_local = h_in1 + h_local  # Residual connection.
