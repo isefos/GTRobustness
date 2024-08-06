@@ -118,7 +118,6 @@ fixed:
       act: relu
       head: weighted_add_pool_graph
       layers_pre_mp: 0
-      layers_post_mp: 3
       dim_inner: 0  # determined later
 
     optim:
