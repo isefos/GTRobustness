@@ -5,9 +5,9 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 1
+  experiments_per_job: 3
   sbatch_options:
-    partition: gpu_gtx1080
+    partition: gpu_a100
     gres: gpu:1       # num GPUs
     mem: 16G          # memory
     cpus-per-task: 4  # num cores
@@ -30,10 +30,10 @@ grid:
       - 0.05
       - 0.1
       - 0.15
-      - 0.25
-      - 0.45
-      - 0.65
-      - 1.0
+      #- 0.25
+      #- 0.45
+      #- 0.65
+      #- 1.0
 
 # experiment fixed configs
 
@@ -46,7 +46,7 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/SAN/UPFD_gos_bert/0'
+      dir: '/ceph/hdd/students/foth/models/GPS/UPFD_gos_bert/0'
       finetune: false
 
     attack:
