@@ -26,7 +26,7 @@ grid:
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/GAT_as'
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/GATv2_as'
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/Graphormer_as'
-      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS_as'
+      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS_as'
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS-GCN_as'
 
 # experiment fixed configs
@@ -40,7 +40,7 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/GPS/CLUSTER/0'
+      dir: '/ceph/hdd/students/foth/models/GPS-GCN/CLUSTER/0'
       finetune: false
 
     attack:
@@ -75,9 +75,9 @@ fixed:
       cache_save: false
       dir: ./datasets
       edge_dim: 128
-      edge_encoder: true
-      edge_encoder_bn: false
-      edge_encoder_name: WeightedDummyEdge
+      edge_encoder: false
+      edge_encoder_bn: true
+      edge_encoder_name: Bond
       edge_encoder_num_types: 0
       edge_message_ratio: 0.8
       edge_negative_sampling_ratio: 1.0
@@ -127,14 +127,14 @@ fixed:
       att_heads: 1
       batchnorm: true
       clear_feature: true
-      dim_inner: 48
+      dim_inner: 40
       dropout: 0.0
       head: inductive_node
       keep_edge: 0.5
       l2norm: true
       layer_type: generalconv
       layers_mp: 2
-      layers_post_mp: 3
+      layers_post_mp: 2
       layers_pre_mp: 0
       msg_direction: single
       normalize_adj: false
@@ -162,7 +162,7 @@ fixed:
         full_attn: true
         norm_e: true
         use_bias: false
-      attn_dropout: 0.5
+      attn_dropout: 0.4
       batch_norm: true
       bigbird:
         add_cross_attention: false
@@ -177,14 +177,14 @@ fixed:
         use_bias: false
       bn_momentum: 0.1
       bn_no_runner: false
-      dim_hidden: 48
-      dropout: 0.1
+      dim_hidden: 40
+      dropout: 0.05
       full_graph: true
       gamma: 1.0e-05
       gamma_learnable: false
       layer_norm: false
-      layer_type: WeightedGatedGCN+Transformer
-      layers: 16
+      layer_type: WeightedGCN+Transformer
+      layers: 13
       n_heads: 8
       pna_degrees: []
       residual: true
@@ -205,16 +205,16 @@ fixed:
     num_threads: 6
     num_workers: 0
     optim:
-      base_lr: 0.0005
+      base_lr: 0.000974388391087546
       batch_accumulation: 1
       clip_grad_norm: true
-      clip_grad_norm_value: 1.0
+      clip_grad_norm_value: 5.0
       early_stopping: true
       early_stopping_delta_e: 0.0
       early_stopping_patience: 40
       early_stopping_warmup: 20
       lr_decay: 0.1
-      max_epoch: 100
+      max_epoch: 150
       min_lr: 0.0
       momentum: 0.9
       num_warmup_epochs: 5
@@ -226,7 +226,7 @@ fixed:
       - 30
       - 60
       - 90
-      weight_decay: 1.0e-05
+      weight_decay: 1.0e-08
     posenc_ElstaticSE:
       dim_pe: 16
       enable: false
@@ -339,7 +339,7 @@ fixed:
     tensorboard_each_run: false
     train:
       auto_resume: false
-      batch_size: 16
+      batch_size: 64
       ckpt_best: true
       ckpt_clean: true
       ckpt_period: 100
