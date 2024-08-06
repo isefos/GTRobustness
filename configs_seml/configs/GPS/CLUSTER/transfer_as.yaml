@@ -26,6 +26,7 @@ grid:
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/GAT_as'
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/GATv2_as'
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/Graphormer_as'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS_as'
 
 # experiment fixed configs
 
