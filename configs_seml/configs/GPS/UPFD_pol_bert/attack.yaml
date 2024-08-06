@@ -363,11 +363,6 @@ fixed:
       post_layers: 0
       raw_norm_type: none
       w_add_dummy_edge: true
-    pretrained:
-      dir: ''
-      finetune: true
-      freeze_main: false
-      reset_prediction_head: true
     print: both
     robustness_unit_test:
       enable: false
