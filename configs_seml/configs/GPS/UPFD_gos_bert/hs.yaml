@@ -106,7 +106,6 @@ fixed:
 
     gt:
       layer_type: WeightedGatedGCN+Transformer
-      layers: 16
       dim_hidden: 0  # determined later
       layer_norm: false
       batch_norm: true
