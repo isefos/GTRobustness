@@ -9,8 +9,8 @@ slurm:
   sbatch_options:
     partition: gpu_a100
     gres: gpu:1       # num GPUs
-    mem: 16G          # memory
-    cpus-per-task: 4  # num cores
+    mem: 32G          # memory
+    cpus-per-task: 6  # num cores
     time: 1-00:00     # max time, D-HH:MM
 
 grid:
