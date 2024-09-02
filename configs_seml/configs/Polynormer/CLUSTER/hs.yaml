@@ -37,13 +37,13 @@ random:
     min: 4
     max: 9
 
-  gnn.dropout:
+  graphgym.gnn.dropout:
     seed: 6233
     type: uniform
     min: 0.0
     max: 0.3
 
-  gnn.layers_mp:
+  graphgym.gnn.layers_mp:
     seed: 3672
     type: randint
     min: 5
