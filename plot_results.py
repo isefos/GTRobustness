@@ -54,6 +54,9 @@ models = {
     "GCN": {"color": "k", "linestyle": (0, (3, 5, 1, 5, 1, 5)), "marker": "s", "markersize": 6},
     "GAT": {"color": "orange", "linestyle": (0, (5, 10)), "marker": "X", "markersize": 8},
     "GATv2": {"color": "m", "linestyle": (0, (5, 1)), "marker": "p", "markersize": 8},
+    "GPS": {"color": "c", "linestyle": (0, (3, 5, 1, 5, 1, 5)), "marker": "P", "markersize": 8},
+    "GPS-GCN": {"color": "olive", "linestyle": (0, (3, 1, 1, 1, 1, 1)), "marker": "d", "markersize": 8},
+
 }
 metrics = {"acc": "Accuracy (\%)", "asr": "Attack success rate (\%)", "margin": "Margin"}
 
@@ -74,7 +77,7 @@ def main(
             "Can't find results for that dataset. "
             "Please run the t_results_analysis.py script first to save the results."
         )
-    figsize = (2.5, 1.7)
+    figsize = (4.5, 3.5)
 
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
     fig_sb, ax_sb = plt.subplots(nrows=1, ncols=1, figsize=figsize)
@@ -112,10 +115,10 @@ def main(
         ax.set_ylabel(metrics[metric])
         ax_sb.set_ylabel(metrics[metric])
     if legend:
-        ax.legend(bbox_to_anchor=(1.01, 0), loc="lower left")  # loc=datasets[dataset]["legend_loc"])
-        #fig.legend(loc='outside right upper')
-        ax_sb.legend(bbox_to_anchor=(1.01, 0), loc="lower left")  # loc=datasets[dataset]["legend_loc"])
-        #fig_sb.legend(loc='outside right upper')
+        #ax.legend(bbox_to_anchor=(1.01, 0), loc="lower left")  # loc=datasets[dataset]["legend_loc"])
+        ax.legend()  # loc='upper right')
+        #ax_sb.legend(bbox_to_anchor=(1.01, 0), loc="lower left")  # loc=datasets[dataset]["legend_loc"])
+        ax_sb.legend()  # loc='upper right')
     save_figure(fig, f"{dataset}_{metric}", png)
     save_figure(fig_sb, f"{dataset}_{metric}_sb", png)
 

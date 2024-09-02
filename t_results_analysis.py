@@ -44,6 +44,8 @@ models = {
     "GCN": {"type": set(["gnn"]), "gnn_layer_type": set(["gcnconvweighted", "gcnconv"])},
     "GAT": {"type": set(["gnn"]), "gnn_layer_type": set(["gatconvweighted", "gatconv"])},
     "GATv2": {"type": set(["gnn"]), "gnn_layer_type": set(["gatv2convweighted", "gatv2conv"])},
+    "GPS": {"type": set(["GPSModel"]), "gnn_layer_type": None},
+    "GPS-GCN": {"type": set(["GPSModel"]), "gnn_layer_type": None},
 }
 
 
@@ -129,10 +131,10 @@ styles = {
     "adaptive": {"color": ["b"], "linestyle": [":"], "marker": ["o"], "markersize": [6]},
     "random": {"color": ["g"], "linestyle": ["-."], "marker": ["*"], "markersize": [9]},
     "transfer": {
-        "color": ["r", "k", "orange", "m", "aqua"],
-        "linestyle": ["--", (0, (3, 5, 1, 5, 1, 5)), (0, (5, 10)), (0, (5, 1)), (0, (1, 1))],
-        "marker": ["v", "s", "X", "p", "s"],
-        "markersize": [7, 6, 8, 8, 8],
+        "color": ["r", "k", "orange", "m", "aqua", "blue"],
+        "linestyle": ["--", (0, (3, 5, 1, 5, 1, 5)), (0, (5, 10)), (0, (5, 1)), (0, (1, 1)), (0, (5, 10))],
+        "marker": ["v", "s", "X", "p", "s", "s"],
+        "markersize": [7, 6, 8, 8, 8, 8],
     },
 }
 
@@ -453,11 +455,28 @@ def save_plots(
                                     y_best = res["y"]
                                     std_best = res["std"]
                                 else:
-                                    assert np.all(x == res["x"])
-                                    y_new = res["y"]
-                                    new_best = y_new < y_best
-                                    y_best[new_best] = y_new[new_best]
-                                    std_best[new_best] = res["std"][new_best]
+                                    x_new = res["x"].copy()
+                                    y_new = res["y"].copy()
+                                    std_new = res["std"].copy()
+                                    n_n = x_new.shape[0]
+                                    n_b = x_best.shape[0]
+                                    if n_b > n_n:
+                                        assert np.all(x_best[:n_n] == x_new)
+                                        new_best = y_new < y_best[:n_n]
+                                        y_best[:n_n][new_best] = y_new[new_best]
+                                        std_best[:n_n][new_best] = std_new[new_best]
+                                    elif n_n > n_b:
+                                        assert np.all(x_best == x_new[:n_b])
+                                        old_best = y_new[:n_b] > y_best
+                                        y_new[:n_b][old_best] = y_best[old_best]
+                                        std_new[:n_b][old_best] = std_best[old_best]
+                                        x_best = x_new
+                                        y_best = y_new
+                                        std_best = std_new
+                                    else:
+                                        new_best = y_new < y_best
+                                        y_best[new_best] = y_new[new_best]
+                                        std_best[new_best] = std_new[new_best]
                                 label = "transfer"
                                 l = label
                                 continue
@@ -496,7 +515,7 @@ def save_plots(
                     else:
                         ax.set_ylabel(title)
                 if add_legend:
-                    ax.legend(fontsize="small", framealpha=0.5, bbox_to_anchor=(1.01, 0), loc="lower left")
+                    ax.legend(fontsize="small", framealpha=0.5)  # bbox_to_anchor=(1.01, 0), loc="lower left")
                 save_figure(fig, pdir, f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}")
                 #fig.savefig(pdir / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
                 ax.clear()
@@ -599,6 +618,9 @@ def get_transfer_model(result):
         if m in tmp:
             if m == "GAT" and "GATv2" in tmp:
                 transfer_model = "GATv2"
+                break
+            if (m == "GPS" or m == "GCN") and "GPS-GCN" in tmp:
+                transfer_model = "GPS-GCN"
                 break
             transfer_model = m
             break

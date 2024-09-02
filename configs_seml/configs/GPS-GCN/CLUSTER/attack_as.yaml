@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 5
+  experiments_per_job: 3
   sbatch_options:
     partition: gpu_a100
     gres: gpu:1       # num GPUs
