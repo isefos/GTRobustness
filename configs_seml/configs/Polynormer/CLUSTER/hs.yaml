@@ -28,32 +28,32 @@ random:
   graphgym.optim.base_lr:
     seed: 126
     type: loguniform
-    min: 6.0e-4
-    max: 5.0e-3
+    min: 1.0e-4
+    max: 1.0e-2
 
   dims_per_head:
     seed: 43514
     type: randint
-    min: 4
-    max: 9
+    min: 5
+    max: 11
 
   graphgym.gnn.dropout:
     seed: 6233
     type: uniform
-    min: 0.0
-    max: 0.3
+    min: 0.05
+    max: 0.15
 
   graphgym.gnn.layers_mp:
     seed: 3672
     type: randint
-    min: 5
-    max: 13
+    min: 10
+    max: 17
 
   graphgym.gt.layers:
     seed: 11762
     type: randint
     min: 2
-    max: 6
+    max: 5
 
   graphgym.gnn.layers_post_mp:
     seed: 191
@@ -112,13 +112,13 @@ fixed:
 
     optim:
       optimizer: adamW
-      weight_decay: 1.0e-8
+      weight_decay: 1.0e-7
       max_epoch: 200
-      num_local_epochs: 30
+      num_local_epochs: 10
       scheduler: cosine_with_warmup
       num_warmup_epochs: 5
       early_stopping: true
-      early_stopping_patience: 40
+      early_stopping_patience: 50
       early_stopping_delta_e: 0.0
       early_stopping_warmup: 20
 
