@@ -134,6 +134,13 @@ def setup_run(graphgym, dims_per_head, dims_per_head_PE, seml_seed=None, jupyter
         elif model_type in ["SANTransformer", "WeightedSANTransformer", "GritTransformer", "GPSModel"]:
             dim_inner = dims_per_head * graphgym["gt"]["n_heads"]
             graphgym["gt"]["dim_hidden"] = dim_inner
+        elif model_type == "WeightedPolynormer":
+            assert graphgym["gt"]["n_heads"] == graphgym["gnn"]["att_heads"], (
+                "Polynormer hyperparameter search currently only supports same "
+                "amount of local and global attention heads"
+            )
+            dim_inner = dims_per_head * graphgym["gt"]["n_heads"]
+            graphgym["gt"]["dim_hidden"] = dim_inner
         elif model_type == "gnn" and graphgym["gnn"]["layer_type"] in ["gatconvweighted"]:
             dim_inner = dims_per_head * graphgym["gnn"]["att_heads"]
         else:
