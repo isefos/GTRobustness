@@ -10,6 +10,8 @@ def set_cfg_gt(cfg):
     - General Powerful Scalable (GPS) Model.
     """
 
+    # TODO: make special config nodes for specific settings that only apply to a single node (SAN, GRIT, ...)
+
     # Positional encodings argument group
     cfg.gt = CN()
 
@@ -50,6 +52,7 @@ def set_cfg_gt(cfg):
     cfg.gt.batch_norm = True
 
     # makes no difference for GRIT (always includes residual)
+    # TODO: make all implementations more general to include option
     cfg.gt.residual = True
 
     # BigBird model/GPS-BigBird layer.
@@ -84,3 +87,14 @@ def set_cfg_gt(cfg):
     cfg.gt.attn.norm_e = True
     cfg.gt.attn.O_e = True
     cfg.gt.attn.edge_enhance = True
+
+    # Polynormer
+    cfg.gt.polynormer = CN()
+    # TODO: input dropout, remove from here once more general setting is implemented
+    cfg.gt.polynormer.dropout_node_input = 0.0
+    cfg.gt.polynormer.beta = -1.
+    # TODO: move to gnn to be able to set BN xor LN
+    # essentially always set to false in original polynormer code 
+    cfg.gt.polynormer.local_pre_layer_norm = False
+    # always set to true in original polynormer code
+    cfg.gt.polynormer.qk_shared = True

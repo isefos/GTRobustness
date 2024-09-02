@@ -34,3 +34,6 @@ def extended_optim_cfg(cfg):
     cfg.optim.early_stopping_delta_e = 0.05
 
     cfg.optim.early_stopping_warmup = 10
+
+    # for Polynormer model, where global attention is only trained after local pre-training
+    cfg.optim.num_local_epochs = 0

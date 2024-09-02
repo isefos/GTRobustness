@@ -146,9 +146,10 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
 
     """
     start_epoch = 0
+    max_epoch = cfg.optim.max_epoch
     if cfg.train.auto_resume:
         start_epoch = load_ckpt(model, optimizer, scheduler, cfg.train.epoch_resume)
-    if start_epoch == cfg.optim.max_epoch:
+    if start_epoch == max_epoch:
         logging.info('Checkpoint found, Task already done')
     else:
         logging.info('Start from epoch %s', start_epoch)
@@ -158,6 +159,17 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
     best_val_loss = None
     patience_e = cfg.optim.early_stopping_delta_e
     patience_warmup = start_epoch + cfg.optim.early_stopping_warmup
+
+    # for polynormer with local pre-training:
+    if cfg.optim.num_local_epochs > 0:
+        assert max_epoch > cfg.optim.num_local_epochs, (
+            f"total number of epochs ({max_epoch}) must be larger than "
+            f"the number of local pre-train epochs ({cfg.optim.num_local_epochs})"
+        )
+        logging.info('local-only pre-training for %s epochs', cfg.optim.num_local_epochs)
+        logging.info('global training for %s epochs', max_epoch - cfg.optim.num_local_epochs)
+        patience_warmup += cfg.optim.num_local_epochs
+        model.model._global = False
 
     if cfg.wandb.use:
         try:
@@ -175,11 +187,16 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
     split_names = ['val', 'test']
     full_epoch_times = []
     perf = [[] for _ in range(num_splits)]
-    for cur_epoch in range(start_epoch, cfg.optim.max_epoch):
+    for cur_epoch in range(start_epoch, max_epoch):
 
         if early_stopping and patience <= 0:
             logging.info('Early stopping because validation loss is not decreasing further')
             break
+
+        # for polynormer, with from local pre-training to global
+        if cur_epoch == cfg.optim.num_local_epochs:
+            logging.info('Local-only pre-training done, starting global training')
+            model.model._global = True
 
         start_time = time.perf_counter()
         train_epoch(loggers[0], loaders[0], model, optimizer, scheduler, cfg.optim.batch_accumulation)

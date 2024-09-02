@@ -9,3 +9,5 @@ def custom_gnn_cfg(cfg):
 
     # Use residual connections between the GNN layers.
     cfg.gnn.residual = False
+
+    # TODO: add universal node input dropout that gets applied after the encoders

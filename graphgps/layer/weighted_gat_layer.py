@@ -47,8 +47,8 @@ class WeightedGATConvGraphGymLayer(nn.Module):
         per_head_dim_out = layer_config.dim_out // heads
         if (heads * per_head_dim_out) != layer_config.dim_out:
             raise ValueError(
-                f"The given hidden channel size ({layer_config.dim_out}) is not divisible by the number of "
-                f"attention heads ({heads}). Hidden channel size was set to {per_head_dim_out * heads}."
+                f"The given hidden channel size ({layer_config.dim_out}) is not "
+                f"divisible by the number of attention heads ({heads})."
             )
         # cfg.gnn.aggr is not used, aggregation is always 'add', but the attention scores always sum to 1 (softmax), 
         # so 'mean' would be double normalization
@@ -87,7 +87,7 @@ class WeightedGATv2ConvLayer(pyg_nn.GATv2Conv):
 
 
 @register_layer('gatv2convweighted')
-class WeightedGATConvGraphGymLayer(nn.Module):
+class WeightedGATv2ConvGraphGymLayer(nn.Module):
     """
     Graph Attention Network (GATv2) layer, with probabilistic edges
     """
