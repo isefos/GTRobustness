@@ -30,7 +30,12 @@ def main_function(cfg):
         training_results = None
     else:
         assert cfg.train.mode != 'standard', "Default train.mode not supported, use `custom` (or other specific mode)"
-        training_results = train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
+        if cfg.train.mode == "custom":
+            training_results = train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
+        elif cfg.train.mode == "adversarial":
+            training_results = train_dict[cfg.train.mode](loggers, loaders, model, optimizer, scheduler)
+        else:
+            raise ValueError(f"Invalid training mode: train.mode=`{cfg.train.mode}`")
 
     # Robustness unit test
     rut_results = None
