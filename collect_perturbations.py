@@ -92,6 +92,7 @@ models = {
     "GATv2": {"type": set(["gnn"]), "gnn_layer_type": set(["gatv2convweighted", "gatv2conv"])},
     "GPS": {"type": set(["GPSModel"]), "gnn_layer_type": None},
     "GPS-GCN": {"type": set(["GPSModel"]), "gnn_layer_type": None},
+    "Polynormer": {"type": set(["WeightedPolynormer"]), "gnn_layer_type": None},
 }
 
 
