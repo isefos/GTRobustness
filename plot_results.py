@@ -56,6 +56,7 @@ models = {
     "GATv2": {"color": "m", "linestyle": (0, (5, 1)), "marker": "p", "markersize": 8},
     "GPS": {"color": "c", "linestyle": (0, (3, 5, 1, 5, 1, 5)), "marker": "P", "markersize": 8},
     "GPS-GCN": {"color": "olive", "linestyle": (0, (3, 1, 1, 1, 1, 1)), "marker": "d", "markersize": 8},
+    "Polynormer": {"color": "springgreen", "linestyle": "dotted", "marker": "^", "markersize": 8},
 
 }
 metrics = {"acc": "Accuracy (\%)", "asr": "Attack success rate (\%)", "margin": "Margin"}

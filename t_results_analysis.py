@@ -46,6 +46,7 @@ models = {
     "GATv2": {"type": set(["gnn"]), "gnn_layer_type": set(["gatv2convweighted", "gatv2conv"])},
     "GPS": {"type": set(["GPSModel"]), "gnn_layer_type": None},
     "GPS-GCN": {"type": set(["GPSModel"]), "gnn_layer_type": None},
+    "Polynormer": {"type": set(["WeightedPolynormer"]), "gnn_layer_type": None},
 }
 
 
@@ -131,10 +132,10 @@ styles = {
     "adaptive": {"color": ["b"], "linestyle": [":"], "marker": ["o"], "markersize": [6]},
     "random": {"color": ["g"], "linestyle": ["-."], "marker": ["*"], "markersize": [9]},
     "transfer": {
-        "color": ["r", "k", "orange", "m", "aqua", "blue"],
-        "linestyle": ["--", (0, (3, 5, 1, 5, 1, 5)), (0, (5, 10)), (0, (5, 1)), (0, (1, 1)), (0, (5, 10))],
-        "marker": ["v", "s", "X", "p", "s", "s"],
-        "markersize": [7, 6, 8, 8, 8, 8],
+        "color": ["r", "k", "orange", "m", "aqua", "blue", "darkviolet", "springgreen"],
+        "linestyle": ["--", (0, (3, 5, 1, 5, 1, 5)), (0, (5, 10)), (0, (5, 1)), (0, (1, 1)), (0, (5, 10)), "--", (0, (3, 5, 1, 5, 1, 5))],
+        "marker": ["v", "s", "X", "p", "s", "s", "P", "*"],
+        "markersize": [7, 6, 8, 8, 8, 8, 8, 8],
     },
 }
 
