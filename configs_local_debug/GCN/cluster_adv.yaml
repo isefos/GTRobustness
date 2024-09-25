@@ -54,7 +54,7 @@ graphgym:
     eval_period: 1
     batch_size: 8
     adv:
-      batched_train: False
+      batched_train: True
       e_budget: 0.05
       block_size: 1000
       num_replays: 6

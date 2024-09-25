@@ -40,13 +40,8 @@ def adversarial_train(loggers, loaders, model, optimizer, scheduler):
             "with node injection or pruning away isolated components."
         )
     start_epoch = 0
-    # divide the number of epochs by the number of replays:
-    max_epoch = cfg.optim.max_epoch // cfg.train.adv.num_replays
-    if max_epoch == 0:
-        logging.info(
-            f'Set a higher max_epoch (={cfg.optim.max_epoch}), as with num_replays={cfg.train.adv.num_replays} '
-            f'this results in 0 total epochs'
-        )
+    # should be set as the number of "normal" epochs divided by the number of replays
+    max_epoch = cfg.optim.max_epoch
     if cfg.train.auto_resume:
         start_epoch = load_ckpt(model, optimizer, scheduler, cfg.train.epoch_resume)
     if start_epoch == max_epoch:
