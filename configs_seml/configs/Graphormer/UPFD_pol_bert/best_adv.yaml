@@ -15,7 +15,9 @@ slurm:
     qos: deadline
 
 fixed:
-  graphgym:  
+
+  graphgym:
+
     accelerator: cuda
     benchmark: false
     bn:
@@ -39,14 +41,14 @@ fixed:
       encoder_dim: 128
       encoder_name: db
       format: PyG-UPFD
-      infer_link_label: null
+      infer_link_label: None
       label_column: none
       label_table: none
       location: local
       name: politifact-bert
       node_encoder: true
       node_encoder_bn: false
-      node_encoder_name: LinearNode
+      node_encoder_name: LinearNode+WeightedGraphormerBias
       node_encoder_num_types: 0
       remove_feature: false
       resample_disjoint: false
@@ -78,14 +80,14 @@ fixed:
       att_heads: 1
       batchnorm: true
       clear_feature: true
-      dim_inner: 473
+      dim_inner: 40
       dropout: 0.0
-      head: weighted_mean_pool_graph
+      head: graphormer_graph
       keep_edge: 0.5
       l2norm: true
-      layer_type: gcnconvweighted
+      layer_type: generalconv
       layers_mp: 2
-      layers_post_mp: 3
+      layers_post_mp: 1
       layers_pre_mp: 0
       msg_direction: single
       normalize_adj: false
@@ -94,26 +96,35 @@ fixed:
       skip_every: 1
       stage_type: stack
     gpu_mem: false
+    graphormer:
+      attention_dropout: 0.0
+      dropout: 0.0
+      embed_dim: 40
+      input_dropout: 0.0
+      mlp_dropout: 0.0
+      num_heads: 8
+      num_layers: 6
+      use_graph_token: true
     mem:
       inplace: false
     metric_agg: argmax
     metric_best: accuracy
     model:
       edge_decoding: dot
-      graph_pooling: add
+      graph_pooling: graph_token
       loss_fun: cross_entropy
       match_upper: true
       size_average: mean
       thresh: 0.5
-      type: gnn
+      type: Graphormer
 
     attack:
       enable: true
       e_budget: 0.15
       num_attacked_graphs: 30
-      skip_incorrect_graph_classification: false
+      skip_incorrect_graph_classification: true
       log_progress: false
-      load_best_model: false
+      load_best_model: true
       split: test
       prediction_level: graph
       remove_isolated_components: true
@@ -152,7 +163,7 @@ fixed:
       eval_period: 1
       batch_size: 16
       adv:
-        batched_train: True
+        batched_train: False
         e_budget: 0.15
         block_size: 500
         num_replays: 5
@@ -162,21 +173,21 @@ fixed:
         block_size_val: 1000
         epochs_val: 12
         lr_val: 4000
-  
+
     optim:
-      base_lr: 0.005286030166148311
+      base_lr: 0.0001291431389395534
       batch_accumulation: 1
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       early_stopping: true
-      early_stopping_delta_e: 0.04
+      early_stopping_delta_e: 0.05
       early_stopping_patience: 6
       early_stopping_warmup: 6
       lr_decay: 0.1
       max_epoch: 60
       min_lr: 0.0
       momentum: 0.9
-      num_warmup_epochs: 10
+      num_warmup_epochs: 5
       optimizer: adamW
       reduce_factor: 0.1
       schedule_patience: 10
@@ -185,6 +196,16 @@ fixed:
       - 30
       - 60
       - 90
-      weight_decay: 0.025931832281559417
+      weight_decay: 0.0067022017097888706
 
-    seed: 1094
+    posenc_GraphormerBias:
+      dim_pe: 0
+      directed_graphs: false
+      enable: true
+      has_edge_attr: false
+      node_degrees_only: false
+      num_in_degrees: 37
+      num_out_degrees: 37
+      num_spatial_types: 10
+
+    seed: 1982
