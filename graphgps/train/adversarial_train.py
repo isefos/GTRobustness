@@ -3,7 +3,7 @@ import time
 
 import numpy as np
 import torch
-import torch.nn.functional as F
+from torch import Tensor
 from torch_geometric.graphgym.checkpoint import load_ckpt, save_ckpt, clean_ckpt
 from torch_geometric.graphgym.config import cfg
 from torch_geometric.graphgym.loss import compute_loss
@@ -11,77 +11,42 @@ from torch_geometric.graphgym.register import register_train
 from torch_geometric.graphgym.utils.epoch import is_eval_epoch, is_ckpt_epoch
 
 from graphgps.loss.subtoken_prediction_loss import subtoken_cross_entropy
-from graphgps.train.custom_train import _get_epoch_log_results, eval_epoch, homophily_regularization
-from graphgps.utils import cfg_to_dict, flatten_dict, make_wandb_name
+from graphgps.train.custom_train import (
+    _get_epoch_log_results,
+    eval_epoch,
+    get_best_epoch,
+    init_wandb,
+    log_wandb_val_epoch,
+    checkpoint_and_log,
+)
+from graphgps.utils import flatten_dict
 
-
-def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation):
-    model.train()
-    optimizer.zero_grad()
-    time_start = time.time()
-    for iter, batch in enumerate(loader):
-        #batch.split = 'train' -> commented to make homophily_regularization possible
-        batch.to(torch.device(cfg.accelerator))
-        original_edge_index = batch.edge_index.clone()
-        pred, true = model(batch)
-
-        if cfg.gnn.head == "node" and batch.get("train_mask") is not None:
-            pred_full, true_full = pred, true
-            mask = batch.train_mask
-            pred, true = pred_full[mask], true_full[mask] if true_full is not None else None
-        else:
-            pred_full, true_full = None, None
-
-        if cfg.dataset.name == 'ogbg-code2':
-            loss, pred_score = subtoken_cross_entropy(pred, true)
-            _true = true
-            _pred = pred_score
-        else:
-            loss, pred_score = compute_loss(pred, true)
-            _true = true.detach().to('cpu', non_blocking=True)
-            _pred = pred_score.detach().to('cpu', non_blocking=True)
-        
-        # add homophily regularization if specified
-        if pred_full is not None and cfg.train.homophily_regularization > 0:
-            reg = homophily_regularization(
-                pred_full, true_full, original_edge_index, batch.train_mask, batch.x.size(0),
-            )
-            loss += cfg.train.homophily_regularization * reg
-        
-        loss.backward()
-        # Parameters update after accumulating gradients for given num. batches.
-        if ((iter + 1) % batch_accumulation == 0) or (iter + 1 == len(loader)):
-            if cfg.optim.clip_grad_norm:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.optim.clip_grad_norm_value)
-            optimizer.step()
-            optimizer.zero_grad()
-        logger.update_stats(
-            true=_true,
-            pred=_pred,
-            loss=loss.detach().cpu().item(),
-            lr=scheduler.get_last_lr()[0],
-            time_used=time.time() - time_start,
-            params=cfg.params,
-            dataset_name=cfg.dataset.name,
-        )
-        time_start = time.time()
+from graphgps.attack.preprocessing import add_node_prob, remove_isolated_components
+from torch_geometric.data import Batch, Data
+from graphgps.attack.attack import get_attack_graph
+from graphgps.attack.dataset_attack import get_total_dataset_graphs
+from graphgps.transform.lap_eig import get_repeated_eigenvalue_slices
+from graphgps.attack.prbcd import PRBCDAttack
+from graphgps.attack.prbcd_nia import PRBCDAttackNI
 
 
 @register_train('adversarial')
-def custom_train(loggers, loaders, model, optimizer, scheduler):
-    """
-    Customized training pipeline.
-
-    Args:
-        loggers: List of loggers
-        loaders: List of loaders
-        model: GNN model
-        optimizer: PyTorch optimizer
-        scheduler: PyTorch learning rate scheduler
-
-    """
+def adversarial_train(loggers, loaders, model, optimizer, scheduler):
+    """Adversarial training pipeline."""
+    # currently no node injection supported for transductive
+    if cfg.dataset.task == "node" and (cfg.attack.node_injection.enable or cfg.attack.remove_isolated_components):
+        raise NotImplementedError(
+            "Need to handle the node mask (also to calculate attack success rate) "
+            "with node injection or pruning away isolated components."
+        )
     start_epoch = 0
-    max_epoch = cfg.optim.max_epoch
+    # divide the number of epochs by the number of replays:
+    max_epoch = cfg.optim.max_epoch // cfg.train.adv.num_replays
+    if max_epoch == 0:
+        logging.info(
+            f'Set a higher max_epoch (={cfg.optim.max_epoch}), as with num_replays={cfg.train.adv.num_replays} '
+            f'this results in 0 total epochs'
+        )
     if cfg.train.auto_resume:
         start_epoch = load_ckpt(model, optimizer, scheduler, cfg.train.epoch_resume)
     if start_epoch == max_epoch:
@@ -92,7 +57,7 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
     early_stopping = cfg.optim.early_stopping
     patience = cfg.optim.early_stopping_patience
     best_val_loss = None
-    patience_e = cfg.optim.early_stopping_delta_e
+    patience_m = 1 + cfg.optim.early_stopping_delta_e
     patience_warmup = start_epoch + cfg.optim.early_stopping_warmup
 
     # for polynormer with local pre-training:
@@ -106,17 +71,15 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
         patience_warmup += cfg.optim.num_local_epochs
         model.model._global = False
 
+    # for the attack part
+    if cfg.attack.node_injection.enable:
+        AttackBaseClass = PRBCDAttackNI
+    else:
+        AttackBaseClass = PRBCDAttack
+    TrainAttackClass = get_train_attack_class(AttackBaseClass)
+    
     if cfg.wandb.use:
-        try:
-            import wandb
-        except:
-            raise ImportError('WandB is not installed.')
-        if cfg.wandb.name == '':
-            wandb_name = make_wandb_name(cfg)
-        else:
-            wandb_name = cfg.wandb.name
-        run = wandb.init(entity=cfg.wandb.entity, project=cfg.wandb.project, name=wandb_name)
-        run.config.update(cfg_to_dict(cfg))
+        run = init_wandb()
 
     num_splits = len(loggers)
     split_names = ['val', 'test']
@@ -129,115 +92,314 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
             break
 
         # for polynormer, with from local pre-training to global
-        if cur_epoch == cfg.optim.num_local_epochs:
+        if cur_epoch and cur_epoch == cfg.optim.num_local_epochs:
             logging.info('Local-only pre-training done, starting global training')
             model.model._global = True
 
+        # train epoch
         start_time = time.perf_counter()
-        train_epoch(loggers[0], loaders[0], model, optimizer, scheduler, cfg.optim.batch_accumulation)
+        adversarial_train_epoch(loggers[0], loaders[0], model, optimizer, scheduler, TrainAttackClass)
         perf[0].append(loggers[0].write_epoch(cur_epoch))
 
         if is_eval_epoch(cur_epoch):
+            # TODO: add attack val eval
             for i in range(1, num_splits):
                 eval_epoch(loggers[i], loaders[i], model, split=split_names[i - 1])
                 perf[i].append(loggers[i].write_epoch(cur_epoch))
         else:
+            # repeat log of previous eval
             for i in range(1, num_splits):
                 perf[i].append(perf[i][-1])
 
-        val_perf = perf[1]
+        # lr scheduler
         if cfg.optim.scheduler == 'reduce_on_plateau':
-            scheduler.step(val_perf[-1]['loss'])
+            # based on val loss
+            scheduler.step(perf[1][-1]['loss'])
         else:
             scheduler.step()
+
+        # time
         full_epoch_times.append(time.perf_counter() - start_time)
-        # Checkpoint with regular frequency (if enabled).
+
+        # checkpoint with regular frequency (if enabled)
         if cfg.train.enable_ckpt and not cfg.train.ckpt_best and is_ckpt_epoch(cur_epoch):
             save_ckpt(model, optimizer, scheduler, cur_epoch)
 
         if cfg.wandb.use:
             run.log(flatten_dict(perf), step=cur_epoch)
 
-        # Log current best stats on eval epoch.
+        # log current best stats on eval epoch
         if is_eval_epoch(cur_epoch):
-            val_losses = np.array([vp['loss'] for vp in val_perf])
+            val_losses = np.array([vp['loss'] for vp in perf[1]])
             val_loss_cur_epoch = float(val_losses[-1])
 
+            # patience is computed on validation loss
             if cur_epoch > patience_warmup:
                 if best_val_loss is None:
                     best_val_loss = val_loss_cur_epoch
                 elif val_loss_cur_epoch < best_val_loss:
                     best_val_loss = val_loss_cur_epoch
-                elif (1 + patience_e) * best_val_loss <= val_loss_cur_epoch:
+                elif patience_m * best_val_loss <= val_loss_cur_epoch:
                     patience -= 1
 
             best_epoch = int(val_losses.argmin())
-            best_train = best_val = best_test = ""
+            best_m = ["", "", ""]  # loss is reported anyway
+
             if cfg.metric_best != 'auto':
-                # Select again based on val perf of `cfg.metric_best`.
+                # select again based on val perf of `cfg.metric_best`.
                 m = cfg.metric_best
-                val_metric = np.array([vp[m] for vp in val_perf])
-                if cfg.metric_agg == "argmax":
-                    metric_agg = "max"
-                elif cfg.metric_agg == "argmin":
-                    metric_agg = "min"
-                else:
-                    raise ValueError("cfg.metric_agg should be either 'argmax' or 'argmin'")
-                best_val_metric = getattr(val_metric, metric_agg)()
-                best_val_metric_epochs = np.arange(len(val_metric), dtype=int)[val_metric == best_val_metric]
-                # use loss to decide when epochs have same best metric
-                best_epoch = int(best_val_metric_epochs[val_losses[best_val_metric_epochs].argmin()])
-                if m in perf[0][best_epoch]:
-                    best_train = f"train_{m}: {perf[0][best_epoch][m]:.4f}"
-                else:
-                    # Note: For some datasets it is too expensive to compute
-                    # the main metric on the training set.
-                    best_train = f"train_{m}: {0:.4f}"
-                best_val = f"val_{m}: {perf[1][best_epoch][m]:.4f}"
-                best_test = f"test_{m}: {perf[2][best_epoch][m]:.4f}"
+                
+                # also updated best_m with the metric values
+                best_epoch = get_best_epoch(perf, val_losses, m, best_m)
 
                 if cfg.wandb.use:
-                    bstats = {"best/epoch": best_epoch}
-                    for i, s in enumerate(['train', 'val', 'test']):
-                        bstats[f"best/{s}_loss"] = perf[i][best_epoch]['loss']
-                        if m in perf[i][best_epoch]:
-                            bstats[f"best/{s}_{m}"] = perf[i][best_epoch][m]
-                            run.summary[f"best_{s}_perf"] = perf[i][best_epoch][m]
-                        for x in ['hits@1', 'hits@3', 'hits@10', 'mrr']:
-                            if x in perf[i][best_epoch]:
-                                bstats[f"best/{s}_{x}"] = perf[i][best_epoch][x]
-                    run.log(bstats, step=cur_epoch)
-                    run.summary["full_epoch_time_avg"] = np.mean(full_epoch_times)
-                    run.summary["full_epoch_time_sum"] = np.sum(full_epoch_times)
-            # Checkpoint the best epoch params (if enabled).
-            if cfg.train.enable_ckpt and cfg.train.ckpt_best and best_epoch == cur_epoch:
-                save_ckpt(model, optimizer, scheduler, cur_epoch)
-                if cfg.train.ckpt_clean:  # Delete old ckpt each time.
-                    clean_ckpt()
-            logging.info(
-                f"> Epoch {cur_epoch}: took {full_epoch_times[-1]:.1f}s "
-                f"(avg {np.mean(full_epoch_times):.1f}s) | "
-                f"Best so far: epoch {best_epoch}\t"
-                f"train_loss: {perf[0][best_epoch]['loss']:.4f} {best_train}\t"
-                f"val_loss: {perf[1][best_epoch]['loss']:.4f} {best_val}\t"
-                f"test_loss: {perf[2][best_epoch]['loss']:.4f} {best_test}"
-            )
-            if hasattr(model, 'trf_layers'):
-                # Log SAN's gamma parameter values if they are trainable.
-                for li, gtl in enumerate(model.trf_layers):
-                    if torch.is_tensor(gtl.attention.gamma) and gtl.attention.gamma.requires_grad:
-                        logging.info(f"    {gtl.__class__.__name__} {li}: gamma={gtl.attention.gamma.item()}")
+                    log_wandb_val_epoch(run, perf, m, cur_epoch, best_epoch, full_epoch_times)
+
+            # checkpoint and log
+            checkpoint_and_log(model, optimizer, scheduler, cur_epoch, best_epoch, perf, full_epoch_times, best_m)
+    
     logging.info(f"Avg time per epoch: {np.mean(full_epoch_times):.2f}s")
     logging.info(f"Total train loop time: {np.sum(full_epoch_times) / 3600:.2f}h")
     for logger in loggers:
         logger.close()
     if cfg.train.ckpt_clean:
         clean_ckpt()
-    # close wandb
+
     if cfg.wandb.use:
         run.finish()
-        run = None
+
     logging.info('Task done, results saved in %s', cfg.run_dir)
-    # return the logged results per epoch in a differently organized way:
+    # return the logged results per epoch (organized differently)
     results = _get_epoch_log_results(perf, best_epoch)
     return results
+
+
+def adversarial_train_epoch(logger, loader, model, optimizer, scheduler, TrainAttackClass):
+    model.train()
+    optimizer.zero_grad()
+    time_start = time.time()
+    for b_i, batch in enumerate(loader):
+        # Each batch can be seen as the dataset to be attacked 
+        # (batch shuffle=True, therefore can't create constant global index)
+        # Do we also want to be able to insert nodes from other batches? 
+        #  - With shuffle not that necessary, given that batch size is large enough
+
+        # for node injection attacks, precompute the dataset / graph augmentations
+        total_attack_dataset_graph, attack_dataset_slices = None, None
+        if cfg.attack.node_injection.enable:
+            total_attack_dataset_graph, attack_dataset_slices, _ = get_total_dataset_graphs(
+                inject_nodes_from_attack_dataset=True,
+                dataset_to_attack=batch,
+                additional_injection_datasets=None,
+                include_root_nodes=cfg.attack.node_injection.include_root_nodes,
+            )
+        batch_size = batch.num_graphs
+
+        # create an attacker for each graph in the batch (currently all loaded onto GPU, maybe inefficient)
+        attackers = []
+        for i, data in enumerate(batch.to_data_list()):
+            # get the train nodes' indices (currently incompatible with node injection, checked at start of training)
+            node_mask = data.get(f'train_mask')
+            if node_mask is not None:
+                node_mask = node_mask.to(device=torch.device(cfg.accelerator))
+                assert not cfg.attack.prediction_level == "graph"
+            # augment graph when node injection
+            attack_graph_data = get_attack_graph(
+                graph_data=data,
+                total_attack_dataset_graph=total_attack_dataset_graph,
+                attack_dataset_slice=None if attack_dataset_slices is None else attack_dataset_slices[i],
+                # only inject from training dataset to prevent val/test data leakage
+                total_additional_datasets_graph=None,
+            )
+            attack_graph_data.to(device=torch.device(cfg.accelerator))
+            # create new attack object for this graph
+            attackers.append(
+                TrainAttackClass(
+                    model,
+                    x=attack_graph_data.x,
+                    edge_index=attack_graph_data.edge_index,
+                    labels=attack_graph_data.y,
+                    idx_attack=node_mask,
+                )
+            )
+
+        # replay (train multiple iterations) on the same batch k times to get a k-step attack optimization 
+        for replay in range(cfg.train.adv.num_replays):
+            data_list = []
+
+            # loop over batch samples and do 1 attack step and get 1 new adversarial sample
+            for d_i, train_attack in enumerate(attackers):
+                # optimization step for attack
+                attack_step_stats = train_attack.train_attack_step(replay)
+                # TODO: log these stats?
+                data = train_attack.get_discrete_sample()
+                # for train
+                if cfg.train.adv.batched_train:
+                    # save adv sample for batched update
+                    data_list.append(data)
+                else:
+                    # already do single update and accumulate gradient
+                    time_start = train_forward_backward(model, data, batch_size, time_start, logger, scheduler)
+
+            if cfg.train.adv.batched_train:
+                time_start = train_forward_backward(model, data_list, batch_size, time_start, logger, scheduler)
+            # model parameter update step outside of the batch samples loop (with accumulated gradients)
+            if cfg.optim.clip_grad_norm:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.optim.clip_grad_norm_value)
+            optimizer.step()
+            optimizer.zero_grad()
+
+
+def train_forward_backward(model, data: list[Data] | Data, batch_size: int, time_start, logger, scheduler):
+    if type(data) is list:
+        data = Batch.from_data_list(data)
+        batch_size = 1  # no need for batch normalization, already doing batched update
+        retain_graph = False
+    else:
+        data = Batch.from_data_list([data])
+        retain_graph = True
+    data.split = 'train'
+    # forward train
+    pred, true = model(data)
+    # training loss and backward
+    if cfg.dataset.name == 'ogbg-code2':
+        loss, pred_score = subtoken_cross_entropy(pred, true)
+        _true = true
+        _pred = pred_score
+    else:
+        loss, pred_score = compute_loss(pred, true)
+        _true = true.detach().to('cpu', non_blocking=True)
+        _pred = pred_score.detach().to('cpu', non_blocking=True)
+    # when accumulating the model param gradients: normalize by batch size
+    if batch_size > 1:
+        loss /= batch_size
+    loss.backward(retain_graph=retain_graph)
+    # TODO: update other attack related stats?
+    # log unnormalized loss, because logger also normalizes, we avoid double norm to be comparable to val loss
+    logger.update_stats(
+        true=_true,
+        pred=_pred,
+        loss=loss.detach().cpu().item() * batch_size,
+        lr=scheduler.get_last_lr()[0],
+        time_used=time.time() - time_start,
+        params=cfg.params,
+        dataset_name=cfg.dataset.name,
+    )
+    return time.time()
+
+
+def get_train_attack_class(AttackBaseClass):
+    """
+    returns attack class with some new / overwritten methods for "free" adversarial training setting
+    """
+    assert AttackBaseClass in [PRBCDAttack, PRBCDAttackNI]
+
+    class TrainAttackClass(AttackBaseClass):
+        def __init__(
+            self,
+            model,
+            x: Tensor,
+            edge_index: Tensor,
+            labels: Tensor,
+            idx_attack: None | Tensor = None,
+        ):
+            super().__init__(model)
+            # Set early stopping to False
+            self.coeffs['with_early_stopping'] = False
+
+            # compute the budget, at least 1
+            budget_edges = edge_index.size(1)
+            if cfg.attack.is_undirected:
+                budget_edges //= 2
+            # at least one
+            self.budget = max(1, int(cfg.train.adv.e_budget * budget_edges))
+            
+            self.block_size = cfg.train.adv.block_size
+            self.epochs = cfg.train.adv.num_replays
+            self.lr = cfg.train.adv.lr
+            # always resample
+            self.epochs_resampling = self.epochs
+            self.resample_period = 1
+
+            # set eps higher, such that early iterations can already produce num perturbations close to budget
+            # init such that 10% of the budget is used
+            self.coeffs['eps'] = 0.1 * self.budget / self.block_size
+
+            # prepare for the attack steps
+            self._attack_self_setup(x, edge_index)
+            # if x is on cpu will set self.device to cpu, could either:
+            #  1) set self.device = cfg.accelerator  # here, then the perturbation tensors will all be on gpu
+            #  2) move everything onto gpu only when needed in the forward pass (may take more time, but avoids 
+            #     memory issues for large batch sizes with large block sizes)
+            #  3) move x (and others) to gpu before creating, could potentially use a lot of GPU memory 
+            #     (each graph in the batch could be augmented to the size of the batch, so b^2 instead of b memory)
+            # for now chose 3)
+            #self.device = cfg.accelerator
+            self._setup_sampling(x=x)
+            self.x = x
+            self.labels = labels
+            self.idx_attack = idx_attack
+            _ = self._prepare(self.budget)
+            # only set model to eval when actually inside attack step method
+            model.train()
+
+        def train_attack_step(self, replay: int):
+            self.model.eval()
+            # don't want to accumulate training gradients from this attack forward pass
+            for param in self.model.parameters():
+                param.requires_grad = False
+            # do the attack optimization
+            loss, gradient = self._forward_and_gradient(self.x, self.labels, self.idx_attack, retain_graph=True)
+            scalars = self._update(replay, gradient, self.x, self.labels, self.budget, loss, self.idx_attack, None)
+            # reset the gradient for next step
+            self.block_edge_weight.grad = None
+            self.block_edge_weight.requires_grad = False
+            # accumulate training gradients from next train forward pass
+            self.model.train()
+            for param in self.model.parameters():
+                param.requires_grad = True
+            return scalars
+        
+        def _forward(self, x: Tensor, edge_index: None | Tensor, edge_weight: Tensor, discrete: bool, **kwargs):
+            assert (discrete and edge_weight is None) or (not discrete and edge_weight is not None)
+            data = self._get_forward_data(x, edge_index, edge_weight, discrete)
+            # remove isolated components (if specified in cfg), important for efficient node injection
+            data, root_node = remove_isolated_components(data)
+            # add the "clean" laplacian info, from which will be perturbed
+            if not discrete and cfg.posenc_WLapPE.enable and cfg.attack.SAN.enable_pert_grad:
+                self._add_laplacian_info(data)
+                # check for repeated eigenvalues:
+                data.E_rep_slices_min, data.E_rep_slices_max = get_repeated_eigenvalue_slices(
+                    data.E_clean, cfg.attack.SAN.eps_repeated_eigenvalue,
+                )
+            data.attack_mode = True
+            # add node probability, if needed
+            add_node_prob(data, root_node)
+            data = Batch.from_data_list([data])
+            model_prediction, _ = self.model(data, **kwargs)  # don't need the y ground truth
+            return model_prediction
+
+        def get_discrete_sample(self) -> Data:
+            """only a single sample without budget check for a single training forward pass"""
+            block_edge_weight = self.block_edge_weight
+            block_edge_weight[block_edge_weight <= self.coeffs['eps']] = 0
+            sampled_edges = torch.zeros_like(block_edge_weight)
+            sampled_edges_mask = torch.bernoulli(block_edge_weight).to(bool)
+            sampled_edges[sampled_edges_mask] = block_edge_weight[sampled_edges_mask]
+            # no budget check, not too important during training
+            edge_index = self._get_discrete_sampled_graph(sampled_edges)[0]
+            data = self._get_forward_data(self.x, edge_index, edge_weight=None, discrete=True)
+            # add back the train_mask
+            if self.idx_attack:
+                data.train_mask = self.idx_attack
+            # remove isolated components (if specified in cfg), important for efficient node injection
+            data, root_node = remove_isolated_components(data)
+            data.attack_mode = False
+            # add node probability, if needed
+            add_node_prob(data, root_node)
+            # add y
+            data.y = self.labels
+            return data
+
+
+    return TrainAttackClass

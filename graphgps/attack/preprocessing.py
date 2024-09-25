@@ -29,39 +29,38 @@ def forward_wrapper(forward: Callable) -> Callable:
         root_node: int | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        
         data.attack_mode = False
         if not unmodified:
             data.attack_mode = True
-                
-            use_64bit = False
-            num_nodes = data.x.size(0)
-
-            if cfg.attack.node_prob_enable:
-                if cfg.attack.node_prob_log:
-                    data.node_logprob = get_node_logprob(
-                        edge_index=data.edge_index,
-                        edge_weights=data.edge_attr,
-                        num_nodes=num_nodes,
-                        is_undirected=cfg.attack.is_undirected,
-                        root_node=root_node,
-                        num_iterations=cfg.attack.node_prob_iterations,
-                        use_64bit=use_64bit,
-                    )
-                else:
-                    data.node_prob = node_in_graph_prob(
-                        edge_index=data.edge_index,
-                        edge_weights=data.edge_attr,
-                        num_nodes=num_nodes,
-                        undirected=cfg.attack.is_undirected,
-                        root_node=root_node,
-                        num_iterations=cfg.attack.node_prob_iterations,
-                    )
+            add_node_prob(data, root_node)
         data = Batch.from_data_list([data])
         model_prediction, _ = forward(data, **kwargs)  # don't need the y ground truth
         return model_prediction
 
     return wrapped_forward
+
+
+def add_node_prob(data: Data, root_node: int | None) -> None:
+    if cfg.attack.node_prob_enable:
+        if cfg.attack.node_prob_log:
+            data.node_logprob = get_node_logprob(
+                edge_index=data.edge_index,
+                edge_weights=data.edge_attr,
+                num_nodes=data.x.size(0),
+                is_undirected=cfg.attack.is_undirected,
+                root_node=root_node,
+                num_iterations=cfg.attack.node_prob_iterations,
+                use_64bit=False,
+            )
+        else:
+            data.node_prob = node_in_graph_prob(
+                edge_index=data.edge_index,
+                edge_weights=data.edge_attr,
+                num_nodes=data.x.size(0),
+                undirected=cfg.attack.is_undirected,
+                root_node=root_node,
+                num_iterations=cfg.attack.node_prob_iterations,
+            )
 
 
 def get_only_root_graph(data: Data, root_node: int):
@@ -340,7 +339,7 @@ def node_in_graph_prob_directed(
 
 def node_in_graph_prob(
     edge_index: torch.Tensor,
-    edge_weights: torch.Tensor,
+    edge_weights: None | torch.Tensor,
     num_nodes: int,
     undirected: bool,
     num_iterations: int = 5,

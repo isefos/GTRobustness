@@ -49,7 +49,7 @@ class PRBCDAttackNI(PRBCDAttack):
         )
         self.sample_only_trees = cfg.attack.node_injection.sample_only_trees
 
-    def _setup_sampling(self, **kwargs):
+    def _setup_sampling(self, *args, **kwargs):
         num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
 
         # 'Weighted' sampling
@@ -97,12 +97,12 @@ class PRBCDAttackNI(PRBCDAttack):
         else:
             self.sample_edge_indices = lambda n: torch.randint(num_possible_edges, (n, ), device=self.device)
 
-    def _attack_self_setup(self, x, edge_index, kwargs, random_baseline=False):
-        super()._attack_self_setup(x, edge_index, kwargs, random_baseline)
+    def _attack_self_setup(self, x, edge_index, random_baseline=False):
+        super()._attack_self_setup(x, edge_index, random_baseline)
         self.num_injection_nodes = self.num_nodes - self.num_connected_nodes
         assert self.num_injection_nodes > 0, "use normal structure attack if no injection nodes are given"
 
-    def _get_forward_data(self, x, edge_index, edge_weight, discrete):
+    def _get_forward_data(self, x: Tensor, edge_index: Tensor, edge_weight: None | Tensor, discrete: bool) -> Data:
         # when node injection and laplacian eigen PE, get an off-perturbation
         edge_weight_off = None
         if not discrete and cfg.posenc_WLapPE.enable and cfg.attack.SAN.enable_pert_grad:

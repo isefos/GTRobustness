@@ -94,6 +94,7 @@ class PRBCDAttack(torch.nn.Module):
             raise ValueError(f'Unknown metric `{loss}`')
 
         self.epochs_resampling = cfg.attack.epochs_resampling
+        self.resample_period = cfg.attack.resample_period
         self.lr = cfg.attack.lr
 
         self.coeffs = {
@@ -124,7 +125,7 @@ class PRBCDAttack(torch.nn.Module):
         else:
             raise ValueError(f'Unknown {name} `{loss}`')
 
-    def _setup_sampling(self, x, **kwargs):
+    def _setup_sampling(self, x: Tensor, **kwargs):
         assert self.num_nodes == self.num_connected_nodes, "structure attack should not include isolated nodes"
         num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
         if cfg.attack.cluster_sampling:
@@ -171,18 +172,15 @@ class PRBCDAttack(torch.nn.Module):
             return_lap=True,
         )
 
-    def _attack_self_setup(self, x, edge_index, kwargs, random_baseline=False):
+    def _attack_self_setup(self, x, edge_index, random_baseline=False):
         self.model.eval()
         self.device = x.device
-        assert kwargs.get('edge_weight') is None
-        edge_weight = torch.ones(edge_index.size(1), device=self.device)
         self.edge_index = edge_index.cpu().clone()
-        self.edge_weight = edge_weight.cpu().clone()
+        self.edge_weight = torch.ones(edge_index.size(1), device="cpu")
         self.num_nodes = x.size(0)
         self.connected_nodes: torch.Tensor = self.edge_index.unique(sorted=True)
         self.num_connected_nodes = self.connected_nodes.size(0)
         assert self.connected_nodes[-1] == self.num_connected_nodes - 1, "some nodes of the clean graph are isolated"
-        self._setup_sampling(x=x)
         # get the clean laplacian eigendecomposition
         if cfg.posenc_WLapPE.enable and cfg.attack.SAN.enable_pert_grad and not random_baseline:
             assert self.is_undirected
@@ -218,7 +216,9 @@ class PRBCDAttack(torch.nn.Module):
 
         :rtype: (:class:`torch.Tensor`, :class:`torch.Tensor`)
         """
-        self._attack_self_setup(x, edge_index, kwargs)
+        assert kwargs.get('edge_weight') is None
+        self._attack_self_setup(x, edge_index)
+        self._setup_sampling(x=x)
             
         # For collecting attack statistics
         self.attack_statistics = defaultdict(list)
@@ -271,7 +271,9 @@ class PRBCDAttack(torch.nn.Module):
 
         :rtype: (:class:`torch.Tensor`, :class:`torch.Tensor`)
         """
-        self._attack_self_setup(x, edge_index, kwargs, random_baseline=True)
+        assert kwargs.get('edge_weight') is None
+        self._attack_self_setup(x, edge_index, random_baseline=True)
+        self._setup_sampling(x=x)
         best_metric = float('-Inf')
         best_edge_index = None
 
@@ -358,6 +360,9 @@ class PRBCDAttack(torch.nn.Module):
         scalars['loss'] = loss.item()
 
         if not self.coeffs['with_early_stopping']:
+            # Resampling of search space, even when not saving the best
+            if epoch < self.epochs_resampling - 1 and (epoch + 1) % self.resample_period == 0:
+                self._resample_random_block(budget)
             self._write_scalars_to_tb(tb_writer, scalars, epoch)            
             return scalars
 
@@ -383,7 +388,7 @@ class PRBCDAttack(torch.nn.Module):
             self.best_pert_edge_weight = self.block_edge_weight.cpu().clone()
 
         # Resampling of search space
-        if epoch < self.epochs_resampling - 1 and (epoch + 1) % cfg.attack.resample_period == 0:
+        if epoch < self.epochs_resampling - 1 and (epoch + 1) % self.resample_period == 0:
             self._resample_random_block(budget)
         elif epoch == self.epochs_resampling - 1:
             # Retrieve best epoch if early stopping is active
@@ -399,7 +404,7 @@ class PRBCDAttack(torch.nn.Module):
         return scalars
     
     @staticmethod
-    def _write_scalars_to_tb(tb_writer, scalars, epoch):
+    def _write_scalars_to_tb(tb_writer: SummaryWriter, scalars, epoch):
         if tb_writer is not None:
             tb_writer.add_scalar('lr', scalars['lr'], epoch)
             tb_writer.add_scalar('max_abs_grad', scalars['max_abs_grad'], epoch)
@@ -455,7 +460,7 @@ class PRBCDAttack(torch.nn.Module):
         edge_index, flipped_edges = self._sample_final_edges(x, labels, budget, idx_attack=idx_attack, **kwargs)
         return edge_index, flipped_edges
     
-    def _get_forward_data(self, x, edge_index, edge_weight, discrete):
+    def _get_forward_data(self, x: Tensor, edge_index: Tensor, edge_weight: None | Tensor, discrete: bool) -> Data:
         # create a data object, clone x, since it gets modified inplace in the forward pass
         data = Data(x=x.clone(), edge_index=edge_index, edge_attr=edge_weight)
         return data
@@ -485,6 +490,7 @@ class PRBCDAttack(torch.nn.Module):
         x: Tensor,
         labels: Tensor,
         idx_attack: Optional[Tensor] = None,
+        retain_graph: bool = False,
         **kwargs,
     ) -> Tuple[Tensor, Tensor]:
         """Forward and update edge weights."""
@@ -506,7 +512,9 @@ class PRBCDAttack(torch.nn.Module):
         loss = self.loss(prediction, labels, idx_attack)
         # Retrieve gradient towards the current block
         # (Algorithm 1, line 7 / Algorithm 2, line 8)
-        gradient = torch.autograd.grad(loss, self.block_edge_weight)[0]
+        gradient = torch.autograd.grad(loss, self.block_edge_weight, retain_graph=retain_graph)[0]
+        # Computations outside this do not require gradient
+        self.block_edge_weight.requires_grad = False
 
         return loss, gradient
 

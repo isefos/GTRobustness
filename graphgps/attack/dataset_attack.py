@@ -1,5 +1,5 @@
 import torch
-from torch_geometric.data import Data, Dataset
+from torch_geometric.data import Data, Dataset, Batch
 from torch_geometric.data.collate import collate
 import logging
 from torch_geometric.graphgym.config import cfg
@@ -53,7 +53,7 @@ _collate_exclude_keys = [
 
 def get_total_dataset_graphs(
     inject_nodes_from_attack_dataset: bool,
-    dataset_to_attack: Dataset,
+    dataset_to_attack: Dataset | Batch,
     additional_injection_datasets: None | list[Dataset],
     include_root_nodes: bool,
 ) -> tuple[None | Data, None | list[tuple[int, int]], None | Data]:
@@ -63,6 +63,8 @@ def get_total_dataset_graphs(
         total_attack_dataset_graph = None
         attack_dataset_slices = None
     else:
+        if isinstance(dataset_to_attack, Batch):
+            dataset_to_attack = dataset_to_attack.to_data_list()
         graphs_to_join: list[Data] = []
         attack_dataset_slices: list[tuple[int, int]] = []
         current_idx = 0

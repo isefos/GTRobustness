@@ -236,7 +236,6 @@ def get_attack_graph(
 ) -> Data:
     """
     """
-    num_edges = graph_data.edge_index.size(1)
     if cfg.attack.node_injection.enable:
         graph_data_augmented = get_augmented_graph(
             graph=graph_data.clone(),
@@ -244,7 +243,7 @@ def get_attack_graph(
             attack_dataset_slice=attack_dataset_slice,
             total_additional_datasets_graph=total_additional_datasets_graph,
         )
-        assert graph_data_augmented.edge_index.size(1) == num_edges
+        assert graph_data_augmented.edge_index.size(1) == graph_data.edge_index.size(1)
     else:
         graph_data_augmented = graph_data
     return graph_data_augmented

@@ -276,7 +276,8 @@ class CustomLogger(Logger):
             }
 
         # print
-        logging.info('{}: {}'.format(self.name, stats))
+        stats_report = "".join([f"\n  {k}: {v}" for k, v in stats.items()])
+        logging.info(f"{self.name.upper()} epoch stats:{stats_report}")
         # json
         dict_to_json(stats, '{}/stats.json'.format(self.out_dir))
         # tensorboard

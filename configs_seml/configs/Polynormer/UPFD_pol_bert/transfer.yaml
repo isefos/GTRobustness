@@ -25,7 +25,6 @@ grid:
       - '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/GCN'
       - '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/Graphormer'
 
-
 # experiment fixed configs
 
 fixed:

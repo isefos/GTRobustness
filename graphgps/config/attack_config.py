@@ -155,3 +155,21 @@ def dataset_cfg(cfg):
 
     cfg.attack.GPS = CN()
     cfg.attack.GPS.grad_MPNN = True
+
+    # for "free" adversarial training -> all others are set by the cfg.attack configs
+    cfg.train.adv = CN()
+    # will be faster, as it only requires a single forward pass for batch, 
+    # but some models do not support batched forward with adversarial input 
+    # (because adv. input does not have pre-computed PEs, but could be fixed easily 
+    # by implementing on the fly computation of PEs for a whole batch instead of only one graph) 
+    cfg.train.adv.batched_train = True
+    cfg.train.adv.e_budget = 0.15
+    cfg.train.adv.block_size = 500
+    cfg.train.adv.num_replays = 6
+    cfg.train.adv.lr = 5000
+    # for val
+    cfg.train.adv.e_budget_val = 0.15
+    cfg.train.adv.block_size_val = 1000
+    cfg.train.adv.epochs_val = 12
+    cfg.train.adv.lr_val = 4000
+    # TODO: add more for val, e.g. max_samples, resample_epochs etc. (more normal attack)
