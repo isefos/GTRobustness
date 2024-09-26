@@ -5,14 +5,78 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 1
+  experiments_per_job: 6
   sbatch_options:
     partition: gpu_gtx1080
     gres: gpu:1       # num GPUs
-    mem: 16G          # memory
-    cpus-per-task: 4  # num cores
+    mem: 32G          # memory
+    cpus-per-task: 6  # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
+
+random:
+  samples: 3
+  seed: 6264
+
+  graphgym.seed:
+    seed: 7386
+    type: randint
+    min: 0
+    max: 10000
+
+grid:
+
+  graphgym.train.adv.num_replays: 
+    type: choice
+    options:
+      - 2
+      - 4
+      - 5
+      - 6
+    zip_id: epochs-replay
+
+  graphgym.train.adv.max_epoch:
+    type: choice
+    options:
+      - 150
+      - 75
+      - 60
+      - 50
+    zip_id: epochs-replay
+
+  graphgym.train.adv.num_warmup_epochs:
+    type: choice
+    options:
+      - 5
+      - 4
+      - 3
+      - 2
+    zip_id: epochs-replay
+
+  graphgym.train.adv.early_stopping_warmup:
+    type: choice
+    options:
+      - 15
+      - 8
+      - 7
+      - 6
+    zip_id: epochs-replay
+
+  graphgym.train.adv.early_stopping_patience:
+    type: choice
+    options:
+      - 20
+      - 15
+      - 10
+      - 8
+    zip_id: epochs-replay
+
+  graphgym.train.adv.e_budget:
+    type: choice
+    options:
+      - 0.05
+      - 0.1
+      - 0.15
 
 fixed:
   graphgym:  
@@ -108,7 +172,7 @@ fixed:
       type: gnn
 
     attack:
-      enable: true
+      enable: false
       e_budget: 0.15
       num_attacked_graphs: 30
       skip_incorrect_graph_classification: false
@@ -153,15 +217,17 @@ fixed:
       batch_size: 16
       adv:
         batched_train: True
-        e_budget: 0.15
         block_size: 500
-        num_replays: 5
         lr: 5000
         # for val
-        e_budget_val: 0.1
         block_size_val: 1000
-        epochs_val: 12
+        epochs_val: 10
+        epochs_resampling_val: 7
         lr_val: 4000
+        max_final_samples: 4
+        max_num_graphs_val: 100
+        early_stopping_adv: true
+        nia_include_train_in_val: true
   
     optim:
       base_lr: 0.005286030166148311
@@ -170,13 +236,9 @@ fixed:
       clip_grad_norm_value: 5.0
       early_stopping: true
       early_stopping_delta_e: 0.04
-      early_stopping_patience: 6
-      early_stopping_warmup: 6
       lr_decay: 0.1
-      max_epoch: 60
       min_lr: 0.0
       momentum: 0.9
-      num_warmup_epochs: 10
       optimizer: adamW
       reduce_factor: 0.1
       schedule_patience: 10
@@ -186,5 +248,3 @@ fixed:
       - 60
       - 90
       weight_decay: 0.025931832281559417
-
-    seed: 1094

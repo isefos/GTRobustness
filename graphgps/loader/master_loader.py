@@ -301,7 +301,7 @@ def preformat_GNNBenchmarkDataset(dataset_dir, name):
 
     Args:
         dataset_dir: path where to store the cached dataset
-        name: name of the specific dataset in the TUDataset class
+        name: name of the specific dataset
 
     Returns:
         PyG dataset object
@@ -577,7 +577,11 @@ def preformat_TUDataset(dataset_dir, name):
     use_node_attr = False
     if name in ['DD', 'NCI1', 'ENZYMES', 'PROTEINS', 'TRIANGLES']:
         func = None
-    elif name.startswith('IMDB-') or name in ["COLLAB", "twitch_egos", "reddit_threads", "github_stargazers"]:
+    elif (
+        name.startswith('IMDB-') 
+        or name.startswith("REDDIT-") 
+        or name in ["COLLAB", "twitch_egos", "reddit_threads", "github_stargazers"]
+    ):
         func = T.Constant()
     else:
         raise ValueError(f"Loading dataset '{name}' from TUDataset is not supported.")

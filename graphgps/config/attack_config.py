@@ -168,8 +168,13 @@ def dataset_cfg(cfg):
     cfg.train.adv.num_replays = 6
     cfg.train.adv.lr = 5000
     # for val
-    cfg.train.adv.e_budget_val = 0.15
     cfg.train.adv.block_size_val = 1000
-    cfg.train.adv.epochs_val = 12
+    cfg.train.adv.epochs_val = 16
+    cfg.train.adv.epochs_resampling_val = 12
     cfg.train.adv.lr_val = 4000
-    # TODO: add more for val, e.g. max_samples, resample_epochs etc. (more normal attack)
+    cfg.train.adv.max_final_samples = 4
+    cfg.train.adv.max_num_graphs_val = 100
+    # use the adversarial val eval for early stopping and selecting best model (or clean if False)
+    cfg.train.adv.early_stopping_adv = True
+    # whether to add the training dataset nodes in node injection validation eval
+    cfg.train.adv.nia_include_train_in_val = True

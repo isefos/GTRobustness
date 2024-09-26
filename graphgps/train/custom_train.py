@@ -175,6 +175,7 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
         run = init_wandb()
 
     num_splits = len(loggers)
+    all_splits = [l.name for l in loggers]
     split_names = ['val', 'test']
     full_epoch_times = []
     perf = [[] for _ in range(num_splits)]
@@ -246,7 +247,7 @@ def custom_train(loggers, loaders, model, optimizer, scheduler):
                 best_epoch = get_best_epoch(perf, val_losses, m, best_m)
 
                 if cfg.wandb.use:
-                    log_wandb_val_epoch(run, perf, m, cur_epoch, best_epoch, full_epoch_times)
+                    log_wandb_val_epoch(run, perf, m, cur_epoch, best_epoch, full_epoch_times, all_splits)
 
             # checkpoint and log
             checkpoint_and_log(model, optimizer, scheduler, cur_epoch, best_epoch, perf, full_epoch_times, best_m)
@@ -306,9 +307,9 @@ def init_wandb():
     return run
 
 
-def log_wandb_val_epoch(run, perf, m, cur_epoch, best_epoch, full_epoch_times):
+def log_wandb_val_epoch(run, perf, m, cur_epoch, best_epoch, full_epoch_times, all_splits):
     bstats = {"best/epoch": best_epoch}
-    for i, s in enumerate(['train', 'val', 'test']):
+    for i, s in enumerate(all_splits):
         bstats[f"best/{s}_loss"] = perf[i][best_epoch]['loss']
         if m in perf[i][best_epoch]:
             bstats[f"best/{s}_{m}"] = perf[i][best_epoch][m]
@@ -327,18 +328,21 @@ def checkpoint_and_log(model, optimizer, scheduler, cur_epoch, best_epoch, perf,
         save_ckpt(model, optimizer, scheduler, cur_epoch)
         if cfg.train.ckpt_clean:  # delete old ckpt each time
             clean_ckpt()
-    logging.info(
-        f"> Epoch {cur_epoch}: took {full_epoch_times[-1]:.1f}s (avg {np.mean(full_epoch_times):.1f}s)"
-        f"\n  Best so far: epoch {best_epoch}"
-        f"\n    {best_m[0]},  train_loss: {perf[0][best_epoch]['loss']:.4f}"
-        f"\n    {best_m[1]},  val_loss:   {perf[1][best_epoch]['loss']:.4f}"
-        f"\n    {best_m[2]},  test_loss:  {perf[2][best_epoch]['loss']:.4f}"
-    )
+    logging.info(get_log_str(cur_epoch, full_epoch_times, best_epoch, perf, best_m))
     if hasattr(model, 'trf_layers'):
         # log SAN's gamma parameter values if they are trainable
         for li, gtl in enumerate(model.trf_layers):
             if torch.is_tensor(gtl.attention.gamma) and gtl.attention.gamma.requires_grad:
                 logging.info(f"    {gtl.__class__.__name__} {li}: gamma={gtl.attention.gamma.item()}")
+
+
+def get_log_str(cur_epoch, full_epoch_times, best_epoch, perf, best_m) -> str:
+    s = f"> Epoch {cur_epoch}: took {full_epoch_times[-1]:.1f}s (avg {np.mean(full_epoch_times):.1f}s)"
+    s += f"\n  Best so far: epoch {best_epoch}"
+    names = ["train", "val", "test", "val_adv"]
+    for i in range(len(best_m)):
+        s += f"\n    {best_m[i]},  {names[i].rjust(7)}_loss: {perf[i][best_epoch]['loss']:.4f}"
+    return s
 
 
 def _get_epoch_log_results(perf, best_epoch: int):

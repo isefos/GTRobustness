@@ -52,18 +52,22 @@ graphgym:
   train:
     mode: adversarial
     eval_period: 1
-    batch_size: 8
+    batch_size: 6
     adv:
-      batched_train: True
+      batched_train: true
       e_budget: 0.05
       block_size: 1000
       num_replays: 6
       lr: 5000
       # for val
-      e_budget_val: 0.05
       block_size_val: 2000
-      epochs_val: 12
+      epochs_val: 10
+      epochs_resampling_val: 6
       lr_val: 4000
+      max_final_samples: 4
+      max_num_graphs_val: 30
+      early_stopping_adv: true
+      nia_include_train_in_val: true
     
   attack:
     enable: true

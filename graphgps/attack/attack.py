@@ -37,6 +37,8 @@ def prbcd_attack_dataset(model, loaders):
         )
     logging.info("Start of attack:")
     model.eval()
+    for param in model.parameters():
+        param.requires_grad = False
     model.forward = forward_wrapper(model.forward)
     if cfg.attack.node_injection.enable:
         prbcd = PRBCDAttackNI(model)
@@ -87,6 +89,8 @@ def prbcd_attack_dataset(model, loaders):
         )
         tb_writer.close()
     model.forward = model.forward.__wrapped__
+    for param in model.parameters():
+        param.requires_grad = True
     logging.info("End of attack.")
 
     # save perturbations

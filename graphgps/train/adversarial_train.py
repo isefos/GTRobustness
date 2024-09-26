@@ -12,9 +12,7 @@ from torch_geometric.graphgym.utils.epoch import is_eval_epoch, is_ckpt_epoch
 
 from graphgps.loss.subtoken_prediction_loss import subtoken_cross_entropy
 from graphgps.train.custom_train import (
-    _get_epoch_log_results,
     eval_epoch,
-    get_best_epoch,
     init_wandb,
     log_wandb_val_epoch,
     checkpoint_and_log,
@@ -23,22 +21,34 @@ from graphgps.utils import flatten_dict
 
 from graphgps.attack.preprocessing import add_node_prob, remove_isolated_components
 from torch_geometric.data import Batch, Data
-from graphgps.attack.attack import get_attack_graph
+from graphgps.attack.attack import get_attack_graph, get_attack_loader
 from graphgps.attack.dataset_attack import get_total_dataset_graphs
 from graphgps.transform.lap_eig import get_repeated_eigenvalue_slices
 from graphgps.attack.prbcd import PRBCDAttack
 from graphgps.attack.prbcd_nia import PRBCDAttackNI
+from graphgps.logger import CustomLogger
 
 
-@register_train('adversarial')
-def adversarial_train(loggers, loaders, model, optimizer, scheduler):
-    """Adversarial training pipeline."""
+def check_configs():
     # currently no node injection supported for transductive
     if cfg.dataset.task == "node" and (cfg.attack.node_injection.enable or cfg.attack.remove_isolated_components):
         raise NotImplementedError(
             "Need to handle the node mask (also to calculate attack success rate) "
             "with node injection or pruning away isolated components."
         )
+    # for adversarial val eval
+    assert not cfg.gnn.head == 'inductive_edge', (
+        "originally has special handling, was not implemented for adversarial eval"
+    )
+    assert not cfg.dataset.name == 'ogbg-code2', (
+        "originally has special handling, was not implemented for adversarial eval"
+    )
+
+
+@register_train('adversarial')
+def adversarial_train(loggers, loaders, model, optimizer, scheduler):
+    """Adversarial training pipeline."""
+    check_configs()
     start_epoch = 0
     # should be set as the number of "normal" epochs divided by the number of replays
     max_epoch = cfg.optim.max_epoch
@@ -72,14 +82,19 @@ def adversarial_train(loggers, loaders, model, optimizer, scheduler):
     else:
         AttackBaseClass = PRBCDAttack
     TrainAttackClass = get_train_attack_class(AttackBaseClass)
+    val_attack = get_val_attack_class(AttackBaseClass)(model)
     
     if cfg.wandb.use:
         run = init_wandb()
 
+    # add an additional eval for adversarial val, which we also want to use for early stopping
+    add_adv_val_loader_logger(loaders, loggers)
     num_splits = len(loggers)
-    split_names = ['val', 'test']
+    all_splits = [l.name for l in loggers]
     full_epoch_times = []
     perf = [[] for _ in range(num_splits)]
+    # early stopping on adversarial or clean val
+    idx_es = 3 if cfg.train.adv.early_stopping_adv else 1
     for cur_epoch in range(start_epoch, max_epoch):
 
         if early_stopping and patience <= 0:
@@ -97,10 +112,13 @@ def adversarial_train(loggers, loaders, model, optimizer, scheduler):
         perf[0].append(loggers[0].write_epoch(cur_epoch))
 
         if is_eval_epoch(cur_epoch):
-            # TODO: add attack val eval
-            for i in range(1, num_splits):
-                eval_epoch(loggers[i], loaders[i], model, split=split_names[i - 1])
+            # eval
+            for i, split in zip([1, 2], ["val", "test"]):
+                eval_epoch(loggers[i], loaders[i], model, split=split)
                 perf[i].append(loggers[i].write_epoch(cur_epoch))
+            # adversarial val
+            adv_eval_epoch(loggers[3], loaders[-1], model, val_attack)
+            perf[-1].append(loggers[3].write_epoch(cur_epoch))
         else:
             # repeat log of previous eval
             for i in range(1, num_splits):
@@ -109,7 +127,7 @@ def adversarial_train(loggers, loaders, model, optimizer, scheduler):
         # lr scheduler
         if cfg.optim.scheduler == 'reduce_on_plateau':
             # based on val loss
-            scheduler.step(perf[1][-1]['loss'])
+            scheduler.step(perf[idx_es][-1]['loss'])
         else:
             scheduler.step()
 
@@ -125,7 +143,7 @@ def adversarial_train(loggers, loaders, model, optimizer, scheduler):
 
         # log current best stats on eval epoch
         if is_eval_epoch(cur_epoch):
-            val_losses = np.array([vp['loss'] for vp in perf[1]])
+            val_losses = np.array([vp['loss'] for vp in perf[idx_es]])
             val_loss_cur_epoch = float(val_losses[-1])
 
             # patience is computed on validation loss
@@ -138,17 +156,17 @@ def adversarial_train(loggers, loaders, model, optimizer, scheduler):
                     patience -= 1
 
             best_epoch = int(val_losses.argmin())
-            best_m = ["", "", ""]  # loss is reported anyway
+            best_m = ["", "", "", ""]  # loss is reported anyway
 
             if cfg.metric_best != 'auto':
                 # select again based on val perf of `cfg.metric_best`.
                 m = cfg.metric_best
                 
                 # also updated best_m with the metric values
-                best_epoch = get_best_epoch(perf, val_losses, m, best_m)
+                best_epoch = get_best_adv_epoch(perf, val_losses, m, best_m, idx_es)
 
                 if cfg.wandb.use:
-                    log_wandb_val_epoch(run, perf, m, cur_epoch, best_epoch, full_epoch_times)
+                    log_wandb_val_epoch(run, perf, m, cur_epoch, best_epoch, full_epoch_times, all_splits)
 
             # checkpoint and log
             checkpoint_and_log(model, optimizer, scheduler, cur_epoch, best_epoch, perf, full_epoch_times, best_m)
@@ -165,14 +183,59 @@ def adversarial_train(loggers, loaders, model, optimizer, scheduler):
 
     logging.info('Task done, results saved in %s', cfg.run_dir)
     # return the logged results per epoch (organized differently)
-    results = _get_epoch_log_results(perf, best_epoch)
+    results = _get_adv_epoch_log_results(perf, best_epoch)
+    return results
+
+
+def get_best_adv_epoch(perf, val_losses, m, best_m, idx_es):
+    val_metric = np.array([vp[m] for vp in perf[idx_es]])
+    if cfg.metric_agg == "argmax":
+        metric_agg = "max"
+    elif cfg.metric_agg == "argmin":
+        metric_agg = "min"
+    else:
+        raise ValueError("cfg.metric_agg should be either 'argmax' or 'argmin'")
+    best_val_metric = getattr(val_metric, metric_agg)()
+    best_val_metric_epochs = np.arange(len(val_metric), dtype=int)[val_metric == best_val_metric]
+
+    # use loss to decide when epochs have same best metric
+    best_epoch = int(best_val_metric_epochs[val_losses[best_val_metric_epochs].argmin()])
+
+    # save the metric to be reported
+    if m in perf[0][best_epoch]:
+        best_m[0] = f"train_{m}:    {perf[0][best_epoch][m]:.4f}"
+    else:
+        # (for some datasets it is too expensive to compute the main metric on the training set)
+        best_m[0] = f"train_{m}:    {0:.4f}"
+    best_m[1] =     f"val_{m}:      {perf[1][best_epoch][m]:.4f}"
+    best_m[2] =     f"test_{m}:     {perf[2][best_epoch][m]:.4f}"
+    best_m[3] =     f"val_adv_{m}:  {perf[3][best_epoch][m]:.4f}"
+    return best_epoch
+
+
+def _get_adv_epoch_log_results(perf, best_epoch: int):
+    results = {}
+    for split, p in zip(["train", "val", "test", "val_adv"], perf):
+        results[split] = {}
+        for p_epoch in p:
+            for k, v in p_epoch.items():
+                if k in ["epoch", "eta", "eta_hours", "params"]:
+                    continue
+                if k == "lr" and split in ["val", "test", "val_adv"]:
+                    continue
+                if k not in results[split]:
+                    results[split][k] = []
+                results[split][k].append(v)
+    results["best_val_adv_epoch"] = best_epoch
+    results["best_val_adv_" + cfg.metric_best] = perf[-1][best_epoch].get(cfg.metric_best)
+    for i, split in enumerate(["train", "val", "test"]):
+        results[f"best_val_adv_{split}_" + cfg.metric_best] = perf[i][best_epoch].get(cfg.metric_best)
     return results
 
 
 def adversarial_train_epoch(logger, loader, model, optimizer, scheduler, TrainAttackClass):
     model.train()
     optimizer.zero_grad()
-    time_start = time.time()
     for b_i, batch in enumerate(loader):
         # Each batch can be seen as the dataset to be attacked 
         # (batch shuffle=True, therefore can't create constant global index)
@@ -194,7 +257,7 @@ def adversarial_train_epoch(logger, loader, model, optimizer, scheduler, TrainAt
         attackers = []
         for i, data in enumerate(batch.to_data_list()):
             # get the train nodes' indices (currently incompatible with node injection, checked at start of training)
-            node_mask = data.get(f'train_mask')
+            node_mask = data.get('train_mask')
             if node_mask is not None:
                 node_mask = node_mask.to(device=torch.device(cfg.accelerator))
                 assert not cfg.attack.prediction_level == "graph"
@@ -220,6 +283,7 @@ def adversarial_train_epoch(logger, loader, model, optimizer, scheduler, TrainAt
 
         # replay (train multiple iterations) on the same batch k times to get a k-step attack optimization 
         for replay in range(cfg.train.adv.num_replays):
+            time_start = time.time()
             data_list = []
 
             # loop over batch samples and do 1 attack step and get 1 new adversarial sample
@@ -396,5 +460,160 @@ def get_train_attack_class(AttackBaseClass):
             data.y = self.labels
             return data
 
-
     return TrainAttackClass
+
+
+def get_val_attack_class(AttackBaseClass):
+    """
+    returns attack class with some new / overwritten methods
+    """
+    assert AttackBaseClass in [PRBCDAttack, PRBCDAttackNI]
+
+    class ValAttackClass(AttackBaseClass):
+        def __init__(self, model):
+            super().__init__(model)
+            # Set early stopping to False
+            self.coeffs['with_early_stopping'] = False
+            self.coeffs['max_final_samples'] = cfg.train.adv.max_final_samples
+            self.log = False
+            self.block_size = cfg.train.adv.block_size_val
+            self.epochs = cfg.train.adv.epochs_val
+            self.epochs_resampling = cfg.train.adv.epochs_resampling_val
+            self.resample_period = 1
+            self.lr = cfg.train.adv.lr_val
+        
+        def _forward(self, x: Tensor, edge_index: None | Tensor, edge_weight: Tensor, discrete: bool, **kwargs):
+            assert (discrete and edge_weight is None) or (not discrete and edge_weight is not None)
+            data = self._get_forward_data(x, edge_index, edge_weight, discrete)
+            # remove isolated components (if specified in cfg), important for efficient node injection
+            data, root_node = remove_isolated_components(data)
+            # add the "clean" laplacian info, from which will be perturbed
+            if not discrete and cfg.posenc_WLapPE.enable and cfg.attack.SAN.enable_pert_grad:
+                self._add_laplacian_info(data)
+                # check for repeated eigenvalues:
+                data.E_rep_slices_min, data.E_rep_slices_max = get_repeated_eigenvalue_slices(
+                    data.E_clean, cfg.attack.SAN.eps_repeated_eigenvalue,
+                )
+            data.attack_mode = True
+            # add node probability, if needed
+            add_node_prob(data, root_node)
+            data = Batch.from_data_list([data])
+            model_prediction, _ = self.model(data, **kwargs)  # don't need the y ground truth
+            return model_prediction
+        
+        def attack(
+            self,
+            x: Tensor,
+            edge_index: Tensor,
+            labels: Tensor,
+            budget: int,
+            idx_attack: None | Tensor,
+            **kwargs,
+        ) -> Batch:
+            # set eps higher, such that early iterations can already produce num perturbations close to budget
+            # init such that 5% of the budget is used
+            self.coeffs['eps'] = 0.05 * budget / self.block_size
+            pert_edge_index, _ = super().attack(
+                x,
+                edge_index,
+                labels,
+                budget,
+                idx_attack,
+                tb_writer=None,  # TODO: maybe want to log someday?
+                **kwargs,
+            )
+            data = self._get_forward_data(x, pert_edge_index, edge_weight=None, discrete=True)
+            # add back the train_mask
+            if idx_attack:
+                data.train_mask = idx_attack
+            # remove isolated components (if specified in cfg), important for efficient node injection
+            data, root_node = remove_isolated_components(data)
+            data.attack_mode = False
+            # add node probability, if needed
+            add_node_prob(data, root_node)
+            # add y
+            data.y = labels
+            batch = Batch.from_data_list([data])
+            batch.split = 'val'
+            return batch
+
+    return ValAttackClass
+
+
+def add_adv_val_loader_logger(loaders, loggers):
+    val_dataset = loaders[1].dataset
+    # get the augmentation graph
+    add_train_dataset = [loaders[0].dataset] if cfg.train.adv.nia_include_train_in_val else None
+    total_val_graph, val_slices = None, None
+    if cfg.attack.node_injection.enable:
+        total_val_graph, val_slices, _ = get_total_dataset_graphs(
+            inject_nodes_from_attack_dataset=True,
+            dataset_to_attack=val_dataset,
+            additional_injection_datasets=add_train_dataset,
+            include_root_nodes=cfg.attack.node_injection.include_root_nodes,
+        )
+    # now process each individually
+    data_list = []
+    for i, data in enumerate(val_dataset):
+        if i == cfg.train.adv.max_num_graphs_val:
+            break
+        node_mask = data.get('val_mask')
+        if node_mask is not None:
+            assert not cfg.attack.prediction_level == "graph"
+        # augment graph when node injection
+        attack_graph_data = get_attack_graph(
+            graph_data=data,
+            total_attack_dataset_graph=total_val_graph,
+            attack_dataset_slice=None if val_slices is None else val_slices[i],
+            # only inject from training dataset to prevent val/test data leakage
+            total_additional_datasets_graph=None,
+        )
+        if node_mask and 'val_mask' not in attack_graph_data:
+            attack_graph_data.val_mask = node_mask
+        data_list.append(attack_graph_data)
+    # add new loader with these augmented graphs
+    loaders.append(get_attack_loader(data_list))
+    # add another logger
+    loggers.append(CustomLogger(name="val_adv", task_type=loggers[1].task_type))
+
+
+def adv_eval_epoch(logger, loader, model, val_attack: PRBCDAttack):
+    model.eval()
+    for param in model.parameters():
+        param.requires_grad = False
+    for batch in loader:
+        time_start = time.time()
+        assert batch.num_graphs == 1
+        batch.to(torch.device(cfg.accelerator))
+        # compute the budget, at least 1
+        budget_edges = batch.edge_index.size(1)
+        if cfg.attack.is_undirected:
+            budget_edges //= 2
+        # at least one, use same budget as training
+        budget = max(1, int(cfg.train.adv.e_budget * budget_edges))
+        # attack
+        batch_adv = val_attack.attack(
+            x=batch.x,
+            edge_index=batch.edge_index,
+            labels=batch.y,
+            budget=budget,
+            idx_attack=batch.get('val_mask'),
+        )
+        # forward pass the resulting adv sample and log the performance
+        pred, true = model(batch_adv)
+        loss, pred_score = compute_loss(pred, true)
+        _true = true.detach().to('cpu', non_blocking=True)
+        _pred = pred_score.detach().to('cpu', non_blocking=True)
+        logger.update_stats(
+            true=_true,
+            pred=_pred,
+            loss=loss.detach().cpu().item(),
+            lr=0, time_used=time.time() - time_start,
+            params=cfg.params,
+            dataset_name=cfg.dataset.name,
+        )
+    
+    # put model back to original state
+    for param in model.parameters():
+        param.requires_grad = True
+    model.train()

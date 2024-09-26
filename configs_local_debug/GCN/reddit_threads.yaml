@@ -12,7 +12,9 @@ graphgym:
     task: graph
     task_type: classification_binary
     transductive: false
-    split_mode: standard
+    split_mode: cv-stratifiedkfold-8
+    split_index: 6
+    split_dir: datasets/splits
     node_encoder: true
     node_encoder_name: LinearNode
     node_encoder_bn: false
@@ -30,7 +32,7 @@ graphgym:
   gnn:
     layer_type: gcnconvweighted
     stage_type: stack
-    head: inductive_node
+    head: weighted_mean_pool_graph
     layers_pre_mp: 0
     layers_mp: 3
     layers_post_mp: 1

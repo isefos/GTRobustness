@@ -1,0 +1,108 @@
+graphgym:
+
+    accelerator: auto
+    out_dir: configs_seml/results
+    metric_best: accuracy
+    tensorboard_each_run: false
+    seed: 42
+
+    dataset:
+      format: PyG-UPFD
+      name: politifact-spacy
+      task: graph
+      task_type: classification_binary
+      transductive: false
+      split_mode: standard
+      node_encoder: true
+      node_encoder_name: LinearNode
+      node_encoder_bn: false
+
+    model:
+      type: gnn
+      loss_fun: cross_entropy
+
+    gnn:
+      layer_type: gcnconvweighted
+      stage_type: stack
+      batchnorm: true
+      act: relu
+      dropout: 0.0
+      layers_pre_mp: 0
+      layers_mp: 1
+      layers_post_mp: 1
+      dim_inner: 16  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+      head: weighted_add_pool_graph
+
+    train:
+      mode: adversarial
+      eval_period: 1
+      batch_size: 16
+      adv:
+        batched_train: true
+        e_budget: 0.1
+        block_size: 500
+        num_replays: 5
+        lr: 5000
+        # for val
+        block_size_val: 500
+        epochs_val: 8
+        epochs_resampling_val: 5
+        lr_val: 4000
+        max_final_samples: 4
+        max_num_graphs_val: 20
+        early_stopping_adv: true
+        nia_include_train_in_val: true
+    
+    optim:
+      base_lr: 0.0003
+      weight_decay: 0.0001
+      clip_grad_norm: true
+      clip_grad_norm_value: 5.0
+      optimizer: adamW
+      max_epoch: 20
+      scheduler: cosine_with_warmup
+      num_warmup_epochs: 4
+      early_stopping: true
+      early_stopping_patience: 7
+      early_stopping_delta_e: 0.05
+      early_stopping_warmup: 7
+
+    attack:
+      enable: false
+      e_budget: 0.15
+      num_attacked_graphs: 30
+      skip_incorrect_graph_classification: false
+      log_progress: false
+      load_best_model: false
+      split: test
+      prediction_level: graph
+      remove_isolated_components: true
+      run_random_baseline: true
+      block_size: 1_000  # TODO: test
+      epochs: 125  # TODO: test
+      epochs_resampling: 100
+      resample_period: 1  # TODO: test
+      max_final_samples: 20  # TODO: test
+      eps: 1.0e-07  # TODO: test
+      eps_init_noised: false  # TODO: test
+      is_undirected: true
+      loss: raw_prediction  # TODO: test
+      metric: null
+      lr: 4000  # TODO: test
+      max_edge_weight_update: 0.0  # TODO: test
+      max_trials_sampling: 20
+      minimum_budget: 1
+      node_prob_enable: true
+      node_prob_iterations: 3
+      node_prob_log: true
+      root_node_idx: 0
+      with_early_stopping: true
+      node_injection:
+        enable: true
+        from_train: true
+        from_val: true
+        from_test: true
+        allow_existing_graph_pert: false
+        sample_only_connected: true
+        include_root_nodes: false
+        sample_only_trees: true

@@ -691,7 +691,7 @@ class PRBCDAttack(torch.nn.Module):
             self.edge_index, self.edge_weight, self.block_edge_index, self.block_edge_weight,
         )
         assert torch.all(edge_weight == 1)
-        if best_num_removed_edges > 0:
+        if self.log and best_num_removed_edges > 0:
             logging.info(f"Removed {num_removed_edges} edges to satisfy constraint.")
         return edge_index, flipped_edges
     
