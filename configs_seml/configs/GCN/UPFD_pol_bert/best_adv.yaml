@@ -35,7 +35,7 @@ grid:
       - 6
     zip_id: epochs-replay
 
-  graphgym.train.adv.max_epoch:
+  graphgym.optim.max_epoch:
     type: choice
     options:
       - 150
@@ -44,7 +44,7 @@ grid:
       - 50
     zip_id: epochs-replay
 
-  graphgym.train.adv.num_warmup_epochs:
+  graphgym.optim.num_warmup_epochs:
     type: choice
     options:
       - 5
@@ -53,7 +53,7 @@ grid:
       - 2
     zip_id: epochs-replay
 
-  graphgym.train.adv.early_stopping_warmup:
+  graphgym.optim.early_stopping_warmup:
     type: choice
     options:
       - 15
@@ -62,7 +62,7 @@ grid:
       - 6
     zip_id: epochs-replay
 
-  graphgym.train.adv.early_stopping_patience:
+  graphgym.optim.early_stopping_patience:
     type: choice
     options:
       - 20
