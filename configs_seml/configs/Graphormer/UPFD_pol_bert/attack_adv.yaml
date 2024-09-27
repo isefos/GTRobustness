@@ -52,7 +52,6 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/Graphormer/UPFD_pol_bert/0'
       finetune: false
 
     posenc_GraphormerBias:
