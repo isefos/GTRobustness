@@ -5,11 +5,11 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 6
+  experiments_per_job: 4
   sbatch_options:
     partition: gpu_gtx1080
     gres: gpu:1       # num GPUs
-    mem: 32G          # memory
+    mem: 40G          # memory
     cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
@@ -235,7 +235,7 @@ fixed:
       eval_period: 1
       batch_size: 16
       adv:
-        batched_train: True
+        batched_train: false
         block_size: 500
         lr: 5000
         # for val
