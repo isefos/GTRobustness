@@ -237,7 +237,7 @@ def save_single_plots(
         val_dataset = [val_max_metric[idx[v]] for v in values]
         test_dataset = [test_max_metric[idx[v]] for v in values]
         val_adv_dataset = [val_adv_max_metric[idx[v]] for v in values]
-        min_gap = np.min(np.diff(values))
+        min_gap = 1 if len(val_dataset) == 1 else np.min(np.diff(values))
         w = 0.4 * min_gap
         ax_val.violinplot(val_dataset, values, showmeans=True, showmedians=True, widths=w)
         ax_test.violinplot(test_dataset, values, showmeans=True, showmedians=True, widths=w)

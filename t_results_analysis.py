@@ -555,7 +555,8 @@ def get_transfer_collection_results(collection, filter_dict):
     return results, run_ids, extras, run_dirs, num_params
 
 
-def get_random_attack_collection_results(collection, dataset, model, pred_level):
+def get_random_attack_collection_results(collection, dataset, model, pred_level, pretrained_num):
+    # TODO: only take the results from the correct pretrained model
     results = seml.get_results(collection, ['config', 'result.attack.avg'])
     for r in results:
         check_correct_result(r, dataset, model, pred_level)
@@ -665,7 +666,9 @@ def main(
     results_path, info_file, seed_dir = clean_path(results_path)
     write_info_file(info_file, run_ids, num_params, extras, run_dirs)
 
-    rand_result = get_random_attack_collection_results(attack_collection, dataset, model, pred_level)
+    # TODO: will need to get the pretrained model num now as well to find the correct
+    pretrained_num = 0
+    rand_result = get_random_attack_collection_results(attack_collection, dataset, model, pred_level, pretrained_num)
     results.append(rand_result)
 
     run_seed_dataframes = write_results(
