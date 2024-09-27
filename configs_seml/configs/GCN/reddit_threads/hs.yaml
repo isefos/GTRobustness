@@ -5,11 +5,11 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 4
+  experiments_per_job: 16
   sbatch_options:
     partition: gpu_gtx1080
     gres: gpu:1       # num GPUs
-    mem: 32G          # memory
+    mem: 40G          # memory
     cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
@@ -55,19 +55,19 @@ fixed:
       stage_type: stack
       batchnorm: true
       act: relu
-      dropout: 0.0
       layers_pre_mp: 0
 
     optim:
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       optimizer: adamW
-      max_epoch: 70
+      max_epoch: 300
       scheduler: cosine_with_warmup
       early_stopping: true
-      early_stopping_patience: 10
-      early_stopping_delta_e: 0.005
-      early_stopping_warmup: 10
+      early_stopping_patience: 40
+      early_stopping_delta_e: 0.05
+      early_stopping_warmup: 25
+      num_warmup_epochs: 10
 
     attack:
       enable: false
@@ -75,7 +75,7 @@ fixed:
 # experiment random configs
 
 random:
-  samples: 16
+  samples: 160
   seed: 187
 
   graphgym.seed:
@@ -122,8 +122,8 @@ random:
       - 1
       - 2
 
-  graphgym.optim.num_warmup_epochs:
-    seed: 3976
-    type: randint
-    min: 2
-    max: 10
+  graphgym.gnn.dropout:
+    seed: 45289
+    type: uniform
+    min: 0.0
+    max: 0.15
