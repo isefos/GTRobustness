@@ -36,7 +36,7 @@ fixed:
       split_index: 6
       split_dir: datasets/splits
       node_encoder: true
-      node_encoder_name: LinearNode
+      node_encoder_name: LinearNode+WeightedGraphormerBias
       node_encoder_bn: false
       edge_encoder: false
 
