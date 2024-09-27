@@ -73,15 +73,21 @@ budget_measures = {
 }
 
 
-def clean_path(results_path: str):
+def clean_path(results_path: str, nums: list[str]) -> tuple[dict, dict, dict]:
     results_path = Path(results_path)
     if results_path.exists():
         shutil.rmtree(results_path)
-    results_path.mkdir(parents=True)
-    general_info_file = results_path / "runs_infos.txt"
-    seed_dir = results_path / "results"
-    seed_dir.mkdir()
-    return results_path, general_info_file, seed_dir
+    results_paths, general_info_files, seed_dirs = {}, {}, {}
+    for num in nums:
+        results_path_num = results_path / num
+        results_path_num.mkdir(parents=True)
+        results_paths[num] = results_path_num
+        general_info_file = results_path_num / "runs_infos.txt"
+        general_info_files[num] = general_info_file
+        seed_dir = results_path_num / "results"
+        seed_dir.mkdir()
+        seed_dirs[num] = seed_dir
+    return results_paths, general_info_files, seed_dirs
 
 
 def write_info_file(info_file, run_ids, num_params, extras, seeds_graphgym, seeds_seml, run_dirs, budgets):
@@ -152,6 +158,8 @@ def save_plots(
     attack_cols,
     df_agg_mean,
     df_agg_std,
+    num_budgets: None | int,
+    y_range,
 ):
     plots_dir = results_path / "plots"
     seed_plot_dir = plots_dir / "seeds"
@@ -181,10 +189,14 @@ def save_plots(
                         (np.array([0.0]), np.array(df[budget_dict["keys"][label]]))
                     ) * budget_dict["mul"]
                     y = np.concatenate((np.array([zb_val]), np.array(df[col])))
+                    if num_budgets:
+                        x = x[:num_budgets]
+                        y = y[:num_budgets]
                     ax.plot(x, y, label=label)
 
                 ax.set_xlabel(budget_dict["label"])
                 ax.set_ylabel(title)
+                ax.set_ylim(bottom=y_range[0], top=y_range[1])
                 ax.legend()
                 fig.savefig(cur_plot_dir / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
                 ax.clear()
@@ -215,11 +227,16 @@ def save_plots(
                 ) * budget_dict["mul"]
                 y = np.concatenate((np.array([zb_val]), np.array(df_agg_mean[col])))
                 std = np.concatenate((np.array([0.0]), np.array(df_agg_std[col])))
+                if num_budgets:
+                    x = x[:num_budgets]
+                    y = y[:num_budgets]
+                    std = std[:num_budgets]
                 ax.plot(x, y, label=label)
                 ax.fill_between(x, y-std, y+std, alpha=0.2)
 
             ax.set_xlabel(budget_dict["label"])
             ax.set_ylabel(title)
+            ax.set_ylim(bottom=y_range[0], top=y_range[1])
             ax.legend()
             fig.savefig(agg_plot_dir / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
             ax.clear()
@@ -275,24 +292,7 @@ def get_collection_results(collection, filter_dict):
     return results, run_ids, extras, seeds_graphgym, seeds_seml, run_dirs, num_params, budgets
 
 
-def main(
-    collection: str,
-    results_path: str,
-    filter_dict,
-    dataset: str,
-    model: str,
-):
-    (
-        results,
-        run_ids,
-        extras,
-        seeds_graphgym,
-        seeds_seml,
-        run_dirs,
-        num_params,
-        budgets,
-    ) = get_collection_results(collection, filter_dict)
-
+def check_results(results, dataset, model):
     for res in results:
         df = res["config"]["graphgym"]["dataset"]["format"]
         dfg = datasets[dataset]["format"]
@@ -326,12 +326,19 @@ def main(
         attack_cols = attack_cols_node
     else:
         raise ValueError(f"Unknown prediction level: `{pred_level}`")
+    return attack_cols
 
-    results_path, info_file, seed_dir = clean_path(results_path)
-    # write results into file
-    seed_dataframes, df_agg_mean, df_agg_std = write_results(
-        info_file,
-        seed_dir,
+
+def main(
+    collection: str,
+    results_path: str,
+    filter_dict,
+    dataset: str,
+    model: str,
+    num_budgets: None | int,
+    y_range,
+):
+    (
         results,
         run_ids,
         extras,
@@ -340,24 +347,76 @@ def main(
         run_dirs,
         num_params,
         budgets,
-        attack_cols
-    )
-    # plots
-    save_plots(
-        model,
-        dataset,
-        seed_dataframes,
-        results_path,
-        attack_cols,
-        df_agg_mean,
-        df_agg_std,
-    )
+    ) = get_collection_results(collection, filter_dict)
+
+    attack_cols = check_results(results, dataset, model)
+
+    # separate by the pretrained model
+    per_pretrained = defaultdict(lambda: defaultdict(list))
+    for i, r in enumerate(results):
+        pretrained = r["config"]["graphgym"]["pretrained"]["dir"]
+        num = pretrained.split("/")[-1]
+        per_pretrained[num]["results"].append(r)
+        for n, v in zip(
+            [
+                "run_ids",
+                "seeds_graphgym",
+                "seeds_seml",
+                "run_dirs",
+                "num_params",
+                "budgets",
+            ],
+            [
+                run_ids[i],
+                seeds_graphgym[i],
+                seeds_seml[i],
+                run_dirs[i],
+                num_params[i],
+                budgets[i],
+            ]
+        ):
+            per_pretrained[num][n].append(v)
+    
+    # create the paths for each num, dict
+    results_paths, info_files, seed_dirs = clean_path(results_path, list(per_pretrained))
+
+    for num, d in per_pretrained.items():
+
+        # write results into file
+        seed_dataframes, df_agg_mean, df_agg_std = write_results(
+            info_files[num],
+            seed_dirs[num],
+            d["results"],
+            d["run_ids"],
+            extras,
+            d["seeds_graphgym"],
+            d["seeds_seml"],
+            d["run_dirs"],
+            d["num_params"],
+            d["budgets"],
+            attack_cols
+        )
+        # plots
+        save_plots(
+            model,
+            dataset,
+            seed_dataframes,
+            results_paths[num],
+            attack_cols,
+            df_agg_mean,
+            df_agg_std,
+            num_budgets,
+            y_range,
+        )
 
 
 parser = argparse.ArgumentParser(description='Processes the results of attack.')
 parser.add_argument("-c", "--collection")
 parser.add_argument("-d", "--dataset")
 parser.add_argument("-m", "--model")
+parser.add_argument("-n", "--num-budgets", default=None, type=int)
+parser.add_argument("--y-max", default=None, type=float)
+parser.add_argument("--y-min", default=None, type=float)
 
 
 if __name__ == "__main__":
@@ -372,4 +431,6 @@ if __name__ == "__main__":
         filter_dict=filter_dict,
         dataset=args.dataset,
         model=args.model,
+        num_budgets=args.num_budgets,
+        y_range=(args.y_min, args.y_max),
     )
