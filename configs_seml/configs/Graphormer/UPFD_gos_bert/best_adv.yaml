@@ -182,7 +182,6 @@ fixed:
       thresh: 0.5
       type: Graphormer
     posenc_GraphormerBias:
-      combinations_degree: false
       dim_pe: 0
       directed_graphs: false
       enable: true
@@ -191,12 +190,10 @@ fixed:
       num_in_degrees: 21
       num_out_degrees: 21
       num_spatial_types: 8
-      use_weighted_path_distance: false
 
     attack:
       enable: false
-      e_budget: 0.15
-      num_attacked_graphs: 30
+      num_attacked_graphs: 50
       skip_incorrect_graph_classification: false
       log_progress: false
       load_best_model: false
@@ -204,18 +201,18 @@ fixed:
       prediction_level: graph
       remove_isolated_components: true
       run_random_baseline: true
-      block_size: 1_000  # TODO: test
-      epochs: 125  # TODO: test
+      block_size: 1_000
+      epochs: 125
       epochs_resampling: 100
-      resample_period: 1  # TODO: test
-      max_final_samples: 20  # TODO: test
-      eps: 1.0e-07  # TODO: test
-      eps_init_noised: false  # TODO: test
+      resample_period: 1
+      max_final_samples: 20
+      eps: 1.0e-07
+      eps_init_noised: false
       is_undirected: true
-      loss: raw_prediction  # TODO: test
+      loss: raw_prediction
       metric: null
-      lr: 4000  # TODO: test
-      max_edge_weight_update: 0.0  # TODO: test
+      lr: 4000
+      max_edge_weight_update: 0.0
       max_trials_sampling: 20
       minimum_budget: 1
       node_prob_enable: true
