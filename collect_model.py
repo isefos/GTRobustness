@@ -26,19 +26,19 @@ models = {
 
 
 def check_cfg(cfg_from_file, model, dataset):
-    df = cfg_from_file["graphgym"]["dataset"]["format"]
+    df = cfg_from_file["dataset"]["format"]
     dfg = datasets[dataset]["format"]
-    dn = cfg_from_file["graphgym"]["dataset"]["name"]
+    dn = cfg_from_file["dataset"]["name"]
     dng = datasets[dataset]["name"]
     assert df == dfg, (f"Dataset format was given to be `{dfg}`, but encountered `{df}`.")
     assert dn == dng, (f"Dataset name was given to be `{dng}`, but encountered `{dn}`.")
 
-    mt = cfg_from_file["graphgym"]["model"]["type"]
+    mt = cfg_from_file["model"]["type"]
     mtg = models[model]["type"]
     assert mt in mtg, (f"Model was given to be in {mtg}, but encountered `{mt}`.")
     mlg = models[model]["gnn_layer_type"]
     if mlg is not None:
-        ml = cfg_from_file["graphgym"]["gnn"]["layer_type"]
+        ml = cfg_from_file["gnn"]["layer_type"]
         assert ml in mlg, (f"Model layer was given to be in {mlg}, but encountered `{ml}`.")
 
 
