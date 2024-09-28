@@ -78,7 +78,6 @@ fixed:
   
     # copied from pre-trained model
     accelerator: cuda
-    attack:
     bn:
       eps: 1.0e-05
       mom: 0.1
