@@ -5,13 +5,14 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 6
+  experiments_per_job: 3
   sbatch_options:
-    partition: gpu_all
+    partition: gpu_gtx1080
     gres: gpu:1       # num GPUs
-    mem: 64G          # memory
-    cpus-per-task: 6  # num cores
+    mem: 32G          # memory
+    cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
+    qos: deadline
 
 # "cs": cluster sampling, so attacking the labeled nodes is NOT allowed -> attack.cluster_sampling: true
 
@@ -20,12 +21,15 @@ grid:
   graphgym.attack.transfer.perturbation_path:
     type: choice
     options:
-      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GRIT_cs'
-      - '/ceph/hdd/students/foth/perturbations/CLUSTER/SAN_cs'
-      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GCN_cs'
-      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GAT_cs'
-      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GATv2_cs'
-      - '/ceph/hdd/students/foth/perturbations/CLUSTER/Graphormer_cs'
+      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GRIT_cs'
+      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/SAN_cs'
+      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GCN_cs'
+      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GAT_cs'
+      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GATv2_cs'
+      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/Graphormer_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS-GCN_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/Polynormer_cs'
 
 # experiment fixed configs
 

@@ -21,15 +21,15 @@ grid:
   graphgym.attack.transfer.perturbation_path:
     type: choice
     options:
-      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GRIT_as'
-      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/SAN_as'
-      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GCN_as'
-      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GAT_as'
-      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GATv2_as'
-      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/Graphormer_as'
-      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS_as'
-      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS-GCN_as'
-      - '/ceph/hdd/students/foth/perturbations/CLUSTER/Polynormer_as'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GRIT_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/SAN_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GCN_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GAT_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GATv2_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/Graphormer_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS-GCN_cs'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/Polynormer_cs'
 
 # experiment fixed configs
 
@@ -57,7 +57,7 @@ fixed:
       run_random_baseline: false
       is_undirected: true
       root_node_idx: null
-      cluster_sampling: false
+      cluster_sampling: true
       node_injection:
         enable: false
       transfer:
