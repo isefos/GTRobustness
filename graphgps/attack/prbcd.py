@@ -218,6 +218,12 @@ class PRBCDAttack(torch.nn.Module):
         """
         assert kwargs.get('edge_weight') is None
         self._attack_self_setup(x, edge_index)
+
+        num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
+        prev_block_size = self.block_size
+        if self.block_size > num_possible_edges:
+            self.block_size = num_possible_edges
+
         self._setup_sampling(x=x)
             
         # For collecting attack statistics
@@ -238,6 +244,8 @@ class PRBCDAttack(torch.nn.Module):
         assert flipped_edges.size(1) <= budget, (
             f'# perturbed edges {flipped_edges.size(1)} exceeds budget {budget}'
         )
+
+        self.block_size = prev_block_size
 
         return perturbed_edge_index, flipped_edges
     
