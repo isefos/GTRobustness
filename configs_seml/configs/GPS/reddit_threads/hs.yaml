@@ -5,11 +5,11 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 3
+  experiments_per_job: 2
   sbatch_options:
     partition: gpu_gtx1080
     gres: gpu:1       # num GPUs
-    mem: 32G          # memory
+    mem: 36G          # memory
     cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
@@ -38,7 +38,9 @@ fixed:
       node_encoder: true
       node_encoder_name: WLapPE
       node_encoder_bn: false
-      edge_encoder: false
+      edge_encoder: true
+      edge_encoder_name: WeightedDummyEdge
+      edge_encoder_bn: false
 
     train:
       mode: custom
@@ -58,7 +60,6 @@ fixed:
       eigen:
         eigvec_norm: L2
         laplacian_norm: sym
-        max_freqs: 10
       pass_as_var: false
       post_layers: 0
       raw_norm_type: none
@@ -68,8 +69,6 @@ fixed:
       dim_hidden: 0  # determined later
       layer_norm: false
       batch_norm: true
-      dropout: 0.1
-      attn_dropout: 0.5
       n_heads: 8
 
     gnn:
@@ -87,7 +86,7 @@ fixed:
       scheduler: cosine_with_warmup
       early_stopping: true
       early_stopping_patience: 7
-      early_stopping_delta_e: 0.05
+      early_stopping_delta_e: 0.01
       early_stopping_warmup: 3
       num_warmup_epochs: 1
 
@@ -109,26 +108,44 @@ random:
   graphgym.optim.base_lr:
     seed: 2264
     type: loguniform
-    min: 4e-6
-    max: 1e-1
+    min: 4.0e-6
+    max: 1.0e-1
 
   graphgym.optim.weight_decay:
     seed: 89
     type: loguniform
-    min: 1e-8
-    max: 1e-2
+    min: 1.0e-8
+    max: 1.0e-2
+
+  graphgym.posenc_WLapPE.eigen.max_freqs:
+    seed: 135
+    type: randint
+    min: 5
+    max: 20
 
   dims_per_head:
     seed: 13094
     type: randint
     min: 3
-    max: 17
+    max: 13
 
   graphgym.gt.layers:
     seed: 11762
     type: randint
     min: 3
-    max: 13
+    max: 17
+
+  graphgym.gt.dropout: 
+    seed: 326
+    type: uniform
+    min: 0.0
+    max: 0.15
+  
+  graphgym.gt.attn_dropout:
+    seed: 2526
+    type: uniform
+    min: 0.0
+    max: 0.5
   
   graphgym.gnn.layers_post_mp:
     seed: 96624
