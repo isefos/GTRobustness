@@ -46,6 +46,10 @@ datasets = {
         "title": "UPFD (Twitter) politifact",
         "legend_loc": "upper right",
     },
+    "reddit_threads": {
+        "title": "Reddit Threads",
+        "legend_loc": "upper right",
+    },
 }
 models = {
     "Graphormer": {"color": "b", "linestyle": ":", "marker": "o", "markersize": 6},

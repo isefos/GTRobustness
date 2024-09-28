@@ -667,6 +667,8 @@ class PRBCDAttack(torch.nn.Module):
                 sampled_edges[sampled_edges_idx] = block_edge_weight[sampled_edges_idx]
             else:
                 sampled_edges_mask = torch.bernoulli(block_edge_weight).to(bool)
+                # TODO: sometimes the next line triggers a CUDA device-side assert error, not sure why...
+                # (adv. train. GPS)
                 sampled_edges[sampled_edges_mask] = block_edge_weight[sampled_edges_mask]
             
             edge_index, discrete_block_edge_weight, num_removed_edges = self._get_discrete_sampled_graph(sampled_edges)
