@@ -56,7 +56,7 @@ random:
     min: 0.0
     max: 0.1
 
-  graphgym.posenc_WLapPE.wsan_add_dummy_edges:
+  graphgym.posenc_WLapPE.w_add_dummy_edge:
     seed: 3265
     type: choice
     options:
