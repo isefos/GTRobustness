@@ -5,11 +5,11 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 3
+  experiments_per_job: 2
   sbatch_options:
     partition: gpu_gtx1080
     gres: gpu:1       # num GPUs
-    mem: 32G          # memory
+    mem: 16G          # memory
     cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
@@ -29,38 +29,44 @@ random:
   graphgym.optim.base_lr:
     seed: 2264
     type: loguniform
-    min: 4.0e-6
-    max: 1.0e-1
+    min: 3.0e-4
+    max: 5.0e-2
 
   graphgym.optim.weight_decay:
     seed: 89
     type: loguniform
-    min: 1.0e-8
-    max: 1.0e-2
+    min: 4.0e-8
+    max: 5.0e-5
 
   dims_per_head:
     seed: 514
     type: randint
     min: 5
-    max: 17
+    max: 13
 
   graphgym.gnn.dropout:
     seed: 653
     type: uniform
     min: 0.0
-    max: 0.15
+    max: 0.1
 
   graphgym.gnn.layers_mp:
     seed: 672
     type: randint
-    min: 2
-    max: 13
+    min: 1
+    max: 4
 
   graphgym.gt.layers:
     seed: 7625
     type: randint
-    min: 1
-    max: 5
+    min: 4
+    max: 11
+
+  graphgym.gt.dropout:
+    seed: 8625
+    type: uniform
+    min: 0.0
+    max: 0.5
 
   graphgym.gnn.layers_post_mp:
     seed: 5112
@@ -99,7 +105,7 @@ fixed:
       mode: custom
       eval_period: 1
       enable_ckpt: true
-      batch_size: 64  # very small graphs
+      batch_size: 128  # very small graphs
 
     model:
       type: WeightedPolynormer
@@ -108,7 +114,6 @@ fixed:
     gt:
       dim_hidden: 0  # determined using num_heads and dims_per_head
       n_heads: 8
-      dropout: 0.05
       polynormer:
         dropout_node_input: 0.0
         local_pre_layer_norm: false

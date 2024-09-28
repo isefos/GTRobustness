@@ -138,6 +138,7 @@ fixed:
       eigen:
         laplacian_norm: sym
         eigvec_norm: L2
+      model: Transformer
       n_heads: 8
       dim_pe: 0  # determined by heads and dim per head
       raw_norm_type: none
