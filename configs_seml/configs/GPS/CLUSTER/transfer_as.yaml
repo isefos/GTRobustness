@@ -28,7 +28,7 @@ grid:
       #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GATv2_as'
       #- '/ceph/hdd/students/foth/perturbations/CLUSTER/Graphormer_as'
       #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS_as'
-      #- '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS-GCN_as'
+      - '/ceph/hdd/students/foth/perturbations/CLUSTER/GPS-GCN_as'
       - '/ceph/hdd/students/foth/perturbations/CLUSTER/Polynormer_as'
 
 # experiment fixed configs
