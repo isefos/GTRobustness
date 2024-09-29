@@ -49,16 +49,6 @@ fixed:
     pretrained:
       finetune: false
 
-    posenc_GraphormerBias:
-      dim_pe: 0
-      directed_graphs: false
-      enable: true
-      has_edge_attr: false
-      node_degrees_only: false
-      num_in_degrees: 21
-      num_out_degrees: 21
-      num_spatial_types: 8
-
     attack:
       transfer:
         enable: true
