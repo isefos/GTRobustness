@@ -129,14 +129,36 @@ budget_measures = {
     #},
 }
 
+transfer_map = {
+    "GCN": 0,
+    "Graphormer": 1,
+    "GRIT": 2,
+    "SAN": 3,
+    "GPS": 4,
+    "Polynormer": 5,
+    "GPS-GCN": 6,
+    "GAT": 7,
+    "GATv2": 8,
+}
+
 styles = {
-    "adaptive": {"color": ["b"], "linestyle": [":"], "marker": ["o"], "markersize": [6]},
-    "random": {"color": ["g"], "linestyle": ["-."], "marker": ["*"], "markersize": [9]},
+    "adaptive": {"color": "r", "linestyle": (0, (1, 1)), "marker": "o", "markersize": 6},
+    "random": {"color": "k", "linestyle": (0, (1, 1)), "marker": "*", "markersize": 9},
     "transfer": {
-        "color": ["r", "k", "orange", "m", "aqua", "blue", "darkviolet", "springgreen"],
-        "linestyle": ["--", (0, (3, 5, 1, 5, 1, 5)), (0, (5, 10)), (0, (5, 1)), (0, (1, 1)), (0, (5, 10)), "--", (0, (3, 5, 1, 5, 1, 5))],
-        "marker": ["v", "s", "X", "p", "s", "s", "P", "*"],
-        "markersize": [7, 6, 8, 8, 8, 8, 8, 8],
+        "color": ["#8CE", "#328", "#4A9", "#173", "#993", "#DC7", "#C67", "#825", "#A49"],
+        "linestyle": [
+            "--",
+            (0, (3, 5, 1, 5)),
+            "-.",
+            (0, (3, 5, 1, 5, 1, 5)), 
+            (0, (5, 10)), 
+            (0, (5, 1)), 
+            "dotted", 
+            (0, (5, 10)),
+            (0, (3, 10, 1, 15)),
+        ],
+        "marker": ["X", "s", "v", "p", "d", "P", "^", "h", ">"],
+        "markersize": [7, 6, 8, 8, 7, 7, 7, 8, 7],
     },
 }
 
@@ -144,15 +166,21 @@ figsize = (2.5, 2.0)
 figsize_all = (4.5, 3.5)
 
 
-def clean_path(results_path: str):
+def clean_path(results_path: str, names: list[str]) -> tuple[dict, dict, dict]:
     results_path = Path(results_path)
     if results_path.exists():
         shutil.rmtree(results_path)
-    results_path.mkdir(parents=True)
-    general_info_file = results_path / "runs_infos.txt"
-    seed_dir = results_path / "results"
-    seed_dir.mkdir()
-    return results_path, general_info_file, seed_dir
+    results_paths, general_info_files, seed_dirs = {}, {}, {}
+    for name in names:
+        results_path_num = results_path / name
+        results_path_num.mkdir(parents=True)
+        results_paths[name] = results_path_num
+        general_info_file = results_path_num / "runs_infos.txt"
+        general_info_files[name] = general_info_file
+        seed_dir = results_path_num / "results"
+        seed_dir.mkdir()
+        seed_dirs[name] = seed_dir
+    return results_paths, general_info_files, seed_dirs
 
 
 def write_info_file(info_file, run_ids, num_params, extras, run_dirs):
@@ -206,7 +234,7 @@ def write_results(
         run_name = result["transfer_model"]
         rand_run = run_name == "random"
         seeds = result["result"]["attack"]["seeds"]
-        if rand_run:
+        if rand_run or run_name == "adaptive":
             budgets = result["result"]["attack"]["budgets"]
         else:
             budgets = get_transfer_result_budgets(result)
@@ -248,6 +276,8 @@ def save_plots(
     add_legend: bool,
     y_min: float | None,
     y_max: float | None,
+    y_min_margin,
+    y_max_margin,
 ):
     plots_dir = results_path / "plots"
     plots_dir_runs = plots_dir / "individual"
@@ -298,8 +328,6 @@ def save_plots(
                     else:
                         agg_res[title][budget_measure][run_name] = {}
 
-                label_occurrences = defaultdict(int)
-
                 for label, col in col_group.items():
                     rand_label = label == "random"
                     if label == "clean":
@@ -307,12 +335,17 @@ def save_plots(
                     if (rand_run and not rand_label) or (not rand_run and rand_label):
                         continue  # for random only plot the random col, for transfer dont plot rand col
 
-                    l_count = label_occurrences[label]
-                    c = styles[label]["color"][l_count]
-                    l = styles[label]["linestyle"][l_count]
-                    m = styles[label]["marker"][l_count]
-                    ms = styles[label]["markersize"][l_count]
-                    label_occurrences[label] += 1
+                    k = label if run_name != "adaptive" else "adaptive"
+                    c = styles[k]["color"]
+                    l = styles[k]["linestyle"]
+                    m = styles[k]["marker"]
+                    ms = styles[k]["markersize"]
+                    if k == "transfer":
+                        idx = transfer_map[run_name]
+                        c = c[idx]
+                        l = l[idx]
+                        m = m[idx]
+                        ms = ms[idx]
 
                     x = np.concatenate((np.array([0.0]), np.array(df_agg_mean.index)))
                     x = np.concatenate(
@@ -346,6 +379,12 @@ def save_plots(
                     if y_label:
                         ax.set_ylabel(title)
                         ax_sb.set_ylabel(title)
+                    if "argin" not in title:
+                        ax.set_ylim(bottom=y_min, top=y_max)
+                        ax_sb.set_ylim(bottom=y_min, top=y_max)
+                    else:
+                        ax.set_ylim(bottom=y_min_margin, top=y_max_margin)
+                        ax_sb.set_ylim(bottom=y_min_margin, top=y_max_margin)
                     ax.legend()
                     ax_sb.legend()
                     filename = f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}"
@@ -402,17 +441,19 @@ def save_plots(
         df_strongest.to_csv(seed_dir / filename)
 
 
-    plotdir_all = plots_dir / "agg_all_budgets"
+    plotdir_all = plots_dir / "agg_ab"
     plotdir_all.mkdir()
-    plotdir_small = plots_dir / "agg_small_budgets"
+    plotdir_all_bt = plots_dir / "agg_ab_bt"
+    plotdir_all_bt.mkdir()
+    plotdir_small = plots_dir / "agg_sb"
     plotdir_small.mkdir()
-    plotdir_bt = plots_dir / "agg_best_transfer"
-    plotdir_bt.mkdir()
+    plotdir_small_bt = plots_dir / "agg_sb_bt"
+    plotdir_small_bt.mkdir()
 
     for agg_res, pdir, bt in zip(
-        [all_agg_results, all_agg_results_sb, all_agg_results_sb],
-        [plotdir_all, plotdir_small, plotdir_bt],
-        [False, False, True],
+        [all_agg_results, all_agg_results, all_agg_results_sb, all_agg_results_sb],
+        [plotdir_all, plotdir_all_bt, plotdir_small, plotdir_small_bt],
+        [False, True, False, True],
     ):
 
         for title, run_stats_b in agg_res.items():
@@ -429,13 +470,12 @@ def save_plots(
                 y_best = None
                 std_best = None
 
-                label_occurrences = defaultdict(int)
                 run_stats = run_stats_b[budget_measure]
                 if bt:
                     fs_ = figsize
                 else:
                     fs_ = figsize_all
-                fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
+                fig, ax = plt.subplots(nrows=1, ncols=1, figsize=fs_)
                 if add_title:
                     ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
                 for run_name, agg_res_run in run_stats.items():
@@ -443,7 +483,7 @@ def save_plots(
                     assert len(agg_res_run) == 1
                     for col, res in agg_res_run.items():
 
-                        if run_name == model:
+                        if run_name == "adaptive":
                             label = "adaptive"
                             l = label
                         elif run_name == "random":
@@ -484,20 +524,25 @@ def save_plots(
                                 continue
                             else:
                                 l = "transfer"
-                                label = f"transfer from {run_name}"
+                                label = f"tr. {run_name}"
 
-                        l_count = label_occurrences[l]
-                        c = styles[l]["color"][l_count]
-                        ls = styles[l]["linestyle"][l_count]
-                        m = styles[l]["marker"][l_count]
-                        ms = styles[l]["markersize"][l_count]
-                        label_occurrences[l] += 1
+                        k = l if run_name != "adaptive" else "adaptive"
+                        c = styles[k]["color"]
+                        ls = styles[k]["linestyle"]
+                        m = styles[k]["marker"]
+                        ms = styles[k]["markersize"]
+                        if k == "transfer":
+                            idx = transfer_map[run_name]
+                            c = c[idx]
+                            ls = ls[idx]
+                            m = m[idx]
+                            ms = ms[idx]
 
                         x = res["x"]
                         y = res["y"]
                         std = res["std"]
 
-                        ax.plot(x, y, label=label, alpha=0.7, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
+                        ax.plot(x, y, label=label, alpha=0.8, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
                         ax.fill_between(x, y-std, y+std, color=c, alpha=0.1, linewidth=0.0)
 
                 if bt:
@@ -506,18 +551,19 @@ def save_plots(
                     ls = styles[l]["linestyle"][0]
                     m = styles[l]["marker"][0]
                     ms = styles[l]["markersize"][0]
-                    label_occurrences[l] += 1
-                    ax.plot(x_best, y_best, label=l, alpha=0.7, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
+                    ax.plot(x_best, y_best, label=l, alpha=0.8, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
                     ax.fill_between(x_best, y_best-std_best, y_best+std_best, color=c, alpha=0.1, linewidth=0.0)
 
                 ax.set_xlabel(budget_dict["label"])
                 if y_label:
-                    if "margin" not in title:
+                    if "argin" not in title:
                         ax.set_ylabel(title + r" (\%)")
+                        ax.set_ylim(bottom=y_min, top=y_max)
                     else:
                         ax.set_ylabel(title)
+                        ax.set_ylim(bottom=y_min_margin, top=y_max_margin)
                 if add_legend:
-                    ax.legend(fontsize="small", framealpha=0.5)  # bbox_to_anchor=(1.01, 0), loc="lower left")
+                    ax.legend(fontsize="small", framealpha=0.4)  # bbox_to_anchor=(1.01, 0), loc="lower left")
                 save_figure(fig, pdir, f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}")
                 #fig.savefig(pdir / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
                 ax.clear()
@@ -556,35 +602,50 @@ def get_transfer_collection_results(collection, filter_dict):
     return results, run_ids, extras, run_dirs, num_params
 
 
-def get_random_attack_collection_results(collection, dataset, model, pred_level, pretrained_num):
-    # TODO: only take the results from the correct pretrained model
-    results = seml.get_results(collection, ['config', 'result.attack.avg'])
-    for r in results:
+def get_attack_collection_results(collection, dataset, model, pred_level):
+    all_results = seml.get_results(collection, ['config', 'result.attack.avg'])
+    for r in all_results:
         check_correct_result(r, dataset, model, pred_level)
-    a_results = [r["result"]["attack"]["avg"] for r in results]
-    seeds_graphgym = [result["config"]["graphgym"]["seed"] for result in results]
-    budgets_allowed = [result["config"]["graphgym"]["attack"]["e_budget"] for result in results]
-    avg_num_edges_modified_random = [r["avg_budget_used_random"] for r in a_results]
-    avg_num_edges_clean = [r["avg_num_edges_clean"] for r in a_results]
-    avg_budget_used_random = [m / c for m, c in zip(avg_num_edges_modified_random, avg_num_edges_clean)]
-    budgets = [
-        {"budget": b, "bu": bur, "m": mr} for b, bur, mr in zip(
-            budgets_allowed,
-            avg_budget_used_random,
-            avg_num_edges_modified_random,
-        )
-    ]
-    random_transfer_result = {
-        "transfer_model": "random",
-        "result": {
-            "attack": {
-                "seeds": seeds_graphgym,
-                "budgets": budgets,
-                "avg": a_results,
-            },
-        },
-    }
-    return random_transfer_result
+
+    # separate by the pretrained model
+    per_pretrained = defaultdict(list)
+    for r in all_results:
+        pretrained = r["config"]["graphgym"]["pretrained"]["dir"]
+        name = pretrained.split("/")[-1]
+        per_pretrained[name].append(r)
+
+    rand_results_per_pretrained = {}
+    adaptive_results_per_pretrained = {}
+    for name, results in per_pretrained.items():
+        a_results = [r["result"]["attack"]["avg"] for r in results]
+        seeds_graphgym = [result["config"]["graphgym"]["seed"] for result in results]
+        budgets_allowed = [result["config"]["graphgym"]["attack"]["e_budget"] for result in results]
+        avg_num_edges_modified_pert = [r["avg_budget_used"] for r in a_results]
+        avg_num_edges_modified_random = [r["avg_budget_used_random"] for r in a_results]
+        avg_num_edges_clean = [r["avg_num_edges_clean"] for r in a_results]
+        for r, avg_edges_modified, transfer_model in zip(
+            [adaptive_results_per_pretrained, rand_results_per_pretrained],
+            [avg_num_edges_modified_pert, avg_num_edges_modified_random],
+            ["adaptive", "random"]
+        ):
+            bs = [
+                {"budget": b, "bu": bur, "m": mr} for b, bur, mr in zip(
+                    budgets_allowed,
+                    [m / c for m, c in zip(avg_edges_modified, avg_num_edges_clean)],
+                    avg_edges_modified,
+                )
+            ]
+            r[name] = {
+                "transfer_model": transfer_model,
+                "result": {
+                    "attack": {
+                        "seeds": seeds_graphgym,
+                        "budgets": bs,
+                        "avg": a_results,
+                    },
+                },
+            }
+    return adaptive_results_per_pretrained, rand_results_per_pretrained
 
 
 def check_correct_result(result, dataset: str, model: str, pred_level: str):
@@ -644,15 +705,17 @@ def main(
     add_legend: bool,
     y_min: float | None,
     y_max: float | None,
+    y_min_margin: float | None,
+    y_max_margin: float | None,
 ):
     (
-        results,
-        run_ids,
+        all_results,
+        all_run_ids,
         extras,
-        run_dirs,
-        num_params,
+        all_run_dirs,
+        all_num_params,
     ) = get_transfer_collection_results(collection, filter_dict)
-    pred_level = results[0]["config"]["graphgym"]["attack"]["prediction_level"]
+    pred_level = all_results[0]["config"]["graphgym"]["attack"]["prediction_level"]
     if pred_level == "graph":
         attack_cols = attack_cols_graph
         agg_cols = agg_cols_graph
@@ -661,45 +724,89 @@ def main(
         agg_cols = agg_cols_node
     else:
         raise ValueError(f"Unknown prediction level: `{pred_level}`")
-    for res in results:
+    for res in all_results:
         check_correct_result(res, dataset, model, pred_level)
         res["transfer_model"] = get_transfer_model(res)
-    results_path, info_file, seed_dir = clean_path(results_path)
-    write_info_file(info_file, run_ids, num_params, extras, run_dirs)
 
-    # TODO: will need to get the pretrained model num now as well to find the correct
-    pretrained_num = 0
-    rand_result = get_random_attack_collection_results(attack_collection, dataset, model, pred_level, pretrained_num)
-    results.append(rand_result)
+    # separate by the pretrained model
+    per_pretrained = defaultdict(lambda: defaultdict(list))
+    for i, r in enumerate(all_results):
+        pretrained = r["config"]["graphgym"]["pretrained"]["dir"]
+        maybe_adv_trained, name = pretrained.split("/")[-2:]
+        adv_trained = maybe_adv_trained == "adv"
 
-    run_seed_dataframes = write_results(
-        seed_dir,
-        results,
-        attack_cols,
+        if not adv_trained and r["transfer_model"] == model:
+            # get the "adpative" results from the attack collection (where we get random as well)
+            continue 
+
+        per_pretrained[name]["results"].append(r)
+        for n, v in zip(
+            [
+                "run_ids",
+                "run_dirs",
+                "num_params",
+            ],
+            [
+                all_run_ids[i],
+                all_run_dirs[i],
+                all_num_params[i],
+            ]
+        ):
+            per_pretrained[name][n].append(v)
+
+    all_adaptive_results, all_rand_results = get_attack_collection_results(
+        attack_collection, dataset, model, pred_level,
     )
-    # plots
-    save_plots(
-        model,
-        dataset,
-        run_seed_dataframes,
-        results_path,
-        attack_cols,
-        max_idx_small_budget,
-        agg_cols,
-        seed_dir,
-        y_label,
-        add_title,
-        add_legend,
-        y_min,
-        y_max,
-    )
+    
+    # create the paths for each different model, dict
+    results_paths, info_files, seed_dirs = clean_path(results_path, list(per_pretrained))
+
+    for name, d in per_pretrained.items():
+        if name not in all_adaptive_results:
+            raise Exception(
+                f"Did not find *adaptive* results for pretrained mode `{name}` "
+                f"in attack collection `{attack_collection}`, (model={model}, dataset={dataset})"
+            )
+        d["results"].append(all_adaptive_results[name])
+        if name not in all_rand_results:
+            raise Exception(
+                f"Did not find *random* results for pretrained mode `{name}`"
+                f"in attack collection `{attack_collection}`"
+            )
+        d["results"].append(all_rand_results[name])
+
+        write_info_file(info_files[name], d["run_ids"], d["num_params"], extras, d["run_dirs"])
+
+        run_seed_dataframes = write_results(
+            seed_dirs[name],
+            d["results"],
+            attack_cols,
+        )
+        # plots
+        save_plots(
+            model,
+            dataset,
+            run_seed_dataframes,
+            results_paths[name],
+            attack_cols,
+            max_idx_small_budget,
+            agg_cols,
+            seed_dirs[name],
+            y_label,
+            add_title,
+            add_legend,
+            y_min,
+            y_max,
+            y_min_margin,
+            y_max_margin,
+        )
 
 
 parser = argparse.ArgumentParser(description='Processes the results of transfer attack.')
 parser.add_argument("-c", "--collection")
 parser.add_argument("-d", "--dataset")
 parser.add_argument("-m", "--model")
-parser.add_argument("-s", "--small-budget-idx")
+parser.add_argument("-s", "--small-budget-idx", type=int, default=4)
 parser.add_argument("-a", "--attack-collection")
 parser.add_argument("-y", "--y-label", action="store_true")
 parser.add_argument("-t", "--title", action="store_true")
@@ -707,6 +814,8 @@ parser.add_argument("-l", "--legend", action="store_true")
 parser.add_argument("-b", "--best-transfer-only", action="store_true")
 parser.add_argument("--y-min", type=float, default=None)
 parser.add_argument("--y-max", type=float, default=None)
+parser.add_argument("--y-min-margin", type=float, default=1)
+parser.add_argument("--y-max-margin", type=float, default=-1)
 
 
 if __name__ == "__main__":
@@ -721,11 +830,13 @@ if __name__ == "__main__":
         filter_dict=filter_dict,
         dataset=args.dataset,
         model=args.model,
-        max_idx_small_budget=int(args.small_budget_idx),
+        max_idx_small_budget=args.small_budget_idx,
         attack_collection=args.attack_collection,
         y_label=args.y_label,
         add_title=args.title,
         add_legend=args.legend,
         y_min=args.y_min,
         y_max=args.y_max,
+        y_min_margin=args.y_min_margin,
+        y_max_margin=args.y_max_margin,
     )
