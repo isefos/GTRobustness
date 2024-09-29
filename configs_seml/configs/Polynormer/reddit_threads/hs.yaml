@@ -29,51 +29,32 @@ random:
   graphgym.optim.base_lr:
     seed: 2264
     type: loguniform
-    min: 3.0e-4
+    min: 8.0e-5
     max: 5.0e-2
-
-  graphgym.optim.weight_decay:
-    seed: 89
-    type: loguniform
-    min: 4.0e-8
-    max: 5.0e-5
 
   dims_per_head:
     seed: 514
     type: randint
-    min: 5
-    max: 13
-
-  graphgym.gnn.dropout:
-    seed: 653
-    type: uniform
-    min: 0.0
-    max: 0.1
+    min: 6
+    max: 25
 
   graphgym.gnn.layers_mp:
     seed: 672
     type: randint
-    min: 1
-    max: 4
+    min: 2
+    max: 6
 
   graphgym.gt.layers:
     seed: 7625
     type: randint
-    min: 4
-    max: 11
+    min: 2
+    max: 8
 
   graphgym.gt.dropout:
     seed: 8625
     type: uniform
-    min: 0.0
-    max: 0.5
-
-  graphgym.gnn.layers_post_mp:
-    seed: 5112
-    type: choice
-    options:
-      - 1
-      - 2
+    min: 0.2
+    max: 0.4
 
 # experiment fixed configs
 
@@ -105,7 +86,7 @@ fixed:
       mode: custom
       eval_period: 1
       enable_ckpt: true
-      batch_size: 128  # very small graphs
+      batch_size: 64  # very small graphs
 
     model:
       type: WeightedPolynormer
@@ -113,31 +94,34 @@ fixed:
 
     gt:
       dim_hidden: 0  # determined using num_heads and dims_per_head
-      n_heads: 8
+      n_heads: 3
       polynormer:
         dropout_node_input: 0.0
         local_pre_layer_norm: false
         beta: -1.0
-        qk_shared: true
+        qk_shared: false
 
     gnn:
-      head: weighted_add_pool_graph
+      head: weighted_mean_pool_graph
       layers_pre_mp: 0
       dim_inner: 0  # determined using num_heads and dims_per_head
-      att_heads: 8
+      att_heads: 3
+      dropout: 0.0
+      layers_post_mp: 1
 
     optim:
       clip_grad_norm: true
       clip_grad_norm_value: 5.0
       optimizer: adamW
+      weight_decay: 0.0
       max_epoch: 30
       scheduler: cosine_with_warmup
       early_stopping: true
       early_stopping_patience: 7
-      early_stopping_delta_e: 0.05
+      early_stopping_delta_e: 0.01
       early_stopping_warmup: 3
-      num_warmup_epochs: 3
-      num_local_epochs: 2
+      num_warmup_epochs: 1
+      num_local_epochs: 0
 
     attack:
       enable: false
