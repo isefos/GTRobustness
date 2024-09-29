@@ -19,7 +19,7 @@ def _compute_dense_eigh(A: NDArray, max_freqs: int, need_full: bool, driver: str
     return E, U
 
 
-def get_dense_eigh(A: NDArray, max_freqs: int, need_full: bool = True):
+def get_dense_eigh(A: NDArray, max_freqs: int = 10, need_full: bool = True):
     try:
         try:
             E, U = _compute_dense_eigh(A, max_freqs, need_full, driver="evr")
