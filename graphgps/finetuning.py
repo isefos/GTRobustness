@@ -78,6 +78,13 @@ def load_pretrained_model_cfg(cfg):
     for key in cfg.keys():
         if key.startswith('posenc_'):
             cfg[key] = pretrained_cfg[key]
+            if (
+                cfg.model.type == "WeightedSANTransformer" 
+                and key == "posenc_WLapPE" 
+                and pretrained_cfg.posenc_WLapPE.model == "none"
+            ):
+                # overwrite the weighted SAN PE model from "none" (which used to default to Transformer)
+                cfg.posenc_WLapPE.model = "Transformer"
 
     # Copy over GT config
     cfg.gt = pretrained_cfg.gt
