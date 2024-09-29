@@ -9,19 +9,25 @@ from numpy.typing import NDArray
 
 def _compute_dense_eigh(A: NDArray, max_freqs: int, need_full: bool, driver: str = "evr"):
     if (not need_full) and (max_freqs < A.shape[0]):
-        E, U = eigh(A, subset_by_index=[0, max_freqs-1], driver=driver)
+        if driver == "evr":
+            E, U = eigh(A, subset_by_index=[0, max_freqs-1], driver=driver)
+        else:
+            E_full, U_full = eigh(A, driver=driver)
+            E, U = E_full[:max_freqs], U_full[:, :max_freqs]
     else:
-        # TODO: add option to get only subset of lowest and highest
         E, U = eigh(A, driver=driver)
     return E, U
 
 
-def get_dense_eigh(A: NDArray, max_freqs: int = 10, need_full: bool = True):
+def get_dense_eigh(A: NDArray, max_freqs: int, need_full: bool = True):
     try:
         try:
             E, U = _compute_dense_eigh(A, max_freqs, need_full, driver="evr")
         except:
-            E, U = _compute_dense_eigh(A, max_freqs, need_full, driver="evd")
+            try:
+                E, U = _compute_dense_eigh(A, max_freqs, need_full, driver="evd")
+            except:
+                E, U = _compute_dense_eigh(A, max_freqs, need_full, driver="ev")
     except Exception as e:
         logging.error(f"Could not resolve error during eigendecomposition of the matrix:\n{A.tolist()}")
         raise e
