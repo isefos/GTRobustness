@@ -74,20 +74,20 @@ budget_measures = {
 }
 
 
-def clean_path(results_path: str, nums: list[str]) -> tuple[dict, dict, dict]:
+def clean_path(results_path: str, names: list[str]) -> tuple[dict, dict, dict]:
     results_path = Path(results_path)
     if results_path.exists():
         shutil.rmtree(results_path)
     results_paths, general_info_files, seed_dirs = {}, {}, {}
-    for num in nums:
-        results_path_num = results_path / num
+    for name in names:
+        results_path_num = results_path / name
         results_path_num.mkdir(parents=True)
-        results_paths[num] = results_path_num
+        results_paths[name] = results_path_num
         general_info_file = results_path_num / "runs_infos.txt"
-        general_info_files[num] = general_info_file
+        general_info_files[name] = general_info_file
         seed_dir = results_path_num / "results"
         seed_dir.mkdir()
-        seed_dirs[num] = seed_dir
+        seed_dirs[name] = seed_dir
     return results_paths, general_info_files, seed_dirs
 
 
@@ -356,8 +356,8 @@ def main(
     per_pretrained = defaultdict(lambda: defaultdict(list))
     for i, r in enumerate(results):
         pretrained = r["config"]["graphgym"]["pretrained"]["dir"]
-        num = pretrained.split("/")[-1]
-        per_pretrained[num]["results"].append(r)
+        name = pretrained.split("/")[-1]
+        per_pretrained[name]["results"].append(r)
         for n, v in zip(
             [
                 "run_ids",
@@ -376,17 +376,17 @@ def main(
                 budgets[i],
             ]
         ):
-            per_pretrained[num][n].append(v)
+            per_pretrained[name][n].append(v)
     
-    # create the paths for each num, dict
+    # create the paths for each different model, dict
     results_paths, info_files, seed_dirs = clean_path(results_path, list(per_pretrained))
 
-    for num, d in per_pretrained.items():
+    for name, d in per_pretrained.items():
 
         # write results into file
         seed_dataframes, df_agg_mean, df_agg_std = write_results(
-            info_files[num],
-            seed_dirs[num],
+            info_files[name],
+            seed_dirs[name],
             d["results"],
             d["run_ids"],
             extras,
@@ -402,7 +402,7 @@ def main(
             model,
             dataset,
             seed_dataframes,
-            results_paths[num],
+            results_paths[name],
             attack_cols,
             df_agg_mean,
             df_agg_std,
