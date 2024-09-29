@@ -52,7 +52,6 @@ fixed:
       remove_isolated_components: false
       run_random_baseline: false
       is_undirected: true
-      root_node_idx: 0
       node_injection:
         enable: false
 
