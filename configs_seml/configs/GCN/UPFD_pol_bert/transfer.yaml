@@ -21,9 +21,8 @@ grid:
     options:
       #- '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/GRIT'
       #- '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/SAN'
-      #- '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/GCN'
       #- '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/Graphormer'
-      - '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/GPS'
+      #- '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/GPS'
       - '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/Polynormer'
 
 # experiment fixed configs

@@ -5,12 +5,12 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 6
+  experiments_per_job: 2
   sbatch_options:
     partition: gpu_a100
     gres: gpu:1       # num GPUs
-    mem: 32G          # memory
-    cpus-per-task: 12 # num cores
+    mem: 16G          # memory
+    cpus-per-task: 2 # num cores
     time: 1-00:00     # max time, D-HH:MM
 
 grid:
@@ -18,12 +18,11 @@ grid:
   graphgym.attack.transfer.perturbation_path:
     type: choice
     options:
-      - '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/Polynormer'
       - '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/GPS'
-      - '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/GRIT'
-      - '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/SAN'
-      - '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/GCN'
-      - '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/Graphormer'
+      #- '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/GRIT'
+      #- '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/SAN'
+      #- '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/GCN'
+      #- '/ceph/hdd/students/foth/perturbations/UPFD_pol_bert/Graphormer'
 
 # experiment fixed configs
 
