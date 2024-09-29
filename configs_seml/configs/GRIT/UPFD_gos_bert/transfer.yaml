@@ -10,8 +10,9 @@ slurm:
     partition: gpu_gtx1080
     gres: gpu:1       # num GPUs
     mem: 32G          # memory
-    cpus-per-task: 8  # num cores
+    cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
+    qos: deadline
 
 grid:
 
@@ -19,9 +20,11 @@ grid:
     type: choice
     options:
       #- '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/GRIT'
-      - '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/SAN'
+      #- '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/SAN'
       #- '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/GCN'
       #- '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/Graphormer'
+      - '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/GPS'
+      - '/ceph/hdd/students/foth/perturbations/UPFD_gos_bert/Polynormer'
 
 # experiment fixed configs
 
