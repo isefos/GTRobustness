@@ -86,7 +86,7 @@ fixed:
         laplacian_norm: sym
       enable: true
       layers: 2
-      model: none
+      model: Transformer
       n_heads: 4
       pass_as_var: false
       post_layers: 0

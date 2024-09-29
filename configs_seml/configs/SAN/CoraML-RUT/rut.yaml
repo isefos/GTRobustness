@@ -50,6 +50,7 @@ fixed:
         laplacian_norm: sym
         max_freqs: 84  # TODO: test (but requires retraining)
       enable: true
+      model: Transformer
       layers: 1
       model: none
       n_heads: 3

@@ -89,6 +89,7 @@ fixed:
         laplacian_norm: sym
         max_freqs: 10
       enable: true
+      model: Transformer
       layers: 1
       n_heads: 4
       pass_as_var: false

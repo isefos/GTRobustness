@@ -47,7 +47,7 @@ fixed:
         max_freqs: 24
       enable: true
       layers: 2
-      model: none
+      model: Transformer
       n_heads: 5
       pass_as_var: false
       post_layers: 0

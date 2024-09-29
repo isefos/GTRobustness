@@ -42,6 +42,7 @@ fixed:
 
     posenc_WLapPE:
       enable: true
+      model: Transformer
       eigen:
         laplacian_norm: sym
         eigvec_norm: L2
