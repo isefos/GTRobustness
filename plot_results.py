@@ -29,6 +29,75 @@ def save_figure(fig, name, png=False):
     fig.savefig(figures_dir / file_name, bbox_inches="tight")
 
 
+plots = {
+    "CLUSTER_cs": {"dataset": "CLUSTER_cs", "sub_dirs": {
+        "Graphormer": "t_gph_cluster_cs_prel/0",
+        "GRIT": "t_grt_cluster_cs_prel/0",
+        "SAN": "t_san_cluster_cs_prel/0",
+        "GPS": "t_gps_cluster_cs/0",
+        "GPS-GCN": "t_gpsgcn_cluster_cs/0",
+        "Polynormer": "t_ply_cluster_cs/0",
+        "GATv2": "t_ga2_cluster_cs_prel/0",
+        "GAT": "t_gat_cluster_cs_prel/0",
+        "GCN": "t_gcn_cluster_cs_prel/0",
+    }},
+    "CLUSTER_as": {"dataset": "CLUSTER_as", "sub_dirs": {
+        "Graphormer": "t_gph_cluster_as_prel/0",
+        "GRIT": "t_grt_cluster_as_prel/0",
+        "SAN": "t_san_cluster_as_prel/0",
+        "GPS": "t_gps_cluster_as/0",
+        "GPS-GCN": "t_gpsgcn_cluster_as/0",
+        "Polynormer": "t_ply_cluster_as/0",
+        "GATv2": "t_ga2_cluster_as_prel/0",
+        "GAT": "t_gat_cluster_as_prel/0",
+        "GCN": "t_gcn_cluster_as_prel/0",
+    }},
+    "UPFD_gos_bert": {"dataset": "UPFD_gos_bert", "sub_dirs": {
+        "Graphormer": "t_gph_upfd_gos_bert_prel/0",
+        "GRIT": "t_grt_upfd_gos_bert_prel/0",
+        "SAN": "t_san_upfd_gos_bert_prel/0",
+        "GPS": "t_gps_upfd_gos_bert/0",
+        "Polynormer": "t_ply_upfd_gos_bert/0",
+        "GCN": "t_gcn_upfd_gos_bert_prel/0",
+    }},
+    "UPFD_pol_bert": {"dataset": "UPFD_pol_bert", "sub_dirs": {
+        "Graphormer": "t_gph_upfd_pol_bert_prel/0",
+        "GRIT": "t_grt_upfd_pol_bert_prel/0",
+        "SAN": "t_san_upfd_pol_bert_prel/0",
+        "GPS": "t_gps_upfd_pol_bert/0",
+        "Polynormer": "t_ply_upfd_pol_bert/1",
+        "GCN": "t_gcn_upfd_pol_bert_prel/0",
+    }},
+    "reddit_threads": {"dataset": "reddit_threads", "sub_dirs": {
+        "Graphormer": "t_gph_reddit_threads/small",
+        "GRIT": "t_grt_reddit_threads/small",
+        "SAN": "t_san_reddit_threads/medium2",
+        "GPS": "t_gps_reddit_threads/small",
+        "GCN": "t_gcn_reddit_threads/tiny",
+    }},
+    "adv_GCN_UPFD_gos_bert": {"dataset": "UPFD_gos_bert", "sub_dirs": {
+        "GCN": "t_gcn_upfd_gos_bert_prel/0",
+        r"GCN, b=5\%, k=4": "t_adv_gcn_upfd_gos_bert/11",
+        r"GCN, b=10\%, k=4": "t_adv_gcn_upfd_gos_bert/15",
+        r"GCN, b=15\%, k=5": "t_adv_gcn_upfd_gos_bert/25",
+    }},
+    "adv_GCN_UPFD_pol_bert": {"dataset": "UPFD_pol_bert", "sub_dirs": {
+        "GCN": "t_gcn_upfd_pol_bert_prel/0",
+        r"GCN, b=15\%, k=4": "t_adv_gcn_upfd_pol_bert/18",
+        r"GCN, b=15\%, k=6": "t_adv_gcn_upfd_pol_bert/35",
+    }},
+    "adv_Graphormer_UPFD_gos_bert": {"dataset": "UPFD_gos_bert", "sub_dirs": {
+        "Graphormer": "t_gph_upfd_gos_bert_prel/0",
+        r"Graphormer, b=5\%, k=4": "t_adv_gph_upfd_gos_bert/12",
+        r"Graphormer, b=10\%, k=4": "t_adv_gph_upfd_gos_bert/15",
+        r"Graphormer, b=15\%, k=4": "t_adv_gph_upfd_gos_bert/18",
+    }},
+    "adv_Graphormer_UPFD_pol_bert": {"dataset": "UPFD_pol_bert", "sub_dirs": {
+        "Graphormer": "t_gph_upfd_pol_bert_prel/0",
+        r"Graphormer, b=15\%, k=4": "t_adv_gph_upfd_pol_bert/18",
+        r"Graphormer, b=15\%, k=6": "t_adv_gph_upfd_pol_bert/35",
+    }},
+}
 datasets = {
     "CLUSTER_cs": {
         "title": "CLUSTER (constrained attack)",
@@ -51,31 +120,102 @@ datasets = {
         "legend_loc": "upper right",
     },
 }
-models = {
-    "Graphormer": {"color": "b", "linestyle": ":", "marker": "o", "markersize": 6},
-    "SAN": {"color": "r", "linestyle": "--", "marker": "v", "markersize": 7},
-    "GRIT": {"color": "g", "linestyle": "-.", "marker": "*", "markersize": 9},
-    "GCN": {"color": "k", "linestyle": (0, (3, 5, 1, 5, 1, 5)), "marker": "s", "markersize": 6},
-    "GAT": {"color": "orange", "linestyle": (0, (5, 10)), "marker": "X", "markersize": 8},
-    "GATv2": {"color": "m", "linestyle": (0, (5, 1)), "marker": "p", "markersize": 8},
-    "GPS": {"color": "c", "linestyle": (0, (3, 5, 1, 5, 1, 5)), "marker": "P", "markersize": 8},
-    "GPS-GCN": {"color": "olive", "linestyle": (0, (3, 1, 1, 1, 1, 1)), "marker": "d", "markersize": 8},
-    "Polynormer": {"color": "springgreen", "linestyle": "dotted", "marker": "^", "markersize": 8},
-
+# In order of GT -> GNN, diverging color scheme
+model_order = {
+    "Graphormer": 0,
+    "GRIT": 1,
+    "SAN": 2,
+    "GPS": 3,
+    "GPS-GCN": 4,
+    "Polynormer": 5,
+    "GATv2": 6,
+    "GAT": 7,
+    "GCN": 8,
+}
+adv_order = {
+    "UPFD_gos_bert": {
+        "GCN": 9,
+        r"GCN, b=5\%, k=4": 10,
+        r"GCN, b=10\%, k=4": 11,
+        r"GCN, b=15\%, k=5": 12,
+        "Graphormer": 9,
+        r"Graphormer, b=5\%, k=4": 10,
+        r"Graphormer, b=10\%, k=4": 11,
+        r"Graphormer, b=15\%, k=4": 12,
+    },
+    "UPFD_pol_bert": {
+        "GCN": 9,
+        r"GCN, b=15\%, k=4": 11,
+        r"GCN, b=15\%, k=6": 12,
+        "Graphormer": 9,
+        r"Graphormer, b=15\%, k=4": 11,
+        r"Graphormer, b=15\%, k=6": 12,
+    },
+}
+syles = {
+    "color": [
+        #"#ad0d00", "#d65e2b", "#eda356", "#deba6b", "#aaac8c", "#92b4bf", "#689ab1", "#3e769d", "#0a3b87",
+        #'#CC6677', '#332288', '#DDCC77', '#117733', '#88CCEE', '#882255', '#44AA99', '#999933', '#AA4499',
+        '#A50026', '#DD3D2D', '#F67E4B', '#FDB366', '#eEcA7B', '#cAcCaC', '#b2d4dF', '#6EA6CD', '#364B9A',
+        # for adversarial
+        #'#cDdCaF', '#c0d7bA', '#b2d3c2', '#a5cDc8', '#98c8cC', '#8Bc2d1', '#7DbBd4', '#71b4d7', '#6BaCd7', '#6Ea2d4'
+        #'#A80003', '#E40515', '#F94902', '#F6790B', '#F19903', '#E7B503', '#D5CE04', '#BBE453', '#A2F49B', '#C6F7D6', '#CEFFFF'
+        '#E40515', '#F19903', '#D5CE04', '#A2F49B',
+    ],
+    "linestyle": [
+        "--",
+        (1, (3, 3, 1, 3, 2, 2)),
+        "-.",
+        (2, (3, 3, 1, 2, 1, 1)), 
+        (3, (5, 10)), 
+        (4, (5, 1)), 
+        "dotted", 
+        (5, (5, 2, 4, 1)),
+        (6, (3, 2, 2, 1)),
+        # now for the adv GCN b = 5, 10, 15, 15
+        #(0, (3, 5, 1, 5)),
+        #"-.",
+        #(0, (3, 5, 1, 5, 1, 5)), 
+        #(0, (5, 10)), 
+        # now for the adv Graphormer b = 5, 10, 15, 15
+        #(0, (5, 1)), 
+        #"dotted", 
+        #(0, (5, 10)),
+        #(0, (3, 10, 1, 15)),
+    ],
+    "marker": [
+        "X", "s", "v", "p", ">", "P", "^", "h", "d",
+        # now for the adv GCN b = 5, 10, 15, 15
+        #"P", "^", "h", "X",
+        # now for the adv Graphormer b = 5, 10, 15, 15
+        #"s", "v", "p", ">",
+    ],
+    "markersize": [
+        7, 6, 8, 8, 8, 8, 8, 8, 7,
+        # now for the adv GCN b = 5, 10, 15, 15
+        #7, 7, 8, 7,
+        # now for the adv Graphormer b = 5, 10, 15, 15
+        #6, 8, 8, 7,
+    ],
 }
 metrics = {"acc": "Accuracy (\%)", "asr": "Attack success rate (\%)", "margin": "Margin"}
 
 
 def main(
-    dataset: str,
+    plot: str,
     metric: str,
     max_idx_small_budget: int,
     png: bool,
     legend: bool,
     title: bool,
     y_label: bool,
+    y_min: None | float,
+    y_max: None | float,
+    y_min_sb: None | float,
+    y_max_sb: None | float,
 ):
     s = max_idx_small_budget
+    dataset = plots[plot]["dataset"]
     result_dir = Path("results_t") / dataset
     if not result_dir.is_dir():
         raise ValueError(
@@ -89,65 +229,94 @@ def main(
     if title:
         ax.set_title(datasets[dataset]["title"])
         ax_sb.set_title(datasets[dataset]["title"])
-    for model_dir in result_dir.iterdir():
-        if not model_dir.is_dir():
-            continue
-        model = model_dir.name
-        c = models[model]["color"]
-        l = models[model]["linestyle"]
-        m = models[model]["marker"]
-        ms = models[model]["markersize"]
+    for i, (model, sub_dir) in enumerate(plots[plot]["sub_dirs"].items()):
+        if plot.startswith("adv"):
+            model_names = model.split(" ")
+            if model in model_order:
+                model_label = "normal"
+            else:
+                budget = model_names[1]
+                steps = model_names[2]
+                model_label = f"adv. {budget} {steps}"
+            model_name = model_names[0]
+            if model_name[-1] == ",":
+                model_name = model_name[:-1]
+        else:
+            model_name = model
+            model_label = model
+        idx = model_order[model_name]
+        if plot.startswith("adv"):
+            c_idx = adv_order[dataset][model]
+            m_idx = (idx + i) % len(model_order)
+        else:
+            c_idx = idx
+            m_idx = idx
+        file: Path = result_dir / model_name / sub_dir / "results" / f"strongest_{metric}.csv"
+        if not file.is_file():
+            raise Exception(f"The results file ({file}) does not exist, run transfer first!")
+        c = syles["color"][c_idx]
+        l = syles["linestyle"][m_idx]
+        #l = (2 * i, (3, 1, 4, 1))
+        m = syles["marker"][m_idx]
+        ms = syles["markersize"][m_idx]
 
-        collections = [sd.name for sd in model_dir.iterdir()]
-        assert len(collections), "Not implemented yet to handle more than one collection"
-        coll_name = collections[0]
-
-        df = pd.read_csv(model_dir / coll_name / "results" / f"strongest_{metric}.csv")
+        df = pd.read_csv(file)
         x = df["budget"] * 100
         y = df["mean"]
         std = df["std"]
         if metric != "margin":
             y *= 100
             std *= 100
-        ax.plot(x, y, alpha=0.7, label=model, color=c, marker=m, linestyle=l, markeredgewidth=0.0, markersize=ms)
-        ax.fill_between(x, y-std, y+std, color=c, alpha=0.1, linewidth=0.0)
-        ax_sb.plot(x[:s], y[:s], alpha=0.7, label=model, color=c, marker=m, linestyle=l, markeredgewidth=0.0, markersize=ms)
-        ax_sb.fill_between(x[:s], y[:s]-std[:s], y[:s]+std[:s], color=c, alpha=0.1, linewidth=0.0)
+        ax.plot(x, y, alpha=0.9, label=model_label, color=c, marker=m, linestyle=l, markeredgewidth=0.0, markersize=ms)
+        ax.fill_between(x, y-std, y+std, color=c, alpha=0.2, linewidth=0.0)
+        ax_sb.plot(x[:s+1], y[:s+1], alpha=0.9, label=model_label, color=c, marker=m, linestyle=l, markeredgewidth=0.0, markersize=ms)
+        ax_sb.fill_between(x[:s+1], y[:s+1]-std[:s+1], y[:s+1]+std[:s+1], color=c, alpha=0.2, linewidth=0.0)
         
     ax.set_xlabel("Edge modification budget (\%)")
     ax_sb.set_xlabel("Edge modification budget (\%)")
+    ax.set_ylim(bottom=y_min, top=y_max)
+    ax_sb.set_ylim(bottom=y_min_sb, top=y_max_sb)
+    ax_sb.set_xlim(left=-0.05*x[s-1], right=1.1*x[s-1])
     if y_label:
         ax.set_ylabel(metrics[metric])
         ax_sb.set_ylabel(metrics[metric])
     if legend:
         #ax.legend(bbox_to_anchor=(1.01, 0), loc="lower left")  # loc=datasets[dataset]["legend_loc"])
-        ax.legend()  # loc='upper right')
+        ax.legend(prop={'size': 8})  # loc='upper right')
         #ax_sb.legend(bbox_to_anchor=(1.01, 0), loc="lower left")  # loc=datasets[dataset]["legend_loc"])
-        ax_sb.legend()  # loc='upper right')
-    save_figure(fig, f"{dataset}_{metric}", png)
-    save_figure(fig_sb, f"{dataset}_{metric}_sb", png)
+        ax_sb.legend(prop={'size': 8})  # loc='upper right')
+    save_figure(fig, f"{plot}_{metric}", png)
+    save_figure(fig_sb, f"{plot}_{metric}_sb", png)
 
 
         
 parser = argparse.ArgumentParser(description='Processes the results of transfer attack.')
-parser.add_argument("-d", "--dataset")
+parser.add_argument("-p", "--plot")
 parser.add_argument("-m", "--metric")
 parser.add_argument("-s", "--small-budget-idx")
-parser.add_argument("-p", "--png", action="store_true")
+parser.add_argument("--png", action="store_true")
 parser.add_argument("-l", "--legend", action="store_true")
 parser.add_argument("-t", "--title", action="store_true")
 parser.add_argument("-y", "--y-label", action="store_true")
+parser.add_argument("--y-min", type=float, default=None)
+parser.add_argument("--y-max", type=float, default=None)
+parser.add_argument("--y-min-sb", type=float, default=None)
+parser.add_argument("--y-max-sb", type=float, default=None)
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
     assert args.metric in metrics, f"Invalid metric argument, must be one of {list(metrics.keys())}"
     main(
-        dataset=args.dataset,
+        plot=args.plot,
         metric=args.metric,
         max_idx_small_budget=int(args.small_budget_idx),
         png=args.png,
         legend=args.legend,
         title=args.title,
         y_label=args.y_label,
+        y_min=args.y_min,
+        y_max=args.y_max,
+        y_min_sb=args.y_min_sb,
+        y_max_sb=args.y_max_sb,
     )

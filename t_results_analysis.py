@@ -129,23 +129,23 @@ budget_measures = {
     #},
 }
 
-transfer_map = {
-    "GCN": 0,
-    "Graphormer": 1,
-    "GRIT": 2,
-    "SAN": 3,
-    "GPS": 4,
+model_order = {
+    "Graphormer": 0,
+    "GRIT": 1,
+    "SAN": 2,
+    "GPS": 3,
+    "GPS-GCN": 4,
     "Polynormer": 5,
-    "GPS-GCN": 6,
+    "GATv2": 6,
     "GAT": 7,
-    "GATv2": 8,
+    "GCN": 8,
 }
 
 styles = {
-    "adaptive": {"color": "r", "linestyle": (0, (1, 1)), "marker": "o", "markersize": 6},
-    "random": {"color": "k", "linestyle": (0, (1, 1)), "marker": "*", "markersize": 9},
+    "adaptive": {"color": "#1b7837", "linestyle": (0, (1, 1)), "marker": "o", "markersize": 6},
+    "random": {"color": "#9970ab", "linestyle": (0, (1, 1)), "marker": "*", "markersize": 9},
     "transfer": {
-        "color": ["#8CE", "#328", "#4A9", "#173", "#993", "#DC7", "#C67", "#825", "#A49"],
+        "color": ["#dd3d2d", "#f67e4b", "#fdb366", "#feda8b", "#eaeccc", "#c2e4ef", "#98cae1", "#6ea6cd", "#4a7bb7"],
         "linestyle": [
             "--",
             (0, (3, 5, 1, 5)),
@@ -157,7 +157,7 @@ styles = {
             (0, (5, 10)),
             (0, (3, 10, 1, 15)),
         ],
-        "marker": ["X", "s", "v", "p", "d", "P", "^", "h", ">"],
+        "marker": ["X", "s", "v", "p", ">", "P", "^", "h", "d"],
         "markersize": [7, 6, 8, 8, 7, 7, 7, 8, 7],
     },
 }
@@ -341,7 +341,7 @@ def save_plots(
                     m = styles[k]["marker"]
                     ms = styles[k]["markersize"]
                     if k == "transfer":
-                        idx = transfer_map[run_name]
+                        idx = model_order[run_name]
                         c = c[idx]
                         l = l[idx]
                         m = m[idx]
@@ -359,7 +359,7 @@ def save_plots(
                         std *= 100
 
                     if plot_individual:
-                        ax.plot(x, y, label=label, alpha=0.7, color=c, marker=m, linestyle=l, markeredgewidth=0.0, markersize=ms)
+                        ax.plot(x, y, label=label, alpha=0.9, color=c, marker=m, linestyle=l, markeredgewidth=0.0, markersize=ms)
                         ax.fill_between(x, y-std, y+std, color=c, alpha=0.1, linewidth=0.0)
 
                     x_sb = x[:max_idx_small_budget+1]
@@ -367,7 +367,7 @@ def save_plots(
                     std_sb = std[:max_idx_small_budget+1]
 
                     if plot_individual:
-                        ax_sb.plot(x_sb, y_sb, label=label, alpha=0.7, color=c, marker=m, linestyle=l, markeredgewidth=0.0, markersize=ms)
+                        ax_sb.plot(x_sb, y_sb, label=label, alpha=0.9, color=c, marker=m, linestyle=l, markeredgewidth=0.0, markersize=ms)
                         ax.fill_between(x_sb, y_sb-std_sb, y_sb+std_sb, color=c, alpha=0.1, linewidth=0.0)
 
                     all_agg_results[title][budget_measure][run_name][col] = {"x": x, "y": y, "std": std}
@@ -478,6 +478,7 @@ def save_plots(
                 fig, ax = plt.subplots(nrows=1, ncols=1, figsize=fs_)
                 if add_title:
                     ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
+                res_rand_adap = {}
                 for run_name, agg_res_run in run_stats.items():
                     # not really a loop, should only have one entry...
                     assert len(agg_res_run) == 1
@@ -532,7 +533,7 @@ def save_plots(
                         m = styles[k]["marker"]
                         ms = styles[k]["markersize"]
                         if k == "transfer":
-                            idx = transfer_map[run_name]
+                            idx = model_order[run_name]
                             c = c[idx]
                             ls = ls[idx]
                             m = m[idx]
@@ -542,17 +543,26 @@ def save_plots(
                         y = res["y"]
                         std = res["std"]
 
-                        ax.plot(x, y, label=label, alpha=0.8, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
-                        ax.fill_between(x, y-std, y+std, color=c, alpha=0.1, linewidth=0.0)
+                        if run_name in ["adaptive", "random"]:
+                            res_rand_adap[run_name] = {"x": x, "y": y, "std": std, "c": c, "m": m, "ls": ls, "ms": ms}
+                        else:
+                            ax.plot(x, y, label=label, alpha=0.9, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
+                            ax.fill_between(x, y-std, y+std, color=c, alpha=0.1, linewidth=0.0)
 
                 if bt:
                     l = "transfer"
-                    c = styles[l]["color"][0]
+                    c = styles[l]["color"][2]
                     ls = styles[l]["linestyle"][0]
                     m = styles[l]["marker"][0]
                     ms = styles[l]["markersize"][0]
-                    ax.plot(x_best, y_best, label=l, alpha=0.8, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
+                    ax.plot(x_best, y_best, label=l, alpha=0.9, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
                     ax.fill_between(x_best, y_best-std_best, y_best+std_best, color=c, alpha=0.1, linewidth=0.0)
+
+                for label, d in res_rand_adap.items():
+                    # plot after all others, so they are on top
+                    ax.plot(d["x"], d["y"], label=label, alpha=0.9, color=d["c"], marker=d["m"], linestyle=d["ls"], markeredgewidth=0.0, markersize=d["ms"])
+                    ax.fill_between(d["x"], d["y"]-d["std"], d["y"]+d["std"], color=d["c"], alpha=0.1, linewidth=0.0)
+
 
                 ax.set_xlabel(budget_dict["label"])
                 if y_label:
@@ -762,24 +772,27 @@ def main(
     results_paths, info_files, seed_dirs = clean_path(results_path, list(per_pretrained))
 
     for name, d in per_pretrained.items():
-        if name not in all_adaptive_results:
-            raise Exception(
-                f"Did not find *adaptive* results for pretrained mode `{name}` "
-                f"in attack collection `{attack_collection}`, (model={model}, dataset={dataset})"
-            )
-        d["results"].append(all_adaptive_results[name])
+        write_info_file(info_files[name], d["run_ids"], d["num_params"], extras, d["run_dirs"])
+        results = d["results"]
+        # sort alphabetically
+        results.sort(key=lambda x: model_order[x["transfer_model"]])
+        # append random and adaptive
         if name not in all_rand_results:
             raise Exception(
                 f"Did not find *random* results for pretrained mode `{name}`"
                 f"in attack collection `{attack_collection}`"
             )
-        d["results"].append(all_rand_results[name])
-
-        write_info_file(info_files[name], d["run_ids"], d["num_params"], extras, d["run_dirs"])
+        results.append(all_rand_results[name])
+        if name not in all_adaptive_results:
+            raise Exception(
+                f"Did not find *adaptive* results for pretrained mode `{name}` "
+                f"in attack collection `{attack_collection}`, (model={model}, dataset={dataset})"
+            )
+        results.append(all_adaptive_results[name])
 
         run_seed_dataframes = write_results(
             seed_dirs[name],
-            d["results"],
+            results,
             attack_cols,
         )
         # plots
