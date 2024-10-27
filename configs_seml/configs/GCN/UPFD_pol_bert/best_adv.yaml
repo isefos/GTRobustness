@@ -163,8 +163,6 @@ fixed:
     metric_agg: argmax
     metric_best: accuracy
     model:
-      edge_decoding: dot
-      graph_pooling: add
       loss_fun: cross_entropy
       match_upper: true
       size_average: mean
