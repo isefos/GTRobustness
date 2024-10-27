@@ -175,6 +175,8 @@ fixed:
       transductive: false
     gnn:
       dim_inner: 9
+      layers_post_mp: 2
+      layers_pre_mp: 0
       head: weighted_mean_pool_graph
     gt:
       attn:
