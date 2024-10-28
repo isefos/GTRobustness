@@ -197,8 +197,19 @@ fixed:
       ksteps: 6
       w_add_dummy_edge: true
     train:
-      batch_size: 16
-      ckpt_best: true
-      enable_ckpt: true
+      mode: adversarial
       eval_period: 1
-      mode: custom
+      batch_size: 16
+      adv:
+        batched_train: False
+        block_size: 500
+        lr: 5000
+        # for val
+        block_size_val: 1000
+        epochs_val: 10
+        epochs_resampling_val: 7
+        lr_val: 4000
+        max_final_samples: 4
+        max_num_graphs_val: 100
+        early_stopping_adv: true
+        nia_include_train_in_val: true
