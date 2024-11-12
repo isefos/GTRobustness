@@ -23,7 +23,11 @@ class WeightedSANDummyEdgeEncoder(torch.nn.Module):
         # same for "fake" edges
         fake_edge_index = negate_edge_index(batch.edge_index, batch.batch)
 
-        if batch.get("attack_mode", False) and cfg.attack.SAN.add_partially_fake_edges:
+        if (
+            batch.edge_attr is not None
+            and batch.get("attack_mode", False)
+            and cfg.attack.SAN.add_partially_fake_edges
+        ):
             if cfg.attack.SAN.partially_fake_edge_grad:
                 edge_attr = batch.edge_attr
             else:

@@ -171,7 +171,6 @@ fixed:
       pna_degrees: []
       residual: true
       update_e: true
-      wsan_add_dummy_edges: false
     metric_agg: argmax
     metric_best: accuracy
     model:
@@ -211,6 +210,7 @@ fixed:
       pass_as_var: false
       post_layers: 0
       raw_norm_type: none
+      w_add_dummy_edge: false
     train:
       mode: adversarial
       eval_period: 1
