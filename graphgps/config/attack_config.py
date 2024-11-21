@@ -17,6 +17,8 @@ def dataset_cfg(cfg):
     cfg.attack.enable = False
     # whether to also run a random baseline attack
     cfg.attack.run_random_baseline = True
+    # whether to only run a random baseline attack
+    cfg.attack.only_random_baseline = False
     # load the best validation model before attack or not
     cfg.attack.load_best_model = True
     # show progress bar or not

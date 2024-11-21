@@ -180,7 +180,14 @@ def attack_or_skip_graph(
         total_additional_datasets_graph=total_additional_datasets_graph,
     )
 
-    for is_random_attack in [False, True] if cfg.attack.run_random_baseline else [False]:
+    if cfg.attack.only_random_baseline:
+        random_flags = [True]
+    elif cfg.attack.run_random_baseline:
+        random_flags = [False, True]
+    else:
+        random_flags = [False]
+
+    for is_random_attack in random_flags:
         # ATTACK
         pert_edge_index, perts = attack_single_graph(
             attack_graph_data=attack_graph_data,
