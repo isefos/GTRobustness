@@ -3,12 +3,14 @@ import numpy as np
 import matplotlib
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 matplotlib.use('Agg')
+from matplotlib.ticker import AutoMinorLocator
 from matplotlib import pyplot as plt
 from pathlib import Path
 import pandas as pd
 import argparse
 import shutil
 from collections import defaultdict
+from plot_results import syles as final_styles
 
 
 use_tex = True
@@ -18,6 +20,19 @@ if use_tex:
         "font.family": "serif",
         "font.serif": ["Computer Modern Roman"],
     })
+
+
+SMALL_SIZE = 8
+MEDIUM_SIZE = 10
+BIGGER_SIZE = 12
+
+plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 
 def save_figure(fig, path, name, png=False):
@@ -115,6 +130,7 @@ budget_measures = {
     "budget": {
         "key": "budget",
         "label": r"Edge mod. budget (\%)",
+        #"label": r"Edge modification budget (\%)",
         "mul": 100,
     },
     #"budget_used": {
@@ -144,26 +160,9 @@ model_order = {
 styles = {
     "adaptive": {"color": "#1b7837", "linestyle": (0, (1, 1)), "marker": "o", "markersize": 6},
     "random": {"color": "#9970ab", "linestyle": (0, (1, 1)), "marker": "*", "markersize": 9},
-    "transfer": {
-        "color": ["#dd3d2d", "#f67e4b", "#fdb366", "#feda8b", "#eaeccc", "#c2e4ef", "#98cae1", "#6ea6cd", "#4a7bb7"],
-        "linestyle": [
-            "--",
-            (0, (3, 5, 1, 5)),
-            "-.",
-            (0, (3, 5, 1, 5, 1, 5)), 
-            (0, (5, 10)), 
-            (0, (5, 1)), 
-            "dotted", 
-            (0, (5, 10)),
-            (0, (3, 10, 1, 15)),
-        ],
-        "marker": ["X", "s", "v", "p", ">", "P", "^", "h", "d"],
-        "markersize": [7, 6, 8, 8, 7, 7, 7, 8, 7],
-    },
+    "random_pert": {"color": "gray", "linestyle": (1, (3, 4, 1, 5)), "marker": (7, 1, 0), "markersize": 7},
+    "transfer": final_styles
 }
-
-figsize = (2.5, 2.0)
-figsize_all = (4.5, 3.5)
 
 
 def clean_path(results_path: str, names: list[str]) -> tuple[dict, dict, dict]:
@@ -232,7 +231,7 @@ def write_results(
 
     for result in results:
         run_name = result["transfer_model"]
-        rand_run = run_name == "random"
+        rand_run = run_name.startswith("random")
         seeds = result["result"]["attack"]["seeds"]
         if rand_run or run_name == "adaptive":
             budgets = result["result"]["attack"]["budgets"]
@@ -278,6 +277,8 @@ def save_plots(
     y_max: float | None,
     y_min_margin,
     y_max_margin,
+    figsize,
+    figsize_all,
 ):
     plots_dir = results_path / "plots"
     plots_dir_runs = plots_dir / "individual"
@@ -291,7 +292,7 @@ def save_plots(
     plot_individual = False
 
     for run_name, seed_dfs in run_seed_dfs.items():
-        rand_run = run_name == "random"
+        rand_run = run_name.startswith("random")
         plots_dir_run = plots_dir_runs / run_name
         plots_dir_run.mkdir(parents=True)
         
@@ -450,10 +451,11 @@ def save_plots(
     plotdir_small_bt = plots_dir / "agg_sb_bt"
     plotdir_small_bt.mkdir()
 
-    for agg_res, pdir, bt in zip(
+    for agg_res, pdir, bt, sb in zip(
         [all_agg_results, all_agg_results, all_agg_results_sb, all_agg_results_sb],
         [plotdir_all, plotdir_all_bt, plotdir_small, plotdir_small_bt],
         [False, True, False, True],
+        [False, False, True, True],
     ):
 
         for title, run_stats_b in agg_res.items():
@@ -485,11 +487,17 @@ def save_plots(
                     for col, res in agg_res_run.items():
 
                         if run_name == "adaptive":
+                            #label = "adaptive (PRBCD, ours)"
                             label = "adaptive"
-                            l = label
+                            l = "adaptive"
                         elif run_name == "random":
-                            label = "random"
-                            l = label
+                            label = "random attack"
+                            #label = "rand. attack"
+                            l = "random"
+                        elif run_name == "random_pert":
+                            label = "random perturbation"
+                            #label = "rand. pert."
+                            l = "random_pert"
                         else:
                             if bt:
                                 # save best
@@ -520,19 +528,18 @@ def save_plots(
                                         new_best = y_new < y_best
                                         y_best[new_best] = y_new[new_best]
                                         std_best[new_best] = std_new[new_best]
-                                label = "transfer"
-                                l = label
-                                continue
-                            else:
-                                l = "transfer"
-                                label = f"tr. {run_name}"
-
-                        k = l if run_name != "adaptive" else "adaptive"
-                        c = styles[k]["color"]
-                        ls = styles[k]["linestyle"]
-                        m = styles[k]["marker"]
-                        ms = styles[k]["markersize"]
-                        if k == "transfer":
+                                if run_name != "GCN":
+                                    continue
+                            l = "transfer"
+                            #label = f"{run_name} PRBCD transfer"
+                            label = f"{run_name} transfer"
+                            #label = f"tr. {run_name}"
+                            
+                        c = styles[l]["color"]
+                        ls = styles[l]["linestyle"]
+                        m = styles[l]["marker"]
+                        ms = styles[l]["markersize"]
+                        if l == "transfer":
                             idx = model_order[run_name]
                             c = c[idx]
                             ls = ls[idx]
@@ -543,37 +550,55 @@ def save_plots(
                         y = res["y"]
                         std = res["std"]
 
-                        if run_name in ["adaptive", "random"]:
-                            res_rand_adap[run_name] = {"x": x, "y": y, "std": std, "c": c, "m": m, "ls": ls, "ms": ms}
+                        if run_name in ["adaptive", "random", "random_pert"]:
+                            res_rand_adap[run_name] = {"x": x, "y": y, "std": std, "c": c, "m": m, "ls": ls, "ms": ms, "label": label}
                         else:
-                            ax.plot(x, y, label=label, alpha=0.9, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
+                            ax.plot(x, y, label=label, alpha=0.8, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
                             ax.fill_between(x, y-std, y+std, color=c, alpha=0.1, linewidth=0.0)
 
                 if bt:
                     l = "transfer"
+                    if model == "GCN":
+                        idx = model_order["GCN"]
+                        c = styles[l]["color"][idx]
+                        ls = styles[l]["linestyle"][idx]
+                        m = styles[l]["marker"][idx]
+                        ms = styles[l]["markersize"][idx]
+                        ax.plot([], [], label="transfer GCN (PRBCD)", alpha=0.8, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
+                    #label = "best transfer (incl. ours)"
+                    label = "best transfer"
                     c = styles[l]["color"][2]
                     ls = styles[l]["linestyle"][0]
                     m = styles[l]["marker"][0]
                     ms = styles[l]["markersize"][0]
-                    ax.plot(x_best, y_best, label=l, alpha=0.9, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
+                    ax.plot(x_best, y_best, label=label, alpha=0.8, color=c, marker=m, linestyle=ls, markeredgewidth=0.0, markersize=ms)
                     ax.fill_between(x_best, y_best-std_best, y_best+std_best, color=c, alpha=0.1, linewidth=0.0)
 
-                for label, d in res_rand_adap.items():
+                for run_name, d in res_rand_adap.items():
+                    if "rand" in run_name:
+                        continue
                     # plot after all others, so they are on top
-                    ax.plot(d["x"], d["y"], label=label, alpha=0.9, color=d["c"], marker=d["m"], linestyle=d["ls"], markeredgewidth=0.0, markersize=d["ms"])
+                    ax.plot(d["x"], d["y"], label=d["label"], alpha=0.8, color=d["c"], marker=d["m"], linestyle=d["ls"], markeredgewidth=0.0, markersize=d["ms"])
                     ax.fill_between(d["x"], d["y"]-d["std"], d["y"]+d["std"], color=d["c"], alpha=0.1, linewidth=0.0)
 
 
                 ax.set_xlabel(budget_dict["label"])
+                if sb:
+                    x_lim = res_rand_adap["adaptive"]["x"][max_idx_small_budget-1]
+                    ax.set_xlim(left=-0.05*x_lim, right=1.1*x_lim)
+                if "argin" not in title:
+                    ax.set_ylim(bottom=y_min, top=y_max)
+                else:
+                    ax.set_ylim(bottom=y_min_margin, top=y_max_margin)
                 if y_label:
                     if "argin" not in title:
                         ax.set_ylabel(title + r" (\%)")
-                        ax.set_ylim(bottom=y_min, top=y_max)
                     else:
                         ax.set_ylabel(title)
-                        ax.set_ylim(bottom=y_min_margin, top=y_max_margin)
                 if add_legend:
-                    ax.legend(fontsize="small", framealpha=0.4)  # bbox_to_anchor=(1.01, 0), loc="lower left")
+                    #ax.legend(fontsize="small", framealpha=0.4)  # bbox_to_anchor=(1.01, 0), loc="lower left")
+                    #ax.legend(bbox_to_anchor=(1.01, 0), loc="lower left")  # , prop={'size': 8})
+                    ax.legend(framealpha=0.4)
                 save_figure(fig, pdir, f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}")
                 #fig.savefig(pdir / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
                 ax.clear()
@@ -658,6 +683,43 @@ def get_attack_collection_results(collection, dataset, model, pred_level):
     return adaptive_results_per_pretrained, rand_results_per_pretrained
 
 
+def get_rand_pert_collection_results(collection, dataset, model, pred_level):
+    all_results = seml.get_results(collection, ['config', 'result.attack.avg'])
+    for r in all_results:
+        check_correct_result(r, dataset, model, pred_level)
+
+    # separate by the pretrained model
+    per_pretrained = defaultdict(list)
+    for r in all_results:
+        pretrained = r["config"]["graphgym"]["pretrained"]["dir"]
+        name = pretrained.split("/")[-1]
+        per_pretrained[name].append(r)
+
+    rand_pert_results_per_pretrained = {}
+    for name, results in per_pretrained.items():
+        a_results = [r["result"]["attack"]["avg"] for r in results]
+        seeds_graphgym = [result["config"]["graphgym"]["seed"] for result in results]
+        budgets_allowed = [result["config"]["graphgym"]["attack"]["e_budget"] for result in results]
+        avg_num_edges_modified_random = [r["avg_budget_used_random"] for r in a_results]
+        bs = [
+            {"budget": b, "m": mr} for b, mr in zip(
+                budgets_allowed,
+                avg_num_edges_modified_random,
+            )
+        ]
+        rand_pert_results_per_pretrained[name] = {
+            "transfer_model": "random_pert",
+            "result": {
+                "attack": {
+                    "seeds": seeds_graphgym,
+                    "budgets": bs,
+                    "avg": a_results,
+                },
+            },
+        }
+    return rand_pert_results_per_pretrained
+
+
 def check_correct_result(result, dataset: str, model: str, pred_level: str):
     df = result["config"]["graphgym"]["dataset"]["format"]
     dfg = datasets[dataset]["format"]
@@ -710,14 +772,22 @@ def main(
     model: str,
     max_idx_small_budget: int,
     attack_collection: str,
+    rand_pert_collection: str,
     y_label: bool,
+    grid: bool,
     add_title: bool,
     add_legend: bool,
     y_min: float | None,
     y_max: float | None,
     y_min_margin: float | None,
     y_max_margin: float | None,
+    fs_w: float,
+    fs_h: float,
+    fs_w_all: float,
+    fs_h_all: float,
 ):
+    figsize = (fs_w, fs_h)
+    figsize_all = (fs_w_all, fs_h_all)
     (
         all_results,
         all_run_ids,
@@ -768,6 +838,10 @@ def main(
         attack_collection, dataset, model, pred_level,
     )
     
+    all_rand_pert_results = get_rand_pert_collection_results(
+        rand_pert_collection, dataset, model, pred_level,
+    )
+    
     # create the paths for each different model, dict
     results_paths, info_files, seed_dirs = clean_path(results_path, list(per_pretrained))
 
@@ -776,6 +850,13 @@ def main(
         results = d["results"]
         # sort alphabetically
         results.sort(key=lambda x: model_order[x["transfer_model"]])
+        # append random pert
+        if name not in all_rand_pert_results:
+            raise Exception(
+                f"Did not find *random_pert* results for pretrained mode `{name}`"
+                f"in rand_pert collection `{rand_pert_collection}`"
+            )
+        results.append(all_rand_pert_results[name])
         # append random and adaptive
         if name not in all_rand_results:
             raise Exception(
@@ -812,6 +893,8 @@ def main(
             y_max,
             y_min_margin,
             y_max_margin,
+            figsize,
+            figsize_all,
         )
 
 
@@ -821,7 +904,9 @@ parser.add_argument("-d", "--dataset")
 parser.add_argument("-m", "--model")
 parser.add_argument("-s", "--small-budget-idx", type=int, default=4)
 parser.add_argument("-a", "--attack-collection")
+parser.add_argument("-r", "--rand-pert-collection")
 parser.add_argument("-y", "--y-label", action="store_true")
+parser.add_argument("-g", "--grid", action="store_true")
 parser.add_argument("-t", "--title", action="store_true")
 parser.add_argument("-l", "--legend", action="store_true")
 parser.add_argument("-b", "--best-transfer-only", action="store_true")
@@ -829,6 +914,10 @@ parser.add_argument("--y-min", type=float, default=None)
 parser.add_argument("--y-max", type=float, default=None)
 parser.add_argument("--y-min-margin", type=float, default=1)
 parser.add_argument("--y-max-margin", type=float, default=-1)
+parser.add_argument("--fs-w", type=float, default=2.5)
+parser.add_argument("--fs-h", type=float, default=2.0)
+parser.add_argument("--fs-w-all", type=float, default=4.5)
+parser.add_argument("--fs-h-all", type=float, default=3.5)
 
 
 if __name__ == "__main__":
@@ -845,11 +934,17 @@ if __name__ == "__main__":
         model=args.model,
         max_idx_small_budget=args.small_budget_idx,
         attack_collection=args.attack_collection,
+        rand_pert_collection=args.rand_pert_collection,
         y_label=args.y_label,
+        grid=args.grid,
         add_title=args.title,
         add_legend=args.legend,
         y_min=args.y_min,
         y_max=args.y_max,
         y_min_margin=args.y_min_margin,
         y_max_margin=args.y_max_margin,
+        fs_w=args.fs_w,
+        fs_h=args.fs_h,
+        fs_w_all=args.fs_w_all,
+        fs_h_all=args.fs_h_all,
     )

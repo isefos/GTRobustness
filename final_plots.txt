@@ -1,0 +1,134 @@
+FINAL PLOTS
+
+python plot_results.py -p reddit_threads -m acc -s 4 --y-min 0.0 --y-max 86.0 --y-min-sb 20.0 --y-max-sb 83.0 --fs-w 2.7 --fs-h 2 &
+python plot_results.py -p UPFD_pol_bert -m acc -s 5 --y-min 0.0 --y-max 95.0 --y-min-sb 40.0 --y-max-sb 95.0 --fs-w 2.7 --fs-h 2 &
+python plot_results.py -p UPFD_gos_bert -m acc -s 5 --y-min 0.0 --y-max 105.0 --y-min-sb 25.0 --y-max-sb 105.0 --fs-w 2.7 --fs-h 2 &
+python plot_results.py -p CLUSTER_as -m acc -s 4 -y --y-min 0.0 --y-max 84.0 --y-min-sb 5.0 --y-max-sb 84.0 --fs-w 2.7 --fs-h 2 &
+
+python plot_results.py -p CLUSTER_cs -m acc -s 4 -l --legend-sb -y --y-min 0.0 --y-max 84.0 --y-min-sb 23.0 --y-max-sb 84.0 --fs-w 2.7 --fs-h 2 &
+
+python plot_results.py -p adv_GCN_UPFD_pol_bert -m acc -s 6 -l -y --y-min 0.0 --y-max 95.0 --y-min-sb 45.0 --y-max-sb 95.0 --fs-w 3 --fs-h 2.2 &
+python plot_results.py -p adv_GCN_UPFD_gos_bert -m acc -s 6 -l -y --y-min 0.0 --y-max 101.0 --y-min-sb 25.0 --y-max-sb 101.0 --fs-w 3 --fs-h 2.2 &
+python plot_results.py -p adv_Graphormer_UPFD_pol_bert -m acc -s 6 -l -y --y-min 0.0 --y-max 95.0 --y-min-sb 45.0 --y-max-sb 95.0 --fs-w 3 --fs-h 2.2 &
+python plot_results.py -p adv_Graphormer_UPFD_gos_bert -m acc -s 6 -l -y --y-min 0.0 --y-max 101.0 --y-min-sb 25.0 --y-max-sb 101.0 --fs-w 3 --fs-h 2.2 &
+
+TRANSFER PLOTS - best transfer
+
+CLUSTER_as
+
+python t_results_analysis.py -c t_gph_cluster_as_prel -d CLUSTER_as -m Graphormer -a a_gph_cluster_as_prel -r r_gph_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 -y &  
+python t_results_analysis.py -c t_grt_cluster_as_prel -d CLUSTER_as -m GRIT       -a a_grt_cluster_as_prel -r r_grt_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_san_cluster_as_prel -d CLUSTER_as -m SAN        -a a_san_cluster_as_prel -r r_san_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gps_cluster_as      -d CLUSTER_as -m GPS        -a a_gps_cluster_as      -r r_gps_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_ply_cluster_as      -d CLUSTER_as -m Polynormer -a a_ply_cluster_as      -r r_ply_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gcn_cluster_as_prel -d CLUSTER_as -m GCN        -a a_gcn_cluster_as_prel -r r_gcn_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+
+#python t_results_analysis.py -c t_gpsgcn_cluster_as -d CLUSTER_as -m GPS-GCN -a a_gpsgcn_cluster_as -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+#python t_results_analysis.py -c t_gat_cluster_as_prel -d CLUSTER_as -m GAT -a a_gat_cluster_as_prel -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+#python t_results_analysis.py -c t_ga2_cluster_as_prel -d CLUSTER_as -m GATv2 -a a_ga2_cluster_as_prel -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+
+CLUSTER_cs
+
+python t_results_analysis.py -c t_gph_cluster_cs_prel -d CLUSTER_cs -m Graphormer -a a_gph_cluster_cs_prel -r r_gph_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 -y &
+python t_results_analysis.py -c t_grt_cluster_cs_prel -d CLUSTER_cs -m GRIT       -a a_grt_cluster_cs_prel -r r_grt_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_san_cluster_cs_prel -d CLUSTER_cs -m SAN        -a a_san_cluster_cs_prel -r r_san_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gps_cluster_cs      -d CLUSTER_cs -m GPS        -a a_gps_cluster_cs      -r r_gps_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_ply_cluster_cs      -d CLUSTER_cs -m Polynormer -a a_ply_cluster_cs      -r r_ply_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gcn_cluster_cs_prel -d CLUSTER_cs -m GCN        -a a_gcn_cluster_cs_prel -r r_gcn_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+
+#python t_results_analysis.py -c t_gpsgcn_cluster_cs -d CLUSTER_cs -m GPS-GCN -a a_gpsgcn_cluster_cs -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+#python t_results_analysis.py -c t_gat_cluster_cs_prel -d CLUSTER_cs -m GAT -a a_gat_cluster_cs_prel -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+#python t_results_analysis.py -c t_ga2_cluster_cs_prel -d CLUSTER_cs -m GATv2 -a a_ga2_cluster_cs_prel -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+
+UPFD_gos
+
+python t_results_analysis.py -c t_gcn_upfd_gos_bert_prel -d UPFD_gos_bert -m GCN        -a a_gcn_upfd_gos_bert_prel -r r_gcn_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gps_upfd_gos_bert      -d UPFD_gos_bert -m GPS        -a a_gps_upfd_gos_bert      -r r_gps_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gph_upfd_gos_bert_prel -d UPFD_gos_bert -m Graphormer -a a_gph_upfd_gos_bert_prel -r r_gph_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 -y &
+python t_results_analysis.py -c t_grt_upfd_gos_bert_prel -d UPFD_gos_bert -m GRIT       -a a_grt_upfd_gos_bert_prel -r r_grt_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_ply_upfd_gos_bert      -d UPFD_gos_bert -m Polynormer -a a_ply_upfd_gos_bert      -r r_ply_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_san_upfd_gos_bert_prel -d UPFD_gos_bert -m SAN        -a a_san_upfd_gos_bert_new  -r r_san_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+
+python t_results_analysis.py -c t_adv_gcn_upfd_gos_bert -d UPFD_gos_bert -m GCN -a a_adv_gcn_upfd_gos_bert -s 4 -l -y --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_adv_gph_upfd_gos_bert -d UPFD_gos_bert -m Graphormer -a a_adv_gph_upfd_gos_bert -s 4 -l --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+
+UPFD_pol
+
+python t_results_analysis.py -c t_gcn_upfd_pol_bert_prel -d UPFD_pol_bert -m GCN        -a a_gcn_upfd_pol_bert_prel -r r_gcn_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gps_upfd_pol_bert      -d UPFD_pol_bert -m GPS        -a a_gps_upfd_pol_bert      -r r_gps_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gph_upfd_pol_bert_prel -d UPFD_pol_bert -m Graphormer -a a_gph_upfd_pol_bert_prel -r r_gph_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 -y &
+python t_results_analysis.py -c t_grt_upfd_pol_bert_prel -d UPFD_pol_bert -m GRIT       -a a_grt_upfd_pol_bert_prel -r r_grt_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_ply_upfd_pol_bert      -d UPFD_pol_bert -m Polynormer -a a_ply_upfd_pol_bert_1    -r r_ply_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_san_upfd_pol_bert_prel -d UPFD_pol_bert -m SAN        -a a_san_upfd_pol_bert_new  -r r_san_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+
+python t_results_analysis.py -c t_adv_gcn_upfd_pol_bert -d UPFD_pol_bert -m GCN -a a_adv_gcn_upfd_pol_bert -s 4 -l -y --y-min 0.0 --y-max 95.0 &
+python t_results_analysis.py -c t_adv_gph_upfd_pol_bert -d UPFD_pol_bert -m Graphormer -a a_adv_gph_upfd_pol_bert -s 4 -l --y-min 0.0 --y-max 95.0 &
+
+REDDIT
+
+python t_results_analysis.py -c t_gcn_reddit_threads -d reddit_threads -m GCN        -a a_gcn_reddit_threads   -r r_gcn_reddit_threads   -s 4 --y-min 0.0 --y-max 86.0 --fs-w 2.64 --fs-w 2 &
+python t_results_analysis.py -c t_gps_reddit_threads -d reddit_threads -m GPS        -a a_gps_reddit_threads   -r r_gps_reddit_threads   -s 4 --y-min 0.0 --y-max 86.0 --fs-w 2.64 --fs-w 2 &
+python t_results_analysis.py -c t_gph_reddit_threads -d reddit_threads -m Graphormer -a a_gph_reddit_threads   -r r_gph_reddit_threads   -s 4 --y-min 0.0 --y-max 86.0 --fs-w 2.64 --fs-w 2 -y &
+python t_results_analysis.py -c t_grt_reddit_threads -d reddit_threads -m GRIT       -a a_grt_reddit_threads   -r r_grt_reddit_threads   -s 4 --y-min 0.0 --y-max 86.0 --fs-w 2.64 --fs-w 2 &
+python t_results_analysis.py -c t_san_reddit_threads -d reddit_threads -m SAN        -a a_san_reddit_threads_2 -r r_san_reddit_threads_2 -s 4 --y-min 0.0 --y-max 86.0 --fs-w 2.64 --fs-w 2 &
+
+
+TRANSFER PLOTS - all transfer
+
+CLUSTER_as
+
+python t_results_analysis.py -c t_gph_cluster_as_prel -d CLUSTER_as -m Graphormer -a a_gph_cluster_as_prel -r r_gph_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 -y -l &  
+python t_results_analysis.py -c t_grt_cluster_as_prel -d CLUSTER_as -m GRIT       -a a_grt_cluster_as_prel -r r_grt_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 -y -l &
+python t_results_analysis.py -c t_san_cluster_as_prel -d CLUSTER_as -m SAN        -a a_san_cluster_as_prel -r r_san_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 -y -l &
+python t_results_analysis.py -c t_gps_cluster_as      -d CLUSTER_as -m GPS        -a a_gps_cluster_as      -r r_gps_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 -y -l &
+python t_results_analysis.py -c t_ply_cluster_as      -d CLUSTER_as -m Polynormer -a a_ply_cluster_as      -r r_ply_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 -y -l &
+python t_results_analysis.py -c t_gcn_cluster_as_prel -d CLUSTER_as -m GCN        -a a_gcn_cluster_as_prel -r r_gcn_cluster_as -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 -y -l &
+
+#python t_results_analysis.py -c t_gpsgcn_cluster_as -d CLUSTER_as -m GPS-GCN -a a_gpsgcn_cluster_as -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+#python t_results_analysis.py -c t_gat_cluster_as_prel -d CLUSTER_as -m GAT -a a_gat_cluster_as_prel -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+#python t_results_analysis.py -c t_ga2_cluster_as_prel -d CLUSTER_as -m GATv2 -a a_ga2_cluster_as_prel -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+
+CLUSTER_cs
+
+python t_results_analysis.py -c t_gph_cluster_cs_prel -d CLUSTER_cs -m Graphormer -a a_gph_cluster_cs_prel -r r_gph_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_grt_cluster_cs_prel -d CLUSTER_cs -m GRIT       -a a_grt_cluster_cs_prel -r r_grt_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_san_cluster_cs_prel -d CLUSTER_cs -m SAN        -a a_san_cluster_cs_prel -r r_san_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gps_cluster_cs      -d CLUSTER_cs -m GPS        -a a_gps_cluster_cs      -r r_gps_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_ply_cluster_cs      -d CLUSTER_cs -m Polynormer -a a_ply_cluster_cs      -r r_ply_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gcn_cluster_cs_prel -d CLUSTER_cs -m GCN        -a a_gcn_cluster_cs_prel -r r_gcn_cluster_cs -s 6 --y-min 0.0 --y-max 81.9 --fs-w 2.2 --fs-w 2 &
+
+#python t_results_analysis.py -c t_gpsgcn_cluster_cs -d CLUSTER_cs -m GPS-GCN -a a_gpsgcn_cluster_cs -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+#python t_results_analysis.py -c t_gat_cluster_cs_prel -d CLUSTER_cs -m GAT -a a_gat_cluster_cs_prel -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+#python t_results_analysis.py -c t_ga2_cluster_cs_prel -d CLUSTER_cs -m GATv2 -a a_ga2_cluster_cs_prel -s 4 -l -y --y-min 0.0 --y-max 81.9 &
+
+UPFD_gos
+
+python t_results_analysis.py -c t_gcn_upfd_gos_bert_prel -d UPFD_gos_bert -m GCN        -a a_gcn_upfd_gos_bert_prel -r r_gcn_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gps_upfd_gos_bert      -d UPFD_gos_bert -m GPS        -a a_gps_upfd_gos_bert      -r r_gps_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gph_upfd_gos_bert_prel -d UPFD_gos_bert -m Graphormer -a a_gph_upfd_gos_bert_prel -r r_gph_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_grt_upfd_gos_bert_prel -d UPFD_gos_bert -m GRIT       -a a_grt_upfd_gos_bert_prel -r r_grt_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_ply_upfd_gos_bert      -d UPFD_gos_bert -m Polynormer -a a_ply_upfd_gos_bert      -r r_ply_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_san_upfd_gos_bert_prel -d UPFD_gos_bert -m SAN        -a a_san_upfd_gos_bert_new  -r r_san_upfd_gos_bert -s 4 --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+
+python t_results_analysis.py -c t_adv_gcn_upfd_gos_bert -d UPFD_gos_bert -m GCN -a a_adv_gcn_upfd_gos_bert -s 4 -l -y --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_adv_gph_upfd_gos_bert -d UPFD_gos_bert -m Graphormer -a a_adv_gph_upfd_gos_bert -s 4 -l --y-min 0.0 --y-max 105.0 --fs-w 2.2 --fs-w 2 &
+
+UPFD_pol
+
+python t_results_analysis.py -c t_gcn_upfd_pol_bert_prel -d UPFD_pol_bert -m GCN        -a a_gcn_upfd_pol_bert_prel -r r_gcn_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gps_upfd_pol_bert      -d UPFD_pol_bert -m GPS        -a a_gps_upfd_pol_bert      -r r_gps_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_gph_upfd_pol_bert_prel -d UPFD_pol_bert -m Graphormer -a a_gph_upfd_pol_bert_prel -r r_gph_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_grt_upfd_pol_bert_prel -d UPFD_pol_bert -m GRIT       -a a_grt_upfd_pol_bert_prel -r r_grt_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_ply_upfd_pol_bert      -d UPFD_pol_bert -m Polynormer -a a_ply_upfd_pol_bert_1    -r r_ply_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+python t_results_analysis.py -c t_san_upfd_pol_bert_prel -d UPFD_pol_bert -m SAN        -a a_san_upfd_pol_bert_new  -r r_san_upfd_pol_bert -s 4 --y-min 0.0 --y-max 95.0 --fs-w 2.2 --fs-w 2 &
+
+python t_results_analysis.py -c t_adv_gcn_upfd_pol_bert -d UPFD_pol_bert -m GCN -a a_adv_gcn_upfd_pol_bert -s 4 -l -y --y-min 0.0 --y-max 95.0 &
+python t_results_analysis.py -c t_adv_gph_upfd_pol_bert -d UPFD_pol_bert -m Graphormer -a a_adv_gph_upfd_pol_bert -s 4 -l --y-min 0.0 --y-max 95.0 &
+
+REDDIT
+
+python t_results_analysis.py -c t_gcn_reddit_threads -d reddit_threads -m GCN        -a a_gcn_reddit_threads   -r r_gcn_reddit_threads   -s 4 --y-min 0.0 --y-max 86.0 --fs-w 2.64 --fs-w 2 &
+python t_results_analysis.py -c t_gps_reddit_threads -d reddit_threads -m GPS        -a a_gps_reddit_threads   -r r_gps_reddit_threads   -s 4 --y-min 0.0 --y-max 86.0 --fs-w 2.64 --fs-w 2 &
+python t_results_analysis.py -c t_gph_reddit_threads -d reddit_threads -m Graphormer -a a_gph_reddit_threads   -r r_gph_reddit_threads   -s 4 --y-min 0.0 --y-max 86.0 --fs-w 2.64 --fs-w 2 &
+python t_results_analysis.py -c t_grt_reddit_threads -d reddit_threads -m GRIT       -a a_grt_reddit_threads   -r r_grt_reddit_threads   -s 4 --y-min 0.0 --y-max 86.0 --fs-w 2.64 --fs-w 2 &
+python t_results_analysis.py -c t_san_reddit_threads -d reddit_threads -m SAN        -a a_san_reddit_threads_2 -r r_san_reddit_threads_2 -s 4 --y-min 0.0 --y-max 86.0 --fs-w 2.64 --fs-w 2 &

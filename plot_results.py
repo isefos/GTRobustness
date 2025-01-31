@@ -19,6 +19,18 @@ if use_tex:
         "font.serif": ["Computer Modern Roman"],
     })
 
+SMALL_SIZE = 8
+MEDIUM_SIZE = 10
+BIGGER_SIZE = 12
+
+plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+plt.rc('legend', fontsize=SMALL_SIZE)    # legend fontsize
+plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
 
 def save_figure(fig, name, png=False):
     if png:
@@ -156,7 +168,7 @@ syles = {
     "color": [
         #"#ad0d00", "#d65e2b", "#eda356", "#deba6b", "#aaac8c", "#92b4bf", "#689ab1", "#3e769d", "#0a3b87",
         #'#CC6677', '#332288', '#DDCC77', '#117733', '#88CCEE', '#882255', '#44AA99', '#999933', '#AA4499',
-        '#A50026', '#DD3D2D', '#F67E4B', '#FDB366', '#eEcA7B', '#cAcCaC', '#b2d4dF', '#6EA6CD', '#364B9A',
+        '#A50026', '#DD3D2D', '#e66E3B', '#dD9346', '#cEaA5B', '#8A8C6C', '#92b4bF', '#5E96bD', '#364B9A',
         # for adversarial
         #'#cDdCaF', '#c0d7bA', '#b2d3c2', '#a5cDc8', '#98c8cC', '#8Bc2d1', '#7DbBd4', '#71b4d7', '#6BaCd7', '#6Ea2d4'
         #'#A80003', '#E40515', '#F94902', '#F6790B', '#F19903', '#E7B503', '#D5CE04', '#BBE453', '#A2F49B', '#C6F7D6', '#CEFFFF'
@@ -207,12 +219,14 @@ def main(
     max_idx_small_budget: int,
     png: bool,
     legend: bool,
+    legend_sb: bool,
     title: bool,
     y_label: bool,
     y_min: None | float,
     y_max: None | float,
     y_min_sb: None | float,
     y_max_sb: None | float,
+    figsize: tuple[float, float],
 ):
     s = max_idx_small_budget
     dataset = plots[plot]["dataset"]
@@ -222,7 +236,6 @@ def main(
             "Can't find results for that dataset. "
             "Please run the t_results_analysis.py script first to save the results."
         )
-    figsize = (4.5, 3.5)
 
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
     fig_sb, ax_sb = plt.subplots(nrows=1, ncols=1, figsize=figsize)
@@ -283,7 +296,9 @@ def main(
     if legend:
         #ax.legend(bbox_to_anchor=(1.01, 0), loc="lower left")  # loc=datasets[dataset]["legend_loc"])
         ax.legend(prop={'size': 8})  # loc='upper right')
-        #ax_sb.legend(bbox_to_anchor=(1.01, 0), loc="lower left")  # loc=datasets[dataset]["legend_loc"])
+        #ax.legend(bbox_to_anchor=(1.01, 0), loc="lower left", prop={'size': 8})
+    if legend_sb:
+        #ax_sb.legend(bbox_to_anchor=(1.01, 0), loc="lower left", prop={'size': 8})  # loc=datasets[dataset]["legend_loc"])
         ax_sb.legend(prop={'size': 8})  # loc='upper right')
     save_figure(fig, f"{plot}_{metric}", png)
     save_figure(fig_sb, f"{plot}_{metric}_sb", png)
@@ -296,12 +311,15 @@ parser.add_argument("-m", "--metric")
 parser.add_argument("-s", "--small-budget-idx")
 parser.add_argument("--png", action="store_true")
 parser.add_argument("-l", "--legend", action="store_true")
+parser.add_argument("--legend-sb", action="store_true")
 parser.add_argument("-t", "--title", action="store_true")
 parser.add_argument("-y", "--y-label", action="store_true")
 parser.add_argument("--y-min", type=float, default=None)
 parser.add_argument("--y-max", type=float, default=None)
 parser.add_argument("--y-min-sb", type=float, default=None)
 parser.add_argument("--y-max-sb", type=float, default=None)
+parser.add_argument("--fs-w", type=float, default=2.5)
+parser.add_argument("--fs-h", type=float, default=1.7)
 
 
 if __name__ == "__main__":
@@ -313,10 +331,12 @@ if __name__ == "__main__":
         max_idx_small_budget=int(args.small_budget_idx),
         png=args.png,
         legend=args.legend,
+        legend_sb=args.legend_sb,
         title=args.title,
         y_label=args.y_label,
         y_min=args.y_min,
         y_max=args.y_max,
         y_min_sb=args.y_min_sb,
         y_max_sb=args.y_max_sb,
+        figsize=(args.fs_w, args.fs_h),
     )
