@@ -7,10 +7,10 @@ seml:
 slurm:
   experiments_per_job: 10
   sbatch_options:
-    partition: gpu_gtx1080
+    partition: gpu_h100
     gres: gpu:1       # num GPUs
-    mem: 32G          # memory
-    cpus-per-task: 2  # num cores
+    mem: 42G          # memory
+    cpus-per-task: 4  # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
 
