@@ -12,6 +12,7 @@ slurm:
     mem: 32G          # memory
     cpus-per-task: 1  # num cores
     time: 1-00:00     # max time, D-HH:MM
+    qos: deadline
 
 # experiment random configs
   
