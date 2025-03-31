@@ -11,6 +11,7 @@ datasets = {
     "UPFD_gos_bert": {"format": "PyG-UPFD", "name": "gossipcop-bert"},
     "UPFD_pol_bert": {"format": "PyG-UPFD", "name": "politifact-bert"},
     "reddit_threads": {"format": "PyG-TUDataset", "name": "reddit_threads"},
+    "ENZYMES": {"format": "PyG-TUDataset", "name": "ENZYMES"},
 }
 models = {
     "Graphormer": {"type": set(["Graphormer"]), "gnn_layer_type": None},
