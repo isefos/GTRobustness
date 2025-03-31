@@ -44,7 +44,7 @@ random:
     min: 3
     max: 17
 
-  graphgym.gt.num_layers:
+  graphgym.gt.layers:
     seed: 357
     type: randint
     min: 2
