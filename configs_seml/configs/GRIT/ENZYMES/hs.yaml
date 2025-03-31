@@ -56,7 +56,7 @@ random:
     min: 0.0
     max: 0.1
 
-  graphgym.gt.attention_dropout:
+  graphgym.gt.attn_dropout:
     seed: 661
     type: uniform
     min: 0.0
