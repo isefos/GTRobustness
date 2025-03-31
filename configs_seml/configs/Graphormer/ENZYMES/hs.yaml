@@ -18,75 +18,43 @@ slurm:
   
 random:
   samples: 30
-  seed: 31453
+  seed: 453
 
   graphgym.seed:
-    seed: 1425
+    seed: 142
     type: randint
     min: 0
     max: 10000
 
   graphgym.optim.base_lr:
-    seed: 264
+    seed: 144
     type: loguniform
-    min: 1e-5
-    max: 1e-1
+    min: 9e-5
+    max: 3e-3
 
   graphgym.optim.weight_decay:
-    seed: 809
+    seed: 413
     type: loguniform
-    min: 5e-7
-    max: 1e-1
+    min: 1e-6
+    max: 2e-2
 
   dims_per_head:
-    seed: 13094
+    seed: 13
     type: randint
-    min: 3
-    max: 17
+    min: 6
+    max: 27
 
   graphgym.graphormer.num_layers:
     seed: 357
     type: randint
-    min: 2
-    max: 13
-
-  graphgym.graphormer.dropout:
-    seed: 961
-    type: uniform
-    min: 0.0
-    max: 0.1
+    min: 9
+    max: 17
 
   graphgym.graphormer.attention_dropout:
     seed: 661
     type: uniform
-    min: 0.1
+    min: 0.25
     max: 0.5
-
-  graphgym.graphormer.mlp_dropout:
-    seed: 241
-    type: uniform
-    min: 0.0
-    max: 0.1
-
-  graphgym.posenc_GraphormerBias.num_in_degrees:
-    seed: 644
-    type: randint
-    min: 6
-    max: 10
-
-  graphgym.posenc_GraphormerBias.num_spatial_types:
-    seed: 5113
-    type: randint
-    min: 14
-    max: 26
-  
-  graphgym.gnn.layers_post_mp:
-    seed: 966
-    type: choice
-    options:
-      - 1
-      - 2
-      - 3
 
 # experiment fixed configs 
 
@@ -123,6 +91,8 @@ fixed:
       node_degrees_only: false
       directed_graphs: false
       has_edge_attr: false
+      num_spatial_types: 23
+      num_in_degrees: 9
       num_out_degrees: ${config.graphgym.posenc_GraphormerBias.num_in_degrees}
 
     model:
@@ -134,11 +104,14 @@ fixed:
       embed_dim: 0  # determined using num_heads and dims_per_head
       input_dropout: 0.0
       num_heads: 8
+      dropout: 0.03
+      mlp_dropout: 0.01
 
     gnn:
       head: graphormer_graph
       layers_pre_mp: 0
       dim_inner: 0  # determined using num_heads and dims_per_head
+      layers_post_mp: 1
 
     optim:
       optimizer: adamW
