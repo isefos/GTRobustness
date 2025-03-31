@@ -18,62 +18,43 @@ slurm:
   
 random:
   samples: 30
-  seed: 153
+  seed: 453
 
   graphgym.seed:
-    seed: 4553
+    seed: 453
     type: randint
     min: 0
     max: 10000
 
   graphgym.optim.base_lr:
-    seed: 264
+    seed: 1454
     type: loguniform
-    min: 1e-5
-    max: 1e-2
+    min: 9e-5
+    max: 4e-3
 
   graphgym.optim.weight_decay:
-    seed: 809
+    seed: 509
     type: loguniform
-    min: 5e-7
-    max: 1e-1
+    min: 9e-7
+    max: 1e-2
 
   dims_per_head:
-    seed: 304
+    seed: 204
     type: randint
-    min: 5
-    max: 11
+    min: 8
+    max: 27
 
   graphgym.gnn.dropout:
-    seed: 6233
+    seed: 342
     type: uniform
     min: 0.0
-    max: 0.15
-
-  graphgym.gnn.layers_mp:
-    seed: 3672
-    type: randint
-    min: 5
-    max: 16
-
-  graphgym.gt.layers:
-    seed: 357
-    type: randint
-    min: 2
-    max: 5
+    max: 0.5
 
   graphgym.gt.dropout:
-    seed: 961
+    seed: 131
     type: uniform
     min: 0.0
-    max: 0.1
-  
-  graphgym.gnn.layers_post_mp:
-    seed: 966
-    type: choice
-    options:
-      - 1
-      - 3
+    max: 0.05
 
 # experiment fixed configs 
 
@@ -111,6 +92,7 @@ fixed:
 
     gt:
       n_heads: 8
+      layers: 2
       dim_hidden: 0  # determined using num_heads and dims_per_head
       polynormer:
         dropout_node_input: 0.0
@@ -123,18 +105,20 @@ fixed:
       layers_pre_mp: 0
       dim_inner: 0  # determined using num_heads and dims_per_head
       att_heads: 8
+      layers_mp: 6
+      layers_post_mp: 3
 
     optim:
       optimizer: adamW
       max_epoch: 500
       scheduler: reduce_on_plateau
       reduce_factor: 0.5
-      schedule_patience: 10
+      schedule_patience: 7
       min_lr: 1.0e-5
       early_stopping: true
-      early_stopping_patience: 50
+      early_stopping_patience: 70
       early_stopping_delta_e: 0.02
-      early_stopping_warmup: 50
+      early_stopping_warmup: 70
       clip_grad_norm: false
       
     attack:
