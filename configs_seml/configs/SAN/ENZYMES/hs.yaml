@@ -111,7 +111,9 @@ fixed:
       node_encoder: true
       node_encoder_name: WLapPE
       node_encoder_bn: false
-      edge_encoder: false
+      edge_encoder: true
+      edge_encoder_bn: false
+      edge_encoder_name: WeightedSANDummyEdge
 
     train:
       mode: custom
