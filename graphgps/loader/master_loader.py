@@ -37,6 +37,7 @@ from graphgps.transform.task_preprocessing import task_specific_preprocessing
 from graphgps.transform.transforms import (
     pre_transform_in_memory,
     typecast_x,
+    remove_edge_attr,
     concat_x_and_pos,
     clip_graphs_to_size,
 )
@@ -406,6 +407,9 @@ def preformat_OGB_Graph(dataset_dir, name):
         # Subset graphs to a maximum size (number of nodes) limit.
         pre_transform_in_memory(dataset, partial(clip_graphs_to_size,
                                                  size_limit=1000))
+    elif name == "ogbg-molhiv" and not cfg.dataset.edge_encoder:
+        # remove edge labels (because we use edge attr in attack)
+        pre_transform_in_memory(dataset, remove_edge_attr)
 
     return dataset
 
@@ -575,8 +579,10 @@ def preformat_TUDataset(dataset_dir, name):
     """
     func = None
     use_node_attr = False
-    if name in ['DD', 'NCI1', 'ENZYMES', 'PROTEINS', 'TRIANGLES']:
+    if name in ['DD', 'NCI1', 'ENZYMES', 'MUTAG', 'PROTEINS', 'TRIANGLES']:
         func = None
+        if name == 'ENZYMES':
+            use_node_attr = True
     elif (
         name.startswith('IMDB-') 
         or name.startswith("REDDIT-") 
@@ -586,6 +592,9 @@ def preformat_TUDataset(dataset_dir, name):
     else:
         raise ValueError(f"Loading dataset '{name}' from TUDataset is not supported.")
     dataset = TUDataset(dataset_dir, name, pre_transform=func, use_node_attr=use_node_attr)
+    if name == "MUTAG" and not cfg.dataset.edge_encoder:
+        # remove edge labels (because we use edge attr in attack)
+        pre_transform_in_memory(dataset, remove_edge_attr)
     return dataset
 
 
@@ -605,6 +614,9 @@ def preformat_ZINC(dataset_dir, name):
         [ZINC(root=dataset_dir, subset=(name == 'subset'), split=split)
          for split in ['train', 'val', 'test']]
     )
+    if not cfg.dataset.edge_encoder:
+        # remove edge labels (because we use edge attr in attack)
+        pre_transform_in_memory(dataset, remove_edge_attr)
     return dataset
 
 

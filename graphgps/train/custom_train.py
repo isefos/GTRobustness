@@ -22,7 +22,8 @@ def train_epoch(logger, loader, model, optimizer, scheduler, batch_accumulation)
     for iter, batch in enumerate(loader):
         #batch.split = 'train' -> commented to make homophily_regularization possible
         batch.to(torch.device(cfg.accelerator))
-        original_edge_index = batch.edge_index.clone()
+        if cfg.train.homophily_regularization > 0:
+            original_edge_index = batch.edge_index.clone()
         pred, true = model(batch)
 
         if cfg.gnn.head == "node" and batch.get("train_mask") is not None:

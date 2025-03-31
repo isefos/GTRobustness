@@ -1,96 +1,96 @@
 graphgym:
 
-    accelerator: auto
-    out_dir: configs_seml/results
-    metric_best: accuracy
-    tensorboard_each_run: false
-    seed: 42
+  accelerator: auto
+  out_dir: configs_seml/results
+  metric_best: accuracy
+  tensorboard_each_run: false
+  seed: 42
 
-    dataset:
-      format: PyG-UPFD
-      name: gossipcop-bert
-      task: graph
-      task_type: classification_binary
-      transductive: false
-      split_mode: standard
-      node_encoder: true
-      node_encoder_name: LinearNode
-      node_encoder_bn: false
+  dataset:
+    format: PyG-UPFD
+    name: gossipcop-bert
+    task: graph
+    task_type: classification_binary
+    transductive: false
+    split_mode: standard
+    node_encoder: true
+    node_encoder_name: LinearNode
+    node_encoder_bn: false
 
-    train:
-      mode: custom
-      batch_size: 32
-      eval_period: 1
-      enable_ckpt: true
-      ckpt_best: true
+  train:
+    mode: custom
+    batch_size: 32
+    eval_period: 1
+    enable_ckpt: true
+    ckpt_best: true
 
-    model:
-      type: gnn
-      loss_fun: cross_entropy
+  model:
+    type: gnn
+    loss_fun: cross_entropy
 
-    gnn:
-      layer_type: gcnconvweighted
-      stage_type: stack
-      batchnorm: true
-      act: relu
-      dropout: 0.0
-      layers_pre_mp: 0
-      layers_mp: 1
-      layers_post_mp: 1
-      dim_inner: 24  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
-      head: weighted_mean_pool_graph
-    
-    optim:
-      base_lr: 0.0003
-      weight_decay: 0.0001
-      clip_grad_norm: true
-      clip_grad_norm_value: 5.0
-      optimizer: adamW
-      max_epoch: 5
-      scheduler: cosine_with_warmup
-      num_warmup_epochs: 20
-      early_stopping: true
-      early_stopping_patience: 30
-      early_stopping_delta_e: 0.05
-      early_stopping_warmup: 30
+  gnn:
+    layer_type: gcnconvweighted
+    stage_type: stack
+    batchnorm: true
+    act: relu
+    dropout: 0.0
+    layers_pre_mp: 0
+    layers_mp: 1
+    layers_post_mp: 1
+    dim_inner: 24  # `gnn.dim_inner` must match `gt.dim_hidden` / `graphormer.embed_dim`
+    head: weighted_mean_pool_graph
+  
+  optim:
+    base_lr: 0.0003
+    weight_decay: 0.0001
+    clip_grad_norm: true
+    clip_grad_norm_value: 5.0
+    optimizer: adamW
+    max_epoch: 5
+    scheduler: cosine_with_warmup
+    num_warmup_epochs: 20
+    early_stopping: true
+    early_stopping_patience: 30
+    early_stopping_delta_e: 0.05
+    early_stopping_warmup: 30
 
-    attack:
+  attack:
+    enable: true
+    num_attacked_graphs: 5
+    skip_incorrect_graph_classification: true
+    log_progress: true
+    load_best_model: true
+    split: test
+    prediction_level: graph
+    remove_isolated_components: true
+    run_random_baseline: true
+    block_size: 100  # TODO: test
+    epochs: 125  # TODO: test
+    epochs_resampling: 100
+    resample_period: 1  # TODO: test
+    max_final_samples: 20  # TODO: test
+    eps: 1.0e-07  # TODO: test
+    eps_init_noised: false  # TODO: test
+    is_undirected: true
+    loss: raw_prediction  # TODO: test
+    metric: null  # use loss
+    lr: 4000  # TODO: test
+    max_edge_weight_update: 0.0  # TODO: test
+    max_trials_sampling: 20
+    minimum_budget: 1
+    node_prob_enable: true
+    root_node_idx: 0
+    node_prob_iterations: 3
+    node_prob_log: true
+    with_early_stopping: true
+    node_injection:
       enable: true
-      num_attacked_graphs: 5
-      skip_incorrect_graph_classification: true
-      log_progress: true
-      load_best_model: true
-      split: test
-      prediction_level: graph
-      remove_isolated_components: true
-      run_random_baseline: true
-      block_size: 100  # TODO: test
-      epochs: 125  # TODO: test
-      epochs_resampling: 100
-      resample_period: 1  # TODO: test
-      max_final_samples: 20  # TODO: test
-      eps: 1.0e-07  # TODO: test
-      eps_init_noised: false  # TODO: test
-      is_undirected: true
-      loss: raw_prediction  # TODO: test
-      metric: null  # use loss
-      lr: 4000  # TODO: test
-      max_edge_weight_update: 0.0  # TODO: test
-      max_trials_sampling: 20
-      minimum_budget: 1
-      node_prob_enable: true
-      root_node_idx: 0
-      node_prob_iterations: 3
-      node_prob_log: true
-      with_early_stopping: true
-      node_injection:
-        enable: true
-        from_train: false
-        from_val: true
-        from_test: false
-        allow_existing_graph_pert: false
-        sample_only_connected: true
-        include_root_nodes: false
-        sample_only_trees: true
-        node_sampling:
-          enable: false
+      from_train: false
+      from_val: true
+      from_test: false
+      allow_existing_graph_pert: false
+      sample_only_connected: true
+      include_root_nodes: false
+      sample_only_trees: true
+      node_sampling:
+        enable: false

@@ -133,7 +133,7 @@ def get_graph_output_stats(y_gt, model_output):
             probs = logits.softmax(dim=0)
 
         num_classes = probs.size(0)
-        y_correct_mask = F.one_hot(y_gt, num_classes).to(dtype=torch.bool)
+        y_correct_mask = F.one_hot(y_gt, num_classes).flatten().to(dtype=torch.bool)
         margin = float((probs[y_correct_mask] - probs[~y_correct_mask].max()).item())
         correct = class_index_pred == class_index_gt
         output_stats = {

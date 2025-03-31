@@ -4,9 +4,9 @@ import os
 import logging
 import yaml
 import datetime
+import seml
 from argparse import Namespace
 from yacs.config import CfgNode
-from seml.config import read_config, generate_configs
 from graphgps.finetuning import load_pretrained_model_cfg, init_model_from_pretrained
 from graphgps.logger import create_logger
 from graphgps.optimizer.extra_optimizers import ExtendedSchedulerConfig
@@ -200,8 +200,8 @@ def setup_run(graphgym, dims_per_head, dims_per_head_PE, seml_seed=None, jupyter
 
 
 def setup_jupyter(cfg_path, exp_index: int = 0):
-    _, _, exp_cfg = read_config(cfg_path)
-    exp_cfgs = generate_configs(exp_cfg)
+    _, _, exp_cfg = seml.config.read_config(cfg_path)
+    exp_cfgs = seml.config.generate_configs(exp_cfg)
     num_exp = len(exp_cfgs)
     if exp_index >= num_exp:
         raise ValueError(f"Given exp_index={exp_index}, but config only generates {num_exp} experiments.")
