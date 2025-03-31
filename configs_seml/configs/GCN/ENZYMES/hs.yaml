@@ -5,7 +5,7 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 8
+  experiments_per_job: 10
   sbatch_options:
     partition: gpu_gtx1080
     gres: gpu:1       # num GPUs
@@ -18,41 +18,34 @@ slurm:
   
 random:
   samples: 100
-  seed: 382
+  seed: 31453
 
   graphgym.seed:
-    seed: 7868
+    seed: 14255
     type: randint
     min: 0
     max: 10000
 
   graphgym.optim.base_lr:
-    seed: 2264
+    seed: 264
     type: loguniform
     min: 1e-4
     max: 5e-2
 
   graphgym.optim.weight_decay:
-    seed: 8923
+    seed: 809
     type: loguniform
     min: 5e-7
     max: 1e-1
 
-  graphgym.gnn.stage_type:
-    seed: 8324
-    type: choice
-    options:
-      - stack
-      - skipsum
-
   graphgym.gnn.dim_inner:
-    seed: 4275
+    seed: 422
     type: randint
-    min: 40
-    max: 600
+    min: 200
+    max: 550
 
   graphgym.gnn.layers_mp:
-    seed: 3893
+    seed: 389
     type: choice
     options:
       - 3
@@ -60,11 +53,10 @@ random:
       - 5
   
   graphgym.gnn.layers_post_mp:
-    seed: 96624
+    seed: 966
     type: choice
     options:
       - 1
-      - 2
       - 3
 
 # experiment fixed configs 
@@ -94,7 +86,7 @@ fixed:
 
     train:
       mode: custom
-      batch_size: 16
+      batch_size: 32
       eval_period: 1
 
     model:
@@ -108,6 +100,7 @@ fixed:
       batchnorm: true
       act: relu
       dropout: 0.01
+      stage_type: stack
 
     optim:
       optimizer: adamW
