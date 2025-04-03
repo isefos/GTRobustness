@@ -91,7 +91,6 @@ fixed:
       max_edge_weight_update: 0.0
       max_trials_sampling: 20
       minimum_budget: 1
-      node_prob_enable: true
       node_prob_iterations: 3
       node_prob_log: true
       root_node_idx: 0
@@ -107,16 +106,12 @@ fixed:
         sample_only_trees: true
       SAN:
         nia_pert: full
-        enable_pert_grad: true
         eps_repeated_eigenvalue: 1.0e-05
         match_true_eigenspaces: false
         match_true_signs: false
         pert_BPDA: false
         set_first_pert_zero: false
-        enable_eig_backprop: false
         eig_backprop_separation_pert: 0.0001
-      GPS:
-        grad_MPNN: true
 
     # copied from pre-trained model
 
