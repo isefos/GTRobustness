@@ -9,7 +9,7 @@ slurm:
   sbatch_options:
     partition: gpu_a100
     gres: gpu:1       # num GPUs
-    mem: 32G          # memory
+    mem: 16G          # memory
     cpus-per-task: 3  # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
@@ -68,12 +68,11 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/GPS/UPFD_gos_bert/0'
+      dir: '/ceph/hdd/students/foth/models/GPS/UPFD_pol_bert/0'
       finetune: false
 
     attack:
       e_budget: 0.1
-      run_random_baseline: false
       enable: true
       num_attacked_graphs: 50
       skip_incorrect_graph_classification: false
@@ -82,6 +81,7 @@ fixed:
       split: test
       prediction_level: graph
       remove_isolated_components: true
+      run_random_baseline: true
       block_size: 1_000
       epochs: 125
       epochs_resampling: 100
@@ -147,7 +147,7 @@ fixed:
       label_column: none
       label_table: none
       location: local
-      name: gossipcop-bert
+      name: politifact-bert
       node_encoder: true
       node_encoder_bn: false
       node_encoder_name: WLapPE
@@ -183,7 +183,7 @@ fixed:
       att_heads: 1
       batchnorm: true
       clear_feature: true
-      dim_inner: 40
+      dim_inner: 32
       dropout: 0.0
       head: weighted_add_pool_graph
       keep_edge: 0.5
@@ -233,14 +233,14 @@ fixed:
         use_bias: false
       bn_momentum: 0.1
       bn_no_runner: false
-      dim_hidden: 40
+      dim_hidden: 32
       dropout: 0.1
       full_graph: true
       gamma: 1.0e-05
       gamma_learnable: false
       layer_norm: false
       layer_type: WeightedGatedGCN+Transformer
-      layers: 5
+      layers: 6
       n_heads: 8
       pna_degrees: []
       residual: true
@@ -261,7 +261,7 @@ fixed:
     num_threads: 6
     num_workers: 0
     optim:
-      base_lr: 0.0004281973630237157
+      base_lr: 0.011826692873645201
       batch_accumulation: 1
       clip_grad_norm: true
       clip_grad_norm_value: 1.0
@@ -282,7 +282,7 @@ fixed:
       - 30
       - 60
       - 90
-      weight_decay: 6.34206375516324e-08
+      weight_decay: 0.00013017898502820324
     posenc_ElstaticSE:
       dim_pe: 16
       enable: false
