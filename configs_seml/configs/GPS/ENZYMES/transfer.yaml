@@ -37,7 +37,7 @@ fixed:
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/GCN/ENZYMES/0'
+      dir: '/ceph/hdd/students/foth/models/GPS/ENZYMES/0'
       finetune: false
 
     attack:
