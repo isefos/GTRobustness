@@ -27,12 +27,29 @@ grid:
   graphgym.attack.node_prob_enable:
     type: choice
     options:
+      - true  # only node prob
+      - true  # MPNN + node prob
+      - false # only MPNN
+      - true
+      - true
+      - true
       - true
       - false
+      - false
+      - false
+      - false
+    zip_id: gps_ablations
 
   graphgym.attack.GPS.grad_MPNN:
     type: choice
     options:
+      - false # only node prob
+      - true  # MPNN + node prob
+      - true  # only MPNN
+      - true
+      - true
+      - false
+      - false
       - true
       - true
       - false
@@ -42,6 +59,13 @@ grid:
   graphgym.attack.SAN.enable_pert_grad:
     type: choice
     options:
+      - false  # only node prob
+      - false  # MPNN + node prob
+      - false  # only MPNN
+      - true
+      - false
+      - true
+      - false
       - true
       - false
       - true
@@ -51,6 +75,13 @@ grid:
   graphgym.attack.SAN.enable_eig_backprop:
     type: choice
     options:
+      - false  # only node prob
+      - false  # MPNN + node prob
+      - false  # only MPNN
+      - false
+      - true
+      - false
+      - true
       - false
       - true
       - false
