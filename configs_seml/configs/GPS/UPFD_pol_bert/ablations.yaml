@@ -5,12 +5,12 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 3
+  experiments_per_job: 1
   sbatch_options:
-    partition: gpu_a100
+    partition: gpu_gtx1080
     gres: gpu:1       # num GPUs
     mem: 16G          # memory
-    cpus-per-task: 3  # num cores
+    cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
 
