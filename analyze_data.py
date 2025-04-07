@@ -12,7 +12,7 @@ from torch_geometric.utils import mask_to_index
 
 
 logging.basicConfig(level=logging.INFO)
-config_file = "./configs_local_debug/GCN/coraml_rut.yaml"
+config_file = "./configs_local_debug/GCN/ENZYMES.yaml"
 with open(config_file, "r") as f:
     cfg_file = CN._load_cfg_from_file(f)
 cfg_file = cfg_file.graphgym
@@ -86,7 +86,7 @@ for dataset, split in zip(datasets, splits):
     msps, counts = torch.unique(max_shortest_paths, return_counts=True)
     print("Encountered longest shortest paths:")
     for msp, c in zip(msps, counts):
-        print(f"  {int(msp.item())}: {int(c.item())}")
+        print(f"  {msp.item()}: {int(c.item())}")
     print(f"Min longest shortest path: {max_shortest_paths.min().item()}")
     print(f"Avg longest shortest path: {max_shortest_paths.mean().item():.2f}")
     print(f"Max longest shortest path: {max_shortest_paths.max().item()}")

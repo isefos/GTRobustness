@@ -4,11 +4,11 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from pathlib import Path
-from dash import Dash, html, dcc, Output, Input, Patch
-import dash_ag_grid as dag
-import dash_bootstrap_components as dbc
+#from dash import Dash, html, dcc, Output, Input, Patch
+#import dash_ag_grid as dag
+#import dash_bootstrap_components as dbc
 import pandas as pd
-import plotly.express as px
+#import plotly.express as px
 import argparse
 import shutil
 
@@ -552,6 +552,7 @@ hyperparameters = {
     "GCN": [
         ("graphgym.optim.base_lr", False, True),
         ("graphgym.optim.weight_decay", False, True),
+        ("graphgym.optim.clip_grad_norm", True, False),
         ("graphgym.gnn.dim_inner", False, False),
         ("graphgym.optim.num_warmup_epochs", True, False),
         ("graphgym.gnn.layers_pre_mp", True, False),
@@ -561,6 +562,7 @@ hyperparameters = {
         ("graphgym.gnn.act", True, False),
         ("graphgym.gnn.dropout", False, False),
         ("graphgym.gnn.agg", True, False),
+        ("graphgym.gnn.stage_type", True, False),
         ("graphgym.train.batch_size", True, False),
         ("graphgym.train.homophily_regularization", False, False),
         ("graphgym.train.homophily_regularization_gt_weight", False, False),
@@ -676,6 +678,7 @@ datasets = {
     "UPFD_gos_bert": {"format": "PyG-UPFD", "name": "gossipcop-bert"},
     "UPFD_pol_bert": {"format": "PyG-UPFD", "name": "politifact-bert"},
     "reddit_threads": {"format": "PyG-TUDataset", "name": "reddit_threads"},
+    "ENZYMES": {"format": "PyG-TUDataset", "name": "ENZYMES"},
 }
 
 models = {

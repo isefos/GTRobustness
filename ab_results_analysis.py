@@ -25,6 +25,8 @@ models = {
     "GCN": {"type": set(["gnn"]), "gnn_layer_type": set(["gcnconvweighted", "gcnconv"])},
     "GAT": {"type": set(["gnn"]), "gnn_layer_type": set(["gatconvweighted", "gatconv"])},
     "GATv2": {"type": set(["gnn"]), "gnn_layer_type": set(["gatv2convweighted", "gatv2conv"])},
+    "GPS": {"type": set(["GPSModel"]), "gnn_layer_type": None},
+    "Polynormer": {"type": set(["WeightedPolynormer"]), "gnn_layer_type": None},
 }
 
 
@@ -87,6 +89,13 @@ ablations_settings = {
         # TODO: add for node injection
         "node_prob": ["config.graphgym.attack.node_prob_enable"],
     },
+    "GPS": {
+        "grad_MPNN": ["config.graphgym.attack.GPS.grad_MPNN"],
+        "pert_appr": ["config.graphgym.attack.SAN.enable_pert_grad"],
+        "backprop": ["config.graphgym.attack.SAN.enable_eig_backprop"],
+        # TODO: add for node injection
+        "node_prob": ["config.graphgym.attack.node_prob_enable"],
+    },
 }
 
 
@@ -105,6 +114,7 @@ random_results = {
         "Graphormer": "a_gph_upfd_gos_bert_prel",
         "GRIT": "a_grt_upfd_gos_bert_prel",
         "SAN": "a_san_upfd_gos_bert_new",
+        "GPS": "a_gps_upfd_gos_bert",
     },
     "UPFD_pol_bert": {
         "Graphormer": "a_gph_upfd_pol_bert_prel",
@@ -288,6 +298,7 @@ def main(
     filter_dict,
     dataset: str,
     model: str,
+    name: str,
 ):
     results_path, info_file, seed_dir = clean_path(results_path)
     (
@@ -314,7 +325,7 @@ def main(
     for r in results:
         check_correct_result(r, dataset, model, pred_level)
 
-    random_path = Path("results_a") / dataset / model / random_results[dataset][model] / "results"
+    random_path = Path("results_a") / dataset / model / random_results[dataset][model] / name / "results"
     assert random_path.is_dir(), f"No results for random attack found in {random_path}"
 
     # write results into file
@@ -335,6 +346,7 @@ parser = argparse.ArgumentParser(description='Processes the results of attack.')
 parser.add_argument("-c", "--collection")
 parser.add_argument("-d", "--dataset")
 parser.add_argument("-m", "--model")
+parser.add_argument("-n", "--name-pretrained", default="0")
 
 
 if __name__ == "__main__":
@@ -349,4 +361,5 @@ if __name__ == "__main__":
         filter_dict=filter_dict,
         dataset=args.dataset,
         model=args.model,
+        name=args.name_pretrained,
     )
