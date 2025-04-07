@@ -28,6 +28,7 @@ grid:
     options:
       - true
       - true
+      - true
       - false
       - false
     zip_id: gps_ablations
@@ -35,6 +36,7 @@ grid:
   graphgym.attack.SAN.enable_pert_grad:
     type: choice
     options:
+      - false
       - true
       - false
       - true
@@ -44,6 +46,7 @@ grid:
   graphgym.attack.SAN.enable_eig_backprop:
     type: choice
     options:
+      - false
       - false
       - true
       - false
