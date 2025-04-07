@@ -271,6 +271,7 @@ def save_plots(
     agg_cols,
     seed_dir,
     y_label: bool,
+    grid: bool,
     add_title: bool,
     add_legend: bool,
     y_min: float | None,
@@ -476,7 +477,7 @@ def save_plots(
                 if bt:
                     fs_ = figsize
                 else:
-                    fs_ = figsize_all
+                    fs_ = figsize  # figsize_all
                 fig, ax = plt.subplots(nrows=1, ncols=1, figsize=fs_)
                 if add_title:
                     ax.set_title(f"{model} - {dataset.replace('_', ' ')}")
@@ -530,6 +531,8 @@ def save_plots(
                                         std_best[new_best] = std_new[new_best]
                                 if run_name != "GCN":
                                     continue
+                            if run_name != "GCN":
+                                continue
                             l = "transfer"
                             #label = f"{run_name} PRBCD transfer"
                             label = f"{run_name} transfer"
@@ -575,7 +578,7 @@ def save_plots(
                     ax.fill_between(x_best, y_best-std_best, y_best+std_best, color=c, alpha=0.1, linewidth=0.0)
 
                 for run_name, d in res_rand_adap.items():
-                    if "rand" in run_name:
+                    if bt and "rand" in run_name:
                         continue
                     # plot after all others, so they are on top
                     ax.plot(d["x"], d["y"], label=d["label"], alpha=0.8, color=d["c"], marker=d["m"], linestyle=d["ls"], markeredgewidth=0.0, markersize=d["ms"])
@@ -599,6 +602,13 @@ def save_plots(
                     #ax.legend(fontsize="small", framealpha=0.4)  # bbox_to_anchor=(1.01, 0), loc="lower left")
                     #ax.legend(bbox_to_anchor=(1.01, 0), loc="lower left")  # , prop={'size': 8})
                     ax.legend(framealpha=0.4)
+                if grid:
+                    ax.yaxis.set_minor_locator(AutoMinorLocator(4))
+                    ax.grid(axis="y", which='major')
+                    ax.grid(axis="y", which='minor', visible=True, alpha=0.3)
+                    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+                    ax.grid(axis="x", which='major')
+                    ax.grid(axis="x", which='minor', visible=True, alpha=0.3)
                 save_figure(fig, pdir, f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}")
                 #fig.savefig(pdir / f"{dataset}_{model}_{title.replace(' ', '_')}_{budget_measure}.png")
                 ax.clear()
@@ -887,6 +897,7 @@ def main(
             agg_cols,
             seed_dirs[name],
             y_label,
+            grid,
             add_title,
             add_legend,
             y_min,

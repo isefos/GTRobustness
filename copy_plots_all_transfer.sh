@@ -17,7 +17,7 @@ find "$BASE_DIR" -type f -path "*/plots/agg_ab_bt/*.pdf" | while read -r FILE; d
     ID=$(echo "$FILE" | awk -F'/' '{print $(NF-3)}')
 
     # Check if the filename contains the word "Accuracy"
-    if [[ "$FILENAME" == *Accuracy* ]] && [[ "$FILENAME" != *UPFD_gos* ]] && [[ "$COLLECTION" != *adv* ]] && [[ "$COLLECTION" != *gat* ]] && [[ "$COLLECTION" != *ga2* ]] && [[ "$COLLECTION" != *gpsgcn* ]]; then
+    if [[ "$FILENAME" == *Accuracy* ]] && [[ "$COLLECTION" != *adv* ]] && [[ "$COLLECTION" != *gat* ]] && [[ "$COLLECTION" != *ga2* ]] && [[ "$COLLECTION" != *gpsgcn* ]]; then
         # Construct new filename
         NEW_FILENAME="${FILENAME}.pdf"
 

@@ -2,6 +2,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.rcParams.update(matplotlib.rcParamsDefault)
 matplotlib.use('Agg')
+from matplotlib.ticker import AutoMinorLocator
 import matplotlib.pyplot as plt
 import argparse
 import pandas as pd
@@ -222,6 +223,7 @@ def main(
     legend_sb: bool,
     title: bool,
     y_label: bool,
+    grid: bool,
     y_min: None | float,
     y_max: None | float,
     y_min_sb: None | float,
@@ -300,6 +302,19 @@ def main(
     if legend_sb:
         #ax_sb.legend(bbox_to_anchor=(1.01, 0), loc="lower left", prop={'size': 8})  # loc=datasets[dataset]["legend_loc"])
         ax_sb.legend(prop={'size': 8})  # loc='upper right')
+    if grid:
+        ax.yaxis.set_minor_locator(AutoMinorLocator(4))
+        ax_sb.yaxis.set_minor_locator(AutoMinorLocator(4))
+        ax.grid(axis="y", which='major')
+        ax.grid(axis="y", which='minor', visible=True, alpha=0.3)
+        ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+        ax.grid(axis="x", which='major')
+        ax.grid(axis="x", which='minor', visible=True, alpha=0.3)
+        ax_sb.grid(axis="y", which='major')
+        ax_sb.grid(axis="y", which='minor', visible=True, alpha=0.3)
+        ax_sb.xaxis.set_minor_locator(AutoMinorLocator(5))
+        ax_sb.grid(axis="x", which='major')
+        ax_sb.grid(axis="x", which='minor', visible=True, alpha=0.3)
     save_figure(fig, f"{plot}_{metric}", png)
     save_figure(fig_sb, f"{plot}_{metric}_sb", png)
 
@@ -314,6 +329,7 @@ parser.add_argument("-l", "--legend", action="store_true")
 parser.add_argument("--legend-sb", action="store_true")
 parser.add_argument("-t", "--title", action="store_true")
 parser.add_argument("-y", "--y-label", action="store_true")
+parser.add_argument("-g", "--grid", action="store_true")
 parser.add_argument("--y-min", type=float, default=None)
 parser.add_argument("--y-max", type=float, default=None)
 parser.add_argument("--y-min-sb", type=float, default=None)
@@ -334,6 +350,7 @@ if __name__ == "__main__":
         legend_sb=args.legend_sb,
         title=args.title,
         y_label=args.y_label,
+        grid=args.grid,
         y_min=args.y_min,
         y_max=args.y_max,
         y_min_sb=args.y_min_sb,
