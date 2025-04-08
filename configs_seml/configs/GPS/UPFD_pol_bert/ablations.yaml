@@ -7,10 +7,10 @@ seml:
 slurm:
   experiments_per_job: 1
   sbatch_options:
-    partition: gpu_gtx1080
-    gres: gpu:1       # num GPUs
+    partition: cpu_all
+    gres: gpu:0       # num GPUs
     mem: 16G          # memory
-    cpus-per-task: 2  # num cores
+    cpus-per-task: 16 # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
 
@@ -29,15 +29,15 @@ grid:
     options:
       - true  # only node prob
       - true  # MPNN + node prob
-      - false # only MPNN
-      - true
-      - true
-      - true
-      - true
-      - false
-      - false
-      - false
-      - false
+      #- false # only MPNN
+      #- true
+      #- true
+      #- true
+      #- true
+      #- false
+      #- false
+      #- false
+      #- false
     zip_id: gps_ablations
 
   graphgym.attack.GPS.grad_MPNN:
@@ -45,15 +45,15 @@ grid:
     options:
       - false # only node prob
       - true  # MPNN + node prob
-      - true  # only MPNN
-      - true
-      - true
-      - false
-      - false
-      - true
-      - true
-      - false
-      - false
+      #- true  # only MPNN
+      #- true
+      #- true
+      #- false
+      #- false
+      #- true
+      #- true
+      #- false
+      #- false
     zip_id: gps_ablations
 
   graphgym.attack.SAN.enable_pert_grad:
@@ -61,15 +61,15 @@ grid:
     options:
       - false  # only node prob
       - false  # MPNN + node prob
-      - false  # only MPNN
-      - true
-      - false
-      - true
-      - false
-      - true
-      - false
-      - true
-      - false
+      #- false  # only MPNN
+      #- true
+      #- false
+      #- true
+      #- false
+      #- true
+      #- false
+      #- true
+      #- false
     zip_id: gps_ablations
 
   graphgym.attack.SAN.enable_eig_backprop:
@@ -77,15 +77,15 @@ grid:
     options:
       - false  # only node prob
       - false  # MPNN + node prob
-      - false  # only MPNN
-      - false
-      - true
-      - false
-      - true
-      - false
-      - true
-      - false
-      - true
+      #- false  # only MPNN
+      #- false
+      #- true
+      #- false
+      #- true
+      #- false
+      #- true
+      #- false
+      #- true
     zip_id: gps_ablations
 
 # experiment fixed configs
@@ -94,12 +94,12 @@ fixed:
 
   graphgym:
 
-    accelerator: auto
+    accelerator: cpu
 
     out_dir: configs_seml/results
 
     pretrained:
-      dir: '/ceph/hdd/students/foth/models/GPS/UPFD_pol_bert/0'
+      dir: '../gtr-saved/models/GPS/UPFD_pol_bert/0'
       finetune: false
 
     attack:
