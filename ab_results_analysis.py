@@ -26,6 +26,7 @@ models = {
     "GAT": {"type": set(["gnn"]), "gnn_layer_type": set(["gatconvweighted", "gatconv"])},
     "GATv2": {"type": set(["gnn"]), "gnn_layer_type": set(["gatv2convweighted", "gatv2conv"])},
     "GPS": {"type": set(["GPSModel"]), "gnn_layer_type": None},
+    "GPS-GCN": {"type": set(["GPSModel"]), "gnn_layer_type": None},
     "Polynormer": {"type": set(["WeightedPolynormer"]), "gnn_layer_type": None},
 }
 
@@ -96,6 +97,13 @@ ablations_settings = {
         # TODO: add for node injection
         "node_prob": ["config.graphgym.attack.node_prob_enable"],
     },
+    "GPS-GCN": {
+        "grad_MPNN": ["config.graphgym.attack.GPS.grad_MPNN"],
+        "pert_appr": ["config.graphgym.attack.SAN.enable_pert_grad"],
+        "backprop": ["config.graphgym.attack.SAN.enable_eig_backprop"],
+        # TODO: add for node injection
+        "node_prob": ["config.graphgym.attack.node_prob_enable"],
+    },
 }
 
 
@@ -104,11 +112,16 @@ random_results = {
         "Graphormer": "a_gph_cluster_as_prel",
         "GRIT": "a_grt_cluster_as_prel",
         "SAN": "a_san_cluster_as_prel",
+        "GPS": "a_gps_cluster_as",
+        "GPS-GCN": "a_gpsgcn_cluster_as",
+
     },
     "CLUSTER_cs": {
         "Graphormer": "a_gph_cluster_cs_prel",
         "GRIT": "a_grt_cluster_cs_prel",
         "SAN": "a_san_cluster_cs_prel",
+        "GPS": "a_gps_cluster_cs",
+        "GPS-GCN": "a_gpsgcn_cluster_cs",
     },
     "UPFD_gos_bert": {
         "Graphormer": "a_gph_upfd_gos_bert_prel",
@@ -120,6 +133,7 @@ random_results = {
         "Graphormer": "a_gph_upfd_pol_bert_prel",
         "GRIT": "a_grt_upfd_pol_bert_prel",
         "SAN": "a_san_upfd_pol_bert_new",
+        "GPS": "a_gps_upfd_pol_bert",
     },
 }
 
@@ -244,6 +258,9 @@ def get_collection_results(collection, filter_dict, model):
         for r in results:
             for key_l in keys_list[:-1]:
                 r = r.get(key_l, {})
+                if isinstance(r, list):
+                    assert len(r) == 1
+                    r = r[0]
             key_last = keys_list[-1]
             v = r.get(key_last, None)
             if v is not None:
