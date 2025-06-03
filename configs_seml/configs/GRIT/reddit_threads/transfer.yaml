@@ -166,3 +166,27 @@ fixed:
       enable: true
       ksteps: 6
       w_add_dummy_edge: false
+    optim:
+      base_lr: 0.0008021910333811125
+      batch_accumulation: 1
+      clip_grad_norm: true
+      clip_grad_norm_value: 5.0
+      early_stopping: true
+      early_stopping_delta_e: 0.01
+      early_stopping_patience: 7
+      early_stopping_warmup: 3
+      lr_decay: 0.1
+      max_epoch: 30
+      min_lr: 0.0
+      momentum: 0.9
+      num_local_epochs: 0
+      num_warmup_epochs: 1
+      optimizer: adamW
+      reduce_factor: 0.1
+      schedule_patience: 10
+      scheduler: cosine_with_warmup
+      steps:
+      - 30
+      - 60
+      - 90
+      weight_decay: 3.052168790303442e-08

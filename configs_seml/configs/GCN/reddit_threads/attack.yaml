@@ -159,3 +159,27 @@ fixed:
       size_average: mean
       thresh: 0.5
       type: gnn
+    optim:
+      base_lr: 0.0031736892010920453
+      batch_accumulation: 1
+      clip_grad_norm: true
+      clip_grad_norm_value: 5.0
+      early_stopping: true
+      early_stopping_delta_e: 0.05
+      early_stopping_patience: 40
+      early_stopping_warmup: 25
+      lr_decay: 0.1
+      max_epoch: 300
+      min_lr: 0.0
+      momentum: 0.9
+      num_local_epochs: 0
+      num_warmup_epochs: 10
+      optimizer: adamW
+      reduce_factor: 0.1
+      schedule_patience: 10
+      scheduler: cosine_with_warmup
+      steps:
+      - 30
+      - 60
+      - 90
+      weight_decay: 2.7047836302183376e-06
