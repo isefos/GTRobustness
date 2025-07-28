@@ -49,8 +49,8 @@ fixed:
       local:
         enable: true
         num_victim_nodes: 5
-        sampling_direct_edge_weight: 5000
-        sampling_indirect_edge_weight: 30
+        sampling_direct_edge_weight: 300
+        sampling_indirect_edge_weight: 5
         sampling_other_edge_weight: 1
       cluster_sampling: false
       enable: true
