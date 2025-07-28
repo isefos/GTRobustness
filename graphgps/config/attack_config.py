@@ -98,6 +98,14 @@ def dataset_cfg(cfg):
     cfg.attack.node_injection.node_sampling.min_total_nodes = 1000
     cfg.attack.node_injection.node_sampling.max_block_size = 20_000
 
+    # local attack
+    cfg.attack.local = CN()
+    cfg.attack.local.enable = False
+    cfg.attack.local.num_victim_nodes = 5
+    cfg.attack.local.sampling_direct_edge_weight = 5000
+    cfg.attack.local.sampling_indirect_edge_weight = 30
+    cfg.attack.local.sampling_other_edge_weight = 1
+
     # for transfer attack
     cfg.attack.transfer = CN()
     cfg.attack.transfer.enable = False

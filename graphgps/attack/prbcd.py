@@ -1,6 +1,6 @@
 from collections import defaultdict
 from functools import partial
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -125,10 +125,61 @@ class PRBCDAttack(torch.nn.Module):
         else:
             raise ValueError(f'Unknown {name} `{loss}`')
 
-    def _setup_sampling(self, x: Tensor, **kwargs):
+    def _setup_sampling(
+        self,
+        x: Tensor,
+        victim_node_idx: None | int = None,
+        **kwargs,
+    ):
         assert self.num_nodes == self.num_connected_nodes, "structure attack should not include isolated nodes"
         num_possible_edges = self._num_possible_edges(self.num_nodes, self.is_undirected)
-        if cfg.attack.cluster_sampling:
+        if cfg.attack.local.enable:
+            # for more efficient attack, sample the edges that are more likely to affect the local victim node
+            assert self.is_undirected  # simplifies finding neighbors
+            assert victim_node_idx is not None
+            victim_node = torch.tensor([victim_node_idx], dtype=torch.long, device="cpu")
+            other_nodes = torch.tensor(
+                [i for i in range(self.num_nodes) if i != victim_node_idx],
+                dtype=torch.long, device="cpu",
+            )
+            edges_to_victim_node = torch.cat(
+                (
+                    victim_node.repeat(other_nodes.size(0))[None, :],
+                    other_nodes[None, :],
+                ),
+                dim=0,
+            ).sort(0)[0]
+            victim_edge_idx = self._triu_to_linear_idx(self.num_nodes, edges_to_victim_node).unique(sorted=True)
+            if cfg.attack.local.sampling_indirect_edge_weight != cfg.attack.local.sampling_other_edge_weight:
+                neighbor_nodes: torch.Tensor = self.edge_index[1, :][self.edge_index[0] == victim_node_idx]
+                assert victim_node_idx not in neighbor_nodes, "Unexpected: Victim node has a self-loop with itself."
+                edges_to_neighbor_nodes = torch.cat(
+                    (
+                        neighbor_nodes.repeat_interleave(other_nodes.size(0))[None, :],
+                        other_nodes.repeat(neighbor_nodes.size(0))[None, :],
+                    ),
+                    dim=0,
+                )
+                # remove self loops
+                edges_to_neighbor_nodes = edges_to_neighbor_nodes[:, edges_to_neighbor_nodes[0, :] != edges_to_neighbor_nodes[1, :]]
+                # sort
+                edges_to_neighbor_nodes = edges_to_neighbor_nodes.sort(0)[0]
+                neighbor_edge_idx = self._triu_to_linear_idx(self.num_nodes, edges_to_neighbor_nodes).unique(sorted=True)
+            else:
+                neighbor_edge_idx = torch.tensor([], dtype=torch.long, device="cpu")
+            # TODO: could still also include the CLUSTER constrained option of not allowing label nodes
+            self._weighted_sampler = WeightedIndexSampler2(
+                {
+                    cfg.attack.local.sampling_direct_edge_weight: victim_edge_idx,
+                    cfg.attack.local.sampling_indirect_edge_weight: neighbor_edge_idx,
+                },
+                default_weight=cfg.attack.local.sampling_other_edge_weight,
+                max_index=num_possible_edges-1,
+                output_device=self.device,
+            )
+            self.sample_edge_indices = lambda n: self._weighted_sampler.sample(n)
+        # For global attacks
+        elif cfg.attack.cluster_sampling:
             # for the CLUSTER dataset, we don't allow modifying edges to the labeled nodes
             assert self.is_undirected
             label_nodes = torch.nonzero(x[:, 1:].sum(1)).flatten().cpu()
@@ -193,6 +244,7 @@ class PRBCDAttack(torch.nn.Module):
         labels: Tensor,
         budget: int,
         idx_attack: Optional[Tensor] = None,
+        local_victim_node: None | int = None,
         tb_writer: None | SummaryWriter = None,
         **kwargs,
     ) -> Tuple[Tensor, Tensor]:
@@ -224,7 +276,7 @@ class PRBCDAttack(torch.nn.Module):
         if self.block_size > num_possible_edges:
             self.block_size = num_possible_edges
 
-        self._setup_sampling(x=x)
+        self._setup_sampling(x=x, victim_node_idx=local_victim_node)
             
         # For collecting attack statistics
         self.attack_statistics = defaultdict(list)
@@ -256,6 +308,7 @@ class PRBCDAttack(torch.nn.Module):
         labels: Tensor,
         budget: int,
         idx_attack: Optional[Tensor] = None,
+        local_victim_node: None | int = None,
         tb_writer: None | SummaryWriter = None,  # not used
         **kwargs,
     ) -> Tuple[Tensor, Tensor]:
@@ -281,7 +334,7 @@ class PRBCDAttack(torch.nn.Module):
         """
         assert kwargs.get('edge_weight') is None
         self._attack_self_setup(x, edge_index, random_baseline=True)
-        self._setup_sampling(x=x)
+        self._setup_sampling(x=x, victim_node_idx=local_victim_node)
         best_metric = float('-Inf')
         best_edge_index = None
 

@@ -1,6 +1,7 @@
 import torch
 import logging
 import json
+from collections import defaultdict
 from pathlib import Path
 from tensorboardX import SummaryWriter
 from torch_geometric.graphgym.config import cfg
@@ -13,6 +14,7 @@ from graphgps.attack.dataset_attack import (
     get_total_dataset_graphs,
     get_augmented_graph,
     get_attack_datasets,
+    get_local_attack_nodes,
 )
 from graphgps.attack.postprocessing import (
     get_accumulated_stat_keys,
@@ -44,12 +46,12 @@ def prbcd_attack_dataset(model, loaders):
         prbcd = PRBCDAttackNI(model)
     else:
         prbcd = PRBCDAttack(model)
+    graph_idx = []
     stat_keys = get_accumulated_stat_keys()
     all_stats = {k: [] for k in sorted(stat_keys)}
     all_stats_zb = None
     if cfg.attack.minimum_budget < 1:
         all_stats_zb = {k: [] for k in sorted(stat_keys)}
-    perturbations: dict[int, list[list[int]]] = {}
 
     # create tensorboard directory
     tb_logdir = Path(cfg.run_dir) / "tb_attack_stats"
@@ -57,6 +59,16 @@ def prbcd_attack_dataset(model, loaders):
 
     # PREPARE DATASETS
     dataset_to_attack, additional_injection_datasets, inject_nodes_from_attack_dataset = get_attack_datasets(loaders)
+    # for local attack -> load victim nodes
+    if cfg.attack.local.enable:
+        perturbations: dict[int, list[list[list[int]]]] = defaultdict(list)
+        victim_nodes: dict[int, list[int]] = {}
+        local_attack_nodes = get_local_attack_nodes(dataset_to_attack, cfg.attack.local.num_victim_nodes)
+        local_node_idx = []
+    else:
+        local_attack_nodes = None
+        local_node_idx = None
+        perturbations: dict[int, list[list[int]]] = {}
     total_attack_dataset_graph, attack_dataset_slices, total_additional_datasets_graph = None, None, None
     if cfg.attack.node_injection.enable:
         # TODO: attach a global index to all possible nodes, that can later be used to trace which nodes where added
@@ -73,20 +85,42 @@ def prbcd_attack_dataset(model, loaders):
             break
         clean_data: Batch
         assert clean_data.num_graphs == 1
-        tb_writer = SummaryWriter(tb_logdir / f"graph_{i}")
-        attack_or_skip_graph(
-            i,
-            model,
-            prbcd,
-            clean_data.get_example(0),
-            all_stats,
-            all_stats_zb,
-            perturbations,
-            total_attack_dataset_graph,
-            attack_dataset_slices,
-            total_additional_datasets_graph,
-            tb_writer,
-        )
+        if not cfg.attack.local.enable:
+            graph_idx.append(i)
+            tb_writer = SummaryWriter(tb_logdir / f"graph_{i}")
+            attack_or_skip_graph(
+                i,
+                model,
+                prbcd,
+                clean_data.get_example(0),
+                all_stats,
+                all_stats_zb,
+                perturbations,
+                total_attack_dataset_graph,
+                attack_dataset_slices,
+                total_additional_datasets_graph,
+                tb_writer,
+            )
+        else:
+            victim_nodes[i] = local_attack_nodes[i]
+            for victim_node_idx in local_attack_nodes[i]:
+                graph_idx.append(i)
+                local_node_idx.append(victim_node_idx)
+                tb_writer = SummaryWriter(tb_logdir / f"graph_{i}_node_{victim_node_idx}")
+                attack_or_skip_graph(
+                    i,
+                    model,
+                    prbcd,
+                    clean_data.get_example(0),
+                    all_stats,
+                    all_stats_zb,
+                    perturbations,
+                    total_attack_dataset_graph,
+                    attack_dataset_slices,
+                    total_additional_datasets_graph,
+                    tb_writer,
+                    victim_node_idx,
+                )
         tb_writer.close()
     model.forward = model.forward.__wrapped__
     for param in model.parameters():
@@ -97,6 +131,10 @@ def prbcd_attack_dataset(model, loaders):
     pert_file = Path(cfg.run_dir) / f"perturbations_b{cfg.attack.e_budget}.json"
     with open(pert_file, "w") as f:
         json.dump(perturbations, f)
+    if local_attack_nodes:
+        victim_node_file = Path(cfg.run_dir) / f"victim_nodes.json"
+        with open(victim_node_file, "w") as f:
+            json.dump(victim_nodes, f)
 
     # summarize results
     summary_stats = log_summary_stats(all_stats)
@@ -119,11 +157,12 @@ def attack_or_skip_graph(
     clean_data: Data,
     all_stats: dict[str, list],
     all_stats_zb: None | dict[str, list],
-    perturbations: dict[int, list[list[int]]],
+    perturbations: dict[int, list[list[int]]] | dict[int, list[list[list[int]]]],
     total_attack_dataset_graph: Data | None,
     attack_dataset_slices: list[tuple[int, int]] | None,
     total_additional_datasets_graph: Data | None,
     tb_writer: SummaryWriter,
+    local_victim_node: None | int = None,
 ):
     """
     """
@@ -131,9 +170,14 @@ def attack_or_skip_graph(
     num_edges = clean_data.edge_index.size(1)
     # currently only global attack (entire split), but could attack specific nodes by using this node mask
     node_mask = clean_data.get(f'{cfg.attack.split}_mask')
-    if node_mask is not None:
-        node_mask = node_mask.to(device=cfg.accelerator)
-        assert not cfg.attack.prediction_level == "graph"
+    if cfg.attack.local.enable:
+        assert local_victim_node is not None
+        node_mask = torch.zeros(num_nodes, dtype=torch.bool, device=cfg.accelerator)
+        node_mask[local_victim_node] = True
+    else:
+        if node_mask is not None:
+            node_mask = node_mask.to(device=cfg.accelerator)
+            assert not cfg.attack.prediction_level == "graph"
 
     # CHECK CLEAN GRAPH
     output_clean = model(clean_data.clone().to(device=cfg.accelerator), unmodified=True)
@@ -166,11 +210,13 @@ def attack_or_skip_graph(
         return
 
     # GRAPH WAS NOT SKIPPED - ATTACK
-    logging.info(f"Attacking graph {i}")
+    if local_victim_node is not None:
+        logging.info(f"Attacking graph {i} -- node {local_victim_node}")
+    else:
+        logging.info(f"Attacking graph {i}")
     accumulate_output_stats(all_stats, output_stats_clean, mode="clean", random=False)
     if all_stats_zb is not None:
         accumulate_output_stats(all_stats_zb, output_stats_clean, mode="clean", random=False)
-        
 
     # AUGMENT GRAPH (ONLY WHEN NODE INJECTION)
     attack_graph_data = get_attack_graph(
@@ -196,12 +242,16 @@ def attack_or_skip_graph(
             global_budget=global_budget,
             random_attack=is_random_attack,
             node_mask=node_mask,
+            local_victim_node=local_victim_node,
             tb_writer=tb_writer,
             _model_forward_already_wrapped=True,
             _keep_forward_wrapped=True,
         )
         if not is_random_attack:
-            perturbations[i] = perts.tolist()
+            if cfg.attack.local.enable:
+                perturbations[i].append(perts.tolist())
+            else:
+                perturbations[i] = perts.tolist()
         log_used_budget(all_stats, all_stats_zb, global_budget, perts, is_random_attack)
         
         # CHECK OUTPUT
@@ -267,6 +317,7 @@ def attack_single_graph(
     global_budget: int,
     random_attack: bool = False,
     node_mask: None | torch.Tensor = None,
+    local_victim_node: None | int = None,
     tb_writer: None | SummaryWriter = None,
     _model_forward_already_wrapped: bool = False,
     _keep_forward_wrapped: bool = False,
@@ -284,6 +335,7 @@ def attack_single_graph(
         attack_graph_data.y.to(device=cfg.accelerator),
         budget=global_budget,
         idx_attack=node_mask,
+        local_victim_node=local_victim_node,
         tb_writer=tb_writer,
     )
 

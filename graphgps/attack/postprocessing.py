@@ -85,10 +85,14 @@ def get_node_output_stats(y_gt, logits):
         y_correct_mask = F.one_hot(y_gt, num_classes).to(dtype=torch.bool)
         assert probs.shape == y_correct_mask.shape
         margin = probs[y_correct_mask] - probs[~y_correct_mask].reshape(-1, num_classes-1).max(dim=1)[0]
-        correct = class_idx_pred == y_gt
+        correct: torch.Tensor = class_idx_pred == y_gt
         acc = correct.float().mean().item()
-        margin_correct = margin[correct]
-        margin_wrong = margin[~correct]
+        margin_correct = None
+        if correct.any():
+            margin_correct = margin[correct]
+        margin_wrong = None
+        if not correct.all():
+            margin_wrong = margin[~correct]
         output_stats = {
             "probs": probs.tolist(),
             "logits": logits.tolist(),
@@ -99,14 +103,14 @@ def get_node_output_stats(y_gt, logits):
             "margin_median": margin.median().item(),
             "margin_min": margin.min().item(),
             "margin_max": margin.max().item(),
-            "margin_correct_mean": margin_correct.mean().item(),
-            "margin_correct_median": margin_correct.median().item(),
-            "margin_correct_min": margin_correct.min().item(),
-            "margin_correct_max": margin_correct.max().item(),
-            "margin_wrong_mean": margin_wrong.mean().item(),
-            "margin_wrong_median": margin_wrong.median().item(),
-            "margin_wrong_min": margin_wrong.min().item(),
-            "margin_wrong_max": margin_wrong.max().item(),
+            "margin_correct_mean": None if margin_correct is None else margin_correct.mean().item(),
+            "margin_correct_median": None if margin_correct is None else margin_correct.median().item(),
+            "margin_correct_min": None if margin_correct is None else margin_correct.min().item(),
+            "margin_correct_max": None if margin_correct is None else margin_correct.max().item(),
+            "margin_wrong_mean": None if margin_wrong is None else margin_wrong.mean().item(),
+            "margin_wrong_median": None if margin_wrong is None else margin_wrong.median().item(),
+            "margin_wrong_min": None if margin_wrong is None else margin_wrong.min().item(),
+            "margin_wrong_max": None if margin_wrong is None else margin_wrong.max().item(),
         }
         return output_stats
 
@@ -195,7 +199,9 @@ def accumulate_output_stats_pert(
             accumulated_stats[asr_key].append(asr)
         if cfg.attack.prediction_level == "node":
             pert_c = list(compress(output_stats_pert["correct"], output_stats_clean["correct"]))
-            asr = 1 - (sum(pert_c) / len(pert_c))
+            asr = None
+            if pert_c:
+                asr = 1 - (sum(pert_c) / len(pert_c))
             accumulated_stats[asr_key].append(asr)
         if not no_asr_log and asr is not None:
             logging.info(f"Attack success rate: {asr:.3f}")

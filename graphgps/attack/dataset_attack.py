@@ -3,6 +3,66 @@ from torch_geometric.data import Data, Dataset, Batch
 from torch_geometric.data.collate import collate
 import logging
 from torch_geometric.graphgym.config import cfg
+import os
+import json
+
+
+def get_local_attack_nodes(dataset, num_victim_nodes: int) -> dict[int, list[int]]:
+    """Generate local attack splits (victim nodes to attack).
+
+    Save these to disk or load existing.
+
+    Args:
+        dataset: PyG dataset object
+        num_victim_nodes: How many nodes are attacked locally in each graph (individually).
+    """
+    split_dir = os.path.join(cfg.dataset.split_dir, "local_attack")
+    os.makedirs(split_dir, exist_ok=True)
+    save_file = os.path.join(
+        split_dir,
+        f"{cfg.dataset.format}_{dataset.name}_{cfg.attack.split}_{cfg.seed}-{num_victim_nodes}.json"
+    )
+    if not os.path.isfile(save_file):
+        create_local_attack_splits(dataset, num_victim_nodes, save_file)
+    with open(save_file) as f:
+        la_splits = json.load(f)
+    assert la_splits['dataset'] == dataset.name, "Unexpected dataset local attack splits"
+    assert la_splits['split'] == cfg.attack.split, "Dataset split does not match"
+    assert la_splits['n_graphs'] == len(dataset), "Dataset length does not match"
+    assert la_splits['n_victims'] == num_victim_nodes, "Num victim nodes does not match"
+    return {int(k): v for k, v in la_splits['victim_idx'].items()}
+
+
+def create_local_attack_splits(dataset, num_victims: int, file_name):
+    """Create local attack splits and save them to file.
+
+    For each graph, will sample `num_victims` nodes for local attacks.
+    """
+    n_samples = len(dataset)
+    all_victim_nodes = {}
+    if cfg.dataset.task == 'graph':
+        for i, graph in enumerate(dataset):
+            n_nodes = graph.num_nodes
+            valid = torch.arange(n_nodes, device="cpu", dtype=torch.long)
+            if cfg.dataset.name == "CLUSTER":
+                node_not_label = graph.x[:, 0] != 0
+                assert node_not_label.sum() == (n_nodes - 6)
+                valid = valid[node_not_label]
+            indices = torch.randperm(valid.size(0))[:num_victims].sort(0)[0]
+            victim_nodes = valid[indices]
+            all_victim_nodes[str(i)] = victim_nodes.tolist()
+    else:
+        raise ValueError("Local attack splits only implemented for graph task level, for `node` need to make sure the train/val/test victim nodes come from the corresponding sets.")
+    splits = {
+        'dataset': dataset.name,
+        'split': cfg.attack.split,
+        'n_graphs': n_samples,
+        'n_victims': num_victims,
+        'victim_idx': all_victim_nodes,
+    }
+    with open(file_name, 'w') as f:
+        json.dump(splits, f)
+    logging.info(f"[*] Saved newly generated local attack splits to {file_name}")
 
 
 def get_attack_datasets(loaders):
