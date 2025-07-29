@@ -70,7 +70,7 @@ fixed:
       eps: 1.0e-07
       eps_init_noised: false
       is_undirected: true
-      loss: tanh_margin
+      loss: raw_prediction
       metric: neg_accuracy
       lr: 4000
       max_edge_weight_update: 0.0
