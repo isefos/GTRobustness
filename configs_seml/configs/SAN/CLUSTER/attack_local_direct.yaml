@@ -5,13 +5,14 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 8
+  experiments_per_job: 5
   sbatch_options:
-    partition: gpu_large
+    partition: gpu_a100
     gres: gpu:1       # num GPUs
-    mem: 40G          # memory
-    cpus-per-task: 8  # num cores
+    mem: 48G          # memory
+    cpus-per-task: 4  # num cores
     time: 1-00:00     # max time, D-HH:MM
+    qos: deadline
 
 grid:
 
@@ -26,20 +27,11 @@ grid:
   graphgym.attack.e_budget:
     type: choice
     options:
-      - 0.01
-      - 0.03
-      - 0.05
-      - 0.1
-      - 0.15
-      - 0.2
-      - 0.3
-      - 0.5
-
-  graphgym.attack.cluster_sampling:
-    type: choice
-    options:
-      - true
-      - false
+      - 0.002
+      - 0.005
+      - 0.009
+      - 0.014
+      - 0.02
 
 # experiment fixed configs
 
@@ -69,8 +61,15 @@ fixed:
       w_add_dummy_edge: true
 
     attack:
+      local:
+        enable: true
+        num_victim_nodes: 3
+        sampling_direct_edge_weight: 300
+        sampling_indirect_edge_weight: 5
+        sampling_other_edge_weight: 1
+      cluster_sampling: false
       enable: true
-      num_attacked_graphs: 50
+      num_attacked_graphs: 30
       skip_incorrect_graph_classification: false
       log_progress: false
       load_best_model: false
@@ -78,7 +77,7 @@ fixed:
       prediction_level: node
       remove_isolated_components: false
       run_random_baseline: true
-      block_size: 20_000
+      block_size: 3000
       epochs: 125
       epochs_resampling: 100
       resample_period: 1
