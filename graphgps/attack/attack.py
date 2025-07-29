@@ -101,6 +101,7 @@ def prbcd_attack_dataset(model, loaders):
                 total_additional_datasets_graph,
                 tb_writer,
             )
+            tb_writer.close()
         else:
             victim_nodes[i] = local_attack_nodes[i]
             for victim_node_idx in local_attack_nodes[i]:
@@ -121,7 +122,7 @@ def prbcd_attack_dataset(model, loaders):
                     tb_writer,
                     victim_node_idx,
                 )
-        tb_writer.close()
+                tb_writer.close()
     model.forward = model.forward.__wrapped__
     for param in model.parameters():
         param.requires_grad = True

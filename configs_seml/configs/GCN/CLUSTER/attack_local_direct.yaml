@@ -48,13 +48,13 @@ fixed:
     attack:
       local:
         enable: true
-        num_victim_nodes: 5
+        num_victim_nodes: 3
         sampling_direct_edge_weight: 300
         sampling_indirect_edge_weight: 5
         sampling_other_edge_weight: 1
       cluster_sampling: false
       enable: true
-      num_attacked_graphs: 50
+      num_attacked_graphs: 30
       skip_incorrect_graph_classification: false
       log_progress: false
       load_best_model: false
@@ -62,7 +62,7 @@ fixed:
       prediction_level: node
       remove_isolated_components: false
       run_random_baseline: true
-      block_size: 20_000
+      block_size: 3000
       epochs: 125
       epochs_resampling: 100
       resample_period: 1
