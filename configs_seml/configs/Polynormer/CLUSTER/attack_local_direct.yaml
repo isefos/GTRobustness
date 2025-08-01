@@ -52,7 +52,7 @@ fixed:
         sampling_direct_edge_weight: 300
         sampling_indirect_edge_weight: 5
         sampling_other_edge_weight: 1
-      cluster_sampling: true
+      cluster_sampling: false
       enable: true
       num_attacked_graphs: 30
       skip_incorrect_graph_classification: false
