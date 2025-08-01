@@ -1,6 +1,5 @@
 import collections
-from typing import Optional, Tuple, Union
-from torchtyping import TensorType
+from typing import Optional, Union
 import torch
 from torch import nn
 from torch_geometric.nn import GCNConv
@@ -22,9 +21,7 @@ class ChainableGCNConv(GCNConv):
     def __init__(self, *input, **kwargs):
         super().__init__(*input, **kwargs)
 
-    def forward(self, arguments: Tuple[TensorType["n_nodes", "n_features"],
-                                       Union[TensorType[2, "nnz"], SparseTensor],
-                                       Optional[TensorType["nnz"]]]) -> TensorType["n_nodes", "n_classes"]:
+    def forward(self, arguments):
         """Predictions based on the input.
 
         Parameters
@@ -156,9 +153,7 @@ class NettackGCN(nn.Module):
     def _ensure_contiguousness(self,
                                x: torch.Tensor,
                                edge_idx: Union[torch.Tensor, SparseTensor],
-                               edge_weight: Optional[torch.Tensor]) -> Tuple[TensorType["n_nodes", "n_features"],
-                                                                             Union[TensorType[2, "nnz"], SparseTensor],
-                                                                             Optional[TensorType["nnz"]]]:
+                               edge_weight: Optional[torch.Tensor]):
         if not x.is_sparse:
             x = x.contiguous()
         if hasattr(edge_idx, 'contiguous'):
