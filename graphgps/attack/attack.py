@@ -27,6 +27,8 @@ from graphgps.attack.postprocessing import (
     log_and_accumulate_num_stats,
     log_summary_stats,
 )
+from graphgps.attack.nettack import Nettack
+import numpy as np
 
 
 def prbcd_attack_dataset(model, loaders):
@@ -45,7 +47,10 @@ def prbcd_attack_dataset(model, loaders):
     if cfg.attack.node_injection.enable:
         prbcd = PRBCDAttackNI(model)
     else:
-        prbcd = PRBCDAttack(model)
+        if cfg.attack.local.enable and cfg.attack.local.nettack:
+            prbcd = None
+        else:
+            prbcd = PRBCDAttack(model)
     graph_idx = []
     stat_keys = get_accumulated_stat_keys()
     all_stats = {k: [] for k in sorted(stat_keys)}
@@ -105,13 +110,30 @@ def prbcd_attack_dataset(model, loaders):
         else:
             victim_nodes[i] = local_attack_nodes[i]
             for victim_node_idx in local_attack_nodes[i]:
+                if cfg.attack.local.nettack:
+                    # TODO: init here with everyting it needs
+                    #  - implement the interface to match prbcd args and methods
+                    _attacker = Nettack(
+                        adj = clean_data.edge_index.to(device=cfg.accelerator),
+                        attr = clean_data.x.to(device=cfg.accelerator),
+                        labels = clean_data.y.to(device=cfg.accelerator),
+                        idx_attack = np.array([victim_node_idx]),
+                        model = model,
+                        device = cfg.accelerator,
+                        data_device = cfg.accelerator,
+                        make_undirected = True,
+                        binary_attr = False,
+                        loss_type = 'CE',
+                    )
+                else:
+                    _attacker = prbcd
                 graph_idx.append(i)
                 local_node_idx.append(victim_node_idx)
                 tb_writer = SummaryWriter(tb_logdir / f"graph_{i}_node_{victim_node_idx}")
                 attack_or_skip_graph(
                     i,
                     model,
-                    prbcd,
+                    _attacker,
                     clean_data.get_example(0),
                     all_stats,
                     all_stats_zb,
@@ -154,7 +176,7 @@ def prbcd_attack_dataset(model, loaders):
 def attack_or_skip_graph(
     i: int,
     model,
-    prbcd: PRBCDAttack,
+    prbcd: PRBCDAttack | Nettack,
     clean_data: Data,
     all_stats: dict[str, list],
     all_stats_zb: None | dict[str, list],
@@ -314,7 +336,7 @@ def get_attack_graph(
 def attack_single_graph(
     attack_graph_data: Data,
     model: torch.nn.Module,
-    attack: PRBCDAttack,
+    attack: PRBCDAttack | Nettack,
     global_budget: int,
     random_attack: bool = False,
     node_mask: None | torch.Tensor = None,
@@ -328,17 +350,26 @@ def attack_single_graph(
     if not _model_forward_already_wrapped:
         model.forward = forward_wrapper(model.forward)
 
-    attack_fun = attack.attack_random_baseline if random_attack else attack.attack
-
-    pert_edge_index, perts = attack_fun(
-        attack_graph_data.x.to(device=cfg.accelerator),
-        attack_graph_data.edge_index.to(device=cfg.accelerator),
-        attack_graph_data.y.to(device=cfg.accelerator),
-        budget=global_budget,
-        idx_attack=node_mask,
-        local_victim_node=local_victim_node,
-        tb_writer=tb_writer,
-    )
+    if cfg.attack.local.enable and cfg.attack.local.nettack:
+        assert not random_attack
+        assert isinstance(attack, Nettack)
+        pert_edge_index, perts = attack.attack(
+            n_perturbations=global_budget,
+            node_idx=local_victim_node,
+            direct=cfg.attack.local.sampling_direct_edge_weight > 0,
+        )
+    else:
+        assert isinstance(attack, PRBCDAttack)
+        attack_fun = attack.attack_random_baseline if random_attack else attack.attack
+        pert_edge_index, perts = attack_fun(
+            attack_graph_data.x.to(device=cfg.accelerator),
+            attack_graph_data.edge_index.to(device=cfg.accelerator),
+            attack_graph_data.y.to(device=cfg.accelerator),
+            budget=global_budget,
+            idx_attack=node_mask,
+            local_victim_node=local_victim_node,
+            tb_writer=tb_writer,
+        )
 
     if not _keep_forward_wrapped:
         model.forward = model.forward.__wrapped__

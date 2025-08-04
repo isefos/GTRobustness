@@ -60,7 +60,13 @@ def load_pretrained_model_cfg(cfg):
     pretrained_cfg.merge_from_file(pretrained_cfg_fname)
 
     assert cfg.model.type in [
-        "GPSModel", "Graphormer", "GritTransformer", "WeightedSANTransformer", "gnn", "WeightedPolynormer",
+        "GPSModel",
+        "Graphormer",
+        "GritTransformer",
+        "WeightedSANTransformer",
+        "gnn",
+        "WeightedPolynormer",
+        "NettackGCN",
     ], (
         "Fine-tuning regime is untested for other model types."
     )

@@ -105,6 +105,7 @@ def dataset_cfg(cfg):
     cfg.attack.local.sampling_direct_edge_weight = 5000
     cfg.attack.local.sampling_indirect_edge_weight = 30
     cfg.attack.local.sampling_other_edge_weight = 1
+    cfg.attack.local.nettack = False
 
     # for transfer attack
     cfg.attack.transfer = CN()

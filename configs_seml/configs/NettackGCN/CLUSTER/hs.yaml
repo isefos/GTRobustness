@@ -5,17 +5,17 @@ seml:
   conda_environment: gtr
 
 slurm:
-  experiments_per_job: 16
+  experiments_per_job: 6
   sbatch_options:
     partition: gpu_a100
     gres: gpu:1       # num GPUs
-    mem: 72G          # memory
+    mem: 24G          # memory
     cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
 
 random:
-  samples: 160
+  samples: 60
   seed: 187
 
   graphgym.seed:
@@ -27,33 +27,20 @@ random:
   graphgym.optim.base_lr:
     seed: 2264
     type: loguniform
-    min: 3e-6
-    max: 2e-2
+    min: 1e-4
+    max: 1e-3
 
   graphgym.optim.weight_decay:
     seed: 89
     type: loguniform
-    min: 1e-8
+    min: 1e-4
     max: 1e-1
-
-  graphgym.gnn.dropout:
-    seed: 42312
-    type: choice
-    options:
-      - 0.0
-      - 0.0
-      - 0.5
-      - 0.5
-      - 0.1
-      - 0.05
-      - 0.2
-      - 0.25
 
   graphgym.gnn.dim_inner:
     seed: 4275
     type: randint
-    min: 150
-    max: 1200
+    min: 80
+    max: 400
 
 # experiment fixed configs - from benchmarking paper
 
@@ -85,7 +72,7 @@ fixed:
       eval_period: 1
 
     model:
-      type: gnn
+      type: NettackGCNs
       loss_fun: weighted_cross_entropy
 
     gnn:
@@ -94,8 +81,9 @@ fixed:
       act: identity
       layers_pre_mp: 0
       layers_mp: 2
-      layers_post_mp: 1
+      layers_post_mp: 0
       batchnorm: false
+      dropout: 0.01
 
     optim:
       optimizer: adamW
