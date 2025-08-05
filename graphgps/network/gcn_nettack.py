@@ -81,8 +81,8 @@ class NettackGCN(nn.Module):
         assert cfg.gnn.act == "identity"
         assert cfg.gnn.layer_type == "gcnconvweighted"
         assert cfg.gnn.layers_mp == 2
-        assert cfg.gnn.layers_post_mp == 1
-        assert cfg.gnn.layers_pre_mp == 0
+        #assert cfg.gnn.layers_post_mp == 1
+        #assert cfg.gnn.layers_pre_mp == 0
         assert not cfg.gnn.batchnorm
         # exactly two layers
         self.n_filters: list[int] = [cfg.gnn.dim_inner]

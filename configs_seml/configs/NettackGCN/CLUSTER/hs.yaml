@@ -72,7 +72,7 @@ fixed:
       eval_period: 1
 
     model:
-      type: NettackGCNs
+      type: NettackGCN
       loss_fun: weighted_cross_entropy
 
     gnn:
