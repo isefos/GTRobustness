@@ -29,6 +29,7 @@ from graphgps.attack.postprocessing import (
 )
 from graphgps.attack.nettack import Nettack
 import numpy as np
+from torch_sparse import SparseTensor
 
 
 def prbcd_attack_dataset(model, loaders):
@@ -114,7 +115,10 @@ def prbcd_attack_dataset(model, loaders):
                     # TODO: init here with everyting it needs
                     #  - implement the interface to match prbcd args and methods
                     _attacker = Nettack(
-                        adj = clean_data.edge_index.to(device=cfg.accelerator),
+                        adj = SparseTensor.from_edge_index(
+                            edge_index=clean_data.edge_index.to(device=cfg.accelerator),
+                            edge_attr=torch.ones((clean_data.edge_index.size(1)), device=cfg.accelerator),
+                        ),
                         attr = clean_data.x.to(device=cfg.accelerator),
                         labels = clean_data.y.to(device=cfg.accelerator),
                         idx_attack = np.array([victim_node_idx]),
@@ -353,10 +357,18 @@ def attack_single_graph(
     if cfg.attack.local.enable and cfg.attack.local.nettack:
         assert not random_attack
         assert isinstance(attack, Nettack)
+
+        direct = cfg.attack.local.sampling_direct_edge_weight > 0
+        if direct:
+            n_influencers = 0
+        else:
+            assert cfg.attack.is_undirected
+            n_influencers = (attack_graph_data.edge_index[0, :] == local_victim_node).sum().item()
         pert_edge_index, perts = attack.attack(
             n_perturbations=global_budget,
             node_idx=local_victim_node,
-            direct=cfg.attack.local.sampling_direct_edge_weight > 0,
+            direct=direct,
+            n_influencers=n_influencers,
         )
     else:
         assert isinstance(attack, PRBCDAttack)

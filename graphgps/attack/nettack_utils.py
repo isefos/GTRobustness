@@ -19,6 +19,7 @@ import torch
 from tqdm import tqdm
 from typing import Optional, Tuple, Union, List, Dict
 from torch.nn import functional as F
+from torch_geometric.utils import to_edge_index
 
 
 def sparse_tensor(spmat: sp.spmatrix, grad: bool = False):
@@ -174,10 +175,14 @@ class Attack(ABC):
             number of perturbations (attack budget in terms of node additions/deletions) that constrain the atack
         """
         if n_perturbations > 0:
-            return self._attack(n_perturbations, **kwargs)
+            self._attack(n_perturbations, **kwargs)
         else:
             self.attr_adversary = self.attr
             self.adj_adversary = self.adj
+        # TODO: need to return pert_edge_index and pert_edges
+        edge_index, edge_weight = to_edge_index(self.adj_adversary)
+        edge_index = edge_index[:, edge_weight > 0]
+        return edge_index, self.perturbed_idx
 
     def set_pertubations(self, adj_perturbed: Union[SparseTensor, torch.Tensor],  # TensorType["n_nodes", "n_nodes"]],
                          attr_perturbed: torch.Tensor,  # TensorType["n_nodes", "n_features"]

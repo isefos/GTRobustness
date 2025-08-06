@@ -45,30 +45,33 @@ class Nettack(SparseLocalAttack):
 
         assert self.make_undirected, 'Attack only implemented for undirected graphs'
 
-        assert len(self.attacked_model.layers) == 2, "Nettack supports only 2 Layer Linear GCN as surrogate model"
-        assert isinstance(self.attacked_model._modules['activation'], Identity), \
+        assert len(self.attacked_model.model.layers) == 2, "Nettack supports only 2 Layer Linear GCN as surrogate model"
+        assert isinstance(self.attacked_model.model._modules['activation'], Identity), \
             "Nettack only supports Linear GCN as surrogate model"
 
         self.sp_adj = self.adj.to_scipy(layout="csr")
         self.sp_attr = SparseTensor.from_dense(self.attr).to_scipy(layout="csr")
         self.nettack = None
 
-    def _attack(self, n_perturbations: int, node_idx: int, direct: bool, **kwargs):
+    def _attack(self, n_perturbations: int, node_idx: int, direct: bool, n_influencers: int, **kwargs):
 
         self.nettack = OriginalNettack(self.sp_adj,
                                        self.sp_attr,
                                        self.labels.detach().cpu().numpy(),
-                                       self.attacked_model.layers[0][0].weight.detach().cpu().numpy(),
-                                       self.attacked_model.layers[1][0].weight.detach().cpu().numpy(),
+                                       self.attacked_model.model.layers[0][0].lin.weight.T.detach().cpu().numpy(),
+                                       self.attacked_model.model.layers[1][0].lin.weight.T.detach().cpu().numpy(),
                                        node_idx,
                                        verbose=True)
         self.nettack.reset()
         self.nettack.attack_surrogate(n_perturbations,
                                       perturb_structure=True,
                                       perturb_features=False,
-                                      direct=direct)
+                                      direct=direct,
+                                      n_influencers=n_influencers)
 
+        # save to self to get later
         perturbed_idx = self.get_perturbed_edges().T
+        self.perturbed_idx = perturbed_idx
 
         if self.make_undirected:
             perturbed_idx = torch.cat((perturbed_idx, perturbed_idx.flip(0)), dim=-1)
