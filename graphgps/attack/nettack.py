@@ -109,6 +109,5 @@ class Nettack(SparseLocalAttack):
 
     def get_perturbed_edges(self):
         if self.nettack is None:
-            return torch.tensor([])
-
-        return torch.tensor(self.nettack.structure_perturbations)
+            return torch.tensor([], device=self.data_device)
+        return torch.tensor(self.nettack.structure_perturbations, device=self.data_device)
