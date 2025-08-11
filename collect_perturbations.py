@@ -90,6 +90,7 @@ models = {
     "SAN": {"type": set(["SANTransformer", "WeightedSANTransformer"]), "gnn_layer_type": None},
     "GRIT": {"type": set(["GritTransformer"]), "gnn_layer_type": None},
     "GCN": {"type": set(["gnn"]), "gnn_layer_type": set(["gcnconvweighted", "gcnconv"])},
+    "NettackGCN": {"type": set(["NettackGCN"]), "gnn_layer_type": set(["gcnconvweighted"])},
     "GAT": {"type": set(["gnn"]), "gnn_layer_type": set(["gatconvweighted", "gatconv"])},
     "GATv2": {"type": set(["gnn"]), "gnn_layer_type": set(["gatv2convweighted", "gatv2conv"])},
     "GPS": {"type": set(["GPSModel"]), "gnn_layer_type": None},
