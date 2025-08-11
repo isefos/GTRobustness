@@ -9,7 +9,7 @@ slurm:
   sbatch_options:
     partition: gpu_a100
     gres: gpu:1       # num GPUs
-    mem: 24G          # memory
+    mem: 42G          # memory
     cpus-per-task: 2  # num cores
     time: 1-00:00     # max time, D-HH:MM
     qos: deadline
