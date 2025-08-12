@@ -423,11 +423,12 @@ def log_and_accumulate_num_stats(accumulated_stats, num_stats, random=False, zer
         accumulated_stats[acc_key].append(current_stat)
 
 
-def log_summary_stats(accumulated_stats, zb=False):
+def get_summary_stats(accumulated_stats, zb=False, log=True):
     summary_stats = {}
-    logging.info(
-        f"Attack stats summary (averages over attacked graphs{'' if not zb else 'including zero budget'}):"
-    )
+    if log:
+        logging.info(
+            f"Attack stats summary (averages over attacked graphs{'' if not zb else 'including zero budget'}):"
+        )
     for key, current_stat in accumulated_stats.items():
         name = "avg_" + key
         filtered_stat = [s for s in current_stat if s is not None]
@@ -436,9 +437,11 @@ def log_summary_stats(accumulated_stats, zb=False):
                 avg = sum(filtered_stat) / len(filtered_stat)
             except TypeError:
                 continue
-            logging.info(f"  {name + ':':<48} {f'{avg:.2f}':>8}")
+            if log:
+                logging.info(f"  {name + ':':<48} {f'{avg:.2f}':>8}")
         else:
             avg = None
-            logging.info(f"  {name + ':':<48} {'nan':>8}")
+            if log:
+                logging.info(f"  {name + ':':<48} {'nan':>8}")
         summary_stats[name] = avg
     return summary_stats

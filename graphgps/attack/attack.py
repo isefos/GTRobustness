@@ -25,7 +25,7 @@ from graphgps.attack.postprocessing import (
     basic_edge_and_node_stats,
     zero_budget_edge_and_node_stats,
     log_and_accumulate_num_stats,
-    log_summary_stats,
+    get_summary_stats,
 )
 from graphgps.attack.nettack import Nettack
 import numpy as np
@@ -164,13 +164,13 @@ def prbcd_attack_dataset(model, loaders):
             json.dump(victim_nodes, f)
 
     # summarize results
-    summary_stats = log_summary_stats(all_stats)
+    summary_stats = get_summary_stats(all_stats)
     results = {"avg": summary_stats}
     if not cfg.attack.only_return_avg:
         results["all"] = all_stats
 
     if all_stats_zb is not None and len(all_stats_zb["budget"]) > len(all_stats["budget"]):
-        summary_stats_zb = log_summary_stats(all_stats_zb, zb=True)
+        summary_stats_zb = get_summary_stats(all_stats_zb, zb=True)
         results["avg_including_zero_budget"] = summary_stats_zb
         if not cfg.attack.only_return_avg:
             results["all_including_zero_budget"] = all_stats_zb
@@ -363,6 +363,7 @@ def attack_single_graph(
             n_influencers = 0
         else:
             assert cfg.attack.is_undirected
+            # TODO: make all other nodes influencer nodes
             n_influencers = (attack_graph_data.edge_index[0, :] == local_victim_node).sum().item()
         pert_edge_index, perts = attack.attack(
             n_perturbations=global_budget,

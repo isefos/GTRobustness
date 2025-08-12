@@ -19,7 +19,7 @@ from graphgps.attack.postprocessing import (
     log_pert_output_stats,
     basic_edge_and_node_stats,
     log_and_accumulate_num_stats,
-    log_summary_stats,
+    get_summary_stats,
 )
 from graphgps.attack.attack import (
     apply_node_mask,
@@ -37,17 +37,26 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
     check_equal_configs(attack_configs, cfg)
 
     # extract perturbations from perturbation path
-    perturbations, seeds, budgets = [], [], []
+    perturbations, seeds, budgets, victim_nodes = [], [], [], None
     for child in perturbation_path.iterdir():
         if not child.is_dir():
             continue
         seed = int(child.name[1:])
         for pert_file in child.iterdir():
-            budget = float(pert_file.name[15:-5])
-            with open(pert_file, "r") as f:
-                perturbations.append(json.load(f))
-            seeds.append(seed)
-            budgets.append(budget)
+            # TODO: if local and victim nodes -> save
+            try:
+                budget = float(pert_file.name[15:-5])
+                with open(pert_file, "r") as f:
+                    perturbations.append(json.load(f))
+                seeds.append(seed)
+                budgets.append(budget)
+            except ValueError:
+                if not pert_file.name == "victim_nodes.json":
+                    raise
+                if not attack_configs.attack.local.enable:
+                    raise Exception("found victim_nodes.json, but cfg is not local")
+                with open(pert_file, "r") as f:
+                    victim_nodes = json.load(f)
     num_perturbations = len(perturbations)
      
     if cfg.dataset.task == "node" and (cfg.attack.node_injection.enable or cfg.attack.remove_isolated_components):
@@ -88,6 +97,7 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
                 total_attack_dataset_graph,
                 attack_dataset_slices,
                 total_additional_datasets_graph,
+                victim_nodes,
             )
     model.forward = model.forward.__wrapped__
     logging.info("End of transfer attack.")
@@ -95,7 +105,7 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
     # summarize results
     summary_stats = []
     for stats in all_stats:
-        summary_stats.append(log_summary_stats(stats))
+        summary_stats.append(get_summary_stats(stats, log=False))
     results = {"avg": summary_stats}
     if not cfg.attack.only_return_avg:
         results["all"] = all_stats
@@ -122,10 +132,11 @@ def transfer_attack_graph(
     model,
     clean_data: Data,
     stats: dict[str, list],
-    perturbation: list[list[int]],
+    perturbation: list[list[int]] | list[list[list[int]]],
     total_attack_dataset_graph: Data | None,
     attack_dataset_slices: list[tuple[int, int]] | None,
     total_additional_datasets_graph: Data | None,
+    victim_nodes: None | dict[str, list[int]],
 ):
     """
     """
@@ -139,10 +150,6 @@ def transfer_attack_graph(
 
     # CHECK CLEAN GRAPH
     output_clean = model(clean_data.clone().to(device=cfg.accelerator), unmodified=True)
-    output_clean = apply_node_mask(output_clean, node_mask)
-    y_gt = apply_node_mask(clean_data.y.to(device=cfg.accelerator), node_mask)
-    output_stats_clean = get_output_stats(y_gt, output_clean)
-    accumulate_output_stats(stats, output_stats_clean, mode="clean", random=False)
 
     # AUGMENT GRAPH (ONLY WHEN NODE INJECTION)
     attack_graph_data = get_attack_graph(
@@ -152,17 +159,36 @@ def transfer_attack_graph(
         total_additional_datasets_graph=total_additional_datasets_graph,
     )
 
+    local_nodes = [None] if victim_nodes is None else victim_nodes[str(i)]
+
     # APPLY TRANSFER ATTACK
-    pert_edge_index = get_perturbed_edge_index(attack_graph_data, perturbation)
-    data = Data(x=attack_graph_data.x.clone(), edge_index=pert_edge_index.clone())
-    data, _ = remove_isolated_components(data)
-    output_pert = model(data.to(device=cfg.accelerator), unmodified=True)
-    output_pert = apply_node_mask(output_pert, node_mask)
-    output_stats_pert = get_output_stats(y_gt, output_pert)
-    log_pert_output_stats(output_stats_pert, output_stats_clean=output_stats_clean, random=False)
-    _, num_stats = basic_edge_and_node_stats(clean_data.edge_index, pert_edge_index, num_edges, num_nodes)
-    accumulate_output_stats_pert(stats, output_stats_pert, output_stats_clean, False)
-    log_and_accumulate_num_stats(stats, num_stats, random=False)
+
+    for i, local_node in enumerate(local_nodes):
+        if local_node is not None:
+            p = perturbation[i]
+            node_mask = torch.zeros(num_nodes, dtype=torch.bool, device=cfg.accelerator)
+            node_mask[local_node] = True
+        else:
+            p = perturbation
+            node_mask = None
+
+        # CLEAN
+        output_clean_masked = apply_node_mask(output_clean, node_mask)
+        y_gt = apply_node_mask(clean_data.y.to(device=cfg.accelerator), node_mask)
+        output_stats_clean = get_output_stats(y_gt, output_clean_masked)
+        accumulate_output_stats(stats, output_stats_clean, mode="clean", random=False)
+
+        # PERT
+        pert_edge_index = get_perturbed_edge_index(attack_graph_data, p)
+        data = Data(x=attack_graph_data.x.clone(), edge_index=pert_edge_index.clone())
+        data, _ = remove_isolated_components(data)
+        output_pert = model(data.to(device=cfg.accelerator), unmodified=True)
+        output_pert = apply_node_mask(output_pert, node_mask)
+        output_stats_pert = get_output_stats(y_gt, output_pert)
+        log_pert_output_stats(output_stats_pert, output_stats_clean=output_stats_clean, random=False)
+        _, num_stats = basic_edge_and_node_stats(clean_data.edge_index, pert_edge_index, num_edges, num_nodes)
+        accumulate_output_stats_pert(stats, output_stats_pert, output_stats_clean, False)
+        log_and_accumulate_num_stats(stats, num_stats, random=False)
 
 
 def get_perturbed_edge_index(data: Data, perturbation):
