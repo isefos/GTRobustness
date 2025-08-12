@@ -14,6 +14,9 @@ attack_configs = {
         "root_node_idx",
         "cluster_sampling",
         {
+            "local": ["enable", ],
+        },
+        {
             "node_injection": [
                 "enable",
                 "from_train",
