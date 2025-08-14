@@ -43,7 +43,6 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
             continue
         seed = int(child.name[1:])
         for pert_file in child.iterdir():
-            # TODO: if local and victim nodes -> save
             try:
                 budget = float(pert_file.name[15:-5])
                 with open(pert_file, "r") as f:
@@ -55,8 +54,10 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
                     raise
                 if not attack_configs.attack.local.enable:
                     raise Exception("found victim_nodes.json, but cfg is not local")
+                if victim_nodes is None:
+                    victim_nodes = dict()
                 with open(pert_file, "r") as f:
-                    victim_nodes = json.load(f)
+                    victim_nodes[seed] = json.load(f)
     num_perturbations = len(perturbations)
      
     if cfg.dataset.task == "node" and (cfg.attack.node_injection.enable or cfg.attack.remove_isolated_components):
@@ -84,7 +85,7 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
     for i, clean_data in enumerate(clean_loader):
         clean_data: Batch
         assert clean_data.num_graphs == 1
-        for p, stats in zip(perturbations, all_stats):
+        for p, seed, stats in zip(perturbations, seeds, all_stats):
             perturbation = p.get(str(i), None)
             if perturbation is None:
                 continue
@@ -97,7 +98,7 @@ def transfer_attack_dataset(model, loaders, perturbation_path):
                 total_attack_dataset_graph,
                 attack_dataset_slices,
                 total_additional_datasets_graph,
-                victim_nodes,
+                victim_nodes[seed],
             )
     model.forward = model.forward.__wrapped__
     logging.info("End of transfer attack.")
